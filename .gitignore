@@ -1,0 +1,10 @@
+*.pyc
+*.png
+*.bak
+tags
+*.orig
+logs/
+runs*/
+lib_loading.txt
+settings/
+saved_data/
