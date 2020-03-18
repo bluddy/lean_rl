@@ -44,6 +44,10 @@ path_sep = ':' if 'linux' in cur_sys or 'darwin' in cur_sys else ';'
 cur_dir = os.path.dirname(abspath(__file__))
 
 sim_path = abspath(pjoin(cur_dir, '..', '..', 'sim'))
+ini_path = './sim_path.ini'
+if os.path.exists(ini_path)
+    with open(ini_path, 'r') as f:
+        sim_path = f.read()
 isi_path = pjoin(sim_path, 'ISIH3DModuleBase', 'python')
 os.environ['PYTHONPATH'] = (isi_path + path_sep +
   os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else '')
