@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 
 DEBUG = False
 
@@ -8,6 +9,11 @@ def calc_dist(p1, p2):
 def unit_v(v):
     """ Returns the unit vector of the vector.  """
     return v / np.linalg.norm(v)
+
+def angle_between(v1, v2):
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    return np.arccos(np.dot(v1_u, v2_u))
 
 # Reward implementation for task reach version 0
 class Reward_reach_v0(object):
@@ -104,16 +110,29 @@ class Reward_reach_v0(object):
 class Reward_suture_v0(object):
     def __init__(self, env):
         self.env = env
+        # Assume targets don't change
+        ss = self.env.state
+        needle_pts = ss.needle_points_pos
+
+        self.needle_r = ss.curvature_radius
+        # needle segment lengths
+        needle_lengths = []
+        last_p = needle_pts[0]
+        for p in needle_pts[1:]:
+            needle_lens.append(calc_dist(p, last_p))
+            last_p = p
+        self.needle_lengths = np.array(needle_lengths)
+
+        #self.targets = np.array([ss.cur_target_pos, ss.next_target_pos])
 
     def reset(self):
-        s = self.env.state
+        ss = self.env.state
         ls = self.env.last_state
 
-        self.needle_r = s.curvature_radius
+        # Ideally, but make sure targets are reset
+        self.targets = np.array([s.cur_target_pos, s.next_target_pos])
 
-        self.targets = [np.array(s.cur_target_pos), np.array(s.next_target_pos)]
-
-        dist = calc_dist(s.needle_tip_pos, self.targets[0])
+        dist = calc_dist(ss.needle_tip_pos, self.targets[0])
         self.last_dist = dist
         self.reset_dist = dist
 
@@ -131,6 +150,60 @@ class Reward_suture_v0(object):
         v2 = np.array([0, -1, 0])
         self.circle_v = unit_v(np.cross(v1, v2))
 
+    def _get_needle_dist(self):
+        ''' Find the point of the needle we care about most.
+            If we're submerging, it's the point above the surface.
+            If we're exiting, it's the point under the surface.
+        '''
+        ss = self.env.state
+        status = ss.needle_insert_status
+        needle = ss.needle_points_pos
+
+        if status == 0:
+            dist = calc_dist(needle[0], self.targets[0])
+
+        elif status == 1: # only entry
+            # Check which points have y lower than target
+            sumberged = needle[:,1] <= self.targets[0,1]
+            idxs = np.where(not submerged)
+            if len(idxs) == 0: # Fully submerged
+                #last_sub = len(needle) - 1
+                # Fully submerged? Impossible in status 1
+                raise ValueError("[{}] Error: status 1 but all submerged".
+                        format(self.server_num))
+
+            first_unsub = idxs[0]
+            if first_unsub == 0:
+                raise ValueError("[{}] Error: status 1 but no submerged points".
+                        format(self.server_num))
+
+            if np.any(submerged[first_unsub:]):
+                raise ValueError("[{}] Error: status 1: found submerged "
+                    "in wrong place!".format(self.server_num))
+
+            # Relevant dist is to entry point
+            dist = calc_dist(needle[first_unsub], self.targets[0])
+            # Add the length of the segments not submerged
+            extra_dist = np.sum(self.needle_lengths[first_unsub:]
+            dist += extra_dist
+
+        elif status in [2, 3]: # entry and exit/exit
+            # Check which points have y lower than exit target
+            sumberged = needle[:,1] <= self.targets[1,1]
+            idxs = np.where(submerged)
+            if len(idxs) == 0:
+                raise ValueError(
+                    "Error: status {} but no submerged points".format(status))
+
+            first_sub = idxs[0]
+            dist = calc_dist(needle[first_sub], self.targets[1])
+            extra_dist = np.sum(self.needle_lengths[first_sub:])
+            dist += extra_dist
+        else:
+            raise ValueError("Error: status 4 not yet supported")
+
+        return dist
+
     def get_reward_and_done(self):
 
         from rl.utils import ForkablePdb
@@ -139,17 +212,47 @@ class Reward_suture_v0(object):
         ss = self.env.state
         ls = self.env.last_state
 
+        done = False
+        reward = 0.
+
         # Compute needle plane vector
         v1 = ss.needle_points_pos[0] - ss.needle_points_pos[1]
         v2 = ss.needle_points_pos[0] - ss.needle_points_pos[2]
-        v_needle = np.cross(v1, v2)
+        needle_v = np.cross(v1, v2)
 
         # Compute avg dist from circle pt
-        vectors = ss.needle_points_pos - self.circle_pt
-        dist = np.linalg.norm(vs, axis=-1).mean()
+        to_circle_pt = ss.needle_points_pos - self.circle_pt
+        mid_dist = np.linalg.norm(to_circle_pt, axis=-1).mean()
 
-        # Compute deviation from vector of ideal circle
+        # Compute deviation from vector of ideal circle plane
+        theta_ideal = angle_between(needle_v, self.circle_v)
+
         # Compute difference from radius (0.06)
+        d_ideal = mid_dist - self.needle_r
+
+        # Compute distance of next point from surface
+        status = s.needle_insert_status
+        last_status = ls.needle_insert_status
+
+        self.last_focal_pt, self.last_dist = self.focal_pt, self.dist
+        self.focal_pt, self.dist = self._needle_pt_and_dist()
+
+        if status > last_status: # progress
+            reward += 1.
+
+        elif status < last_status: # regression
+            reward -= 2.
+            done = True # don't tolerate degradation
+
+        else: # insert status is same as last
+            if self.focal_pt_last is not None and \
+                    self.focal_pt_last == self.focal_pt:
+                d_dist = self.last_dist - self.dist
+
+        if status == 3: # Goal for now
+            reward += 1.
+            done = True
+
 
 
 # Reward implementation for task suture version 1
@@ -233,20 +336,6 @@ class Reward_suture_v1(object):
 
     def _calc_angle_btw_3rd_pt_and_exit(self):
 
-        def angle_between(v1, v2):
-            """ Returns the angle in radians between vectors 'v1' and 'v2'::
-
-                    >>> angle_between((1, 0, 0), (0, 1, 0))
-                    1.5707963267948966
-                    >>> angle_between((1, 0, 0), (1, 0, 0))
-                    0.0
-                    >>> angle_between((1, 0, 0), (-1, 0, 0))
-                    3.141592653589793
-            """
-
-            v1_u = unit_vector(v1)
-            v2_u = unit_vector(v2)
-            return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
         s = self.env.state
         # Compute angle between center to 3rd needle point and center to exit
