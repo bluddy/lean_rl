@@ -349,6 +349,8 @@ def run(args):
     proc_std = []
     terminate = False
 
+    w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
+
     while timestep < args.max_timesteps and not terminate:
 
         # Interact with the environments
@@ -408,8 +410,6 @@ def run(args):
         #time.sleep(0.1)
 
         # Save our data so we can loop and insert it into the replay buffer
-        write_states1, write_states2, write_actions, write_rewards = [],[],[],[]
-        write_dones, write_procs = [], []
         for env, state, ou_noise in zip(envs, states, ou_noises):
             if env.is_ready() or env.poll():
                 # Get the state and saved action from the env
@@ -418,12 +418,12 @@ def run(args):
                 new_states.append(new_state)
 
                 if action is not None:
-                    write_states1.append(state)
-                    write_states2.append(new_state)
-                    write_rewards.append(reward)
-                    write_dones.append(done)
-                    write_actions.append(action)
-                    write_procs.append(env.server_num)
+                    w_s1.append(state)
+                    w_s2.append(new_state)
+                    w_r.append(reward)
+                    w_d.append(done)
+                    w_a.append(action)
+                    w_procs.append(env.server_num)
 
                 if done:
                     render_ep_path=None
@@ -439,22 +439,22 @@ def run(args):
                 # Nothing to do with the env yet
                 new_states.append(state)
 
-        # Do compression in parallel
-        if args.compressed:
-            write_states1 = Parallel(n_jobs=-1)(delayed(state_compress)
-                    (args.mode, s) for s in write_states1)
-            write_states2 = Parallel(n_jobs=-1)(delayed(state_compress)
-                    (args.mode, s) for s in write_states2)
-            '''
-            write_states1 = [state_compress(args.mode, s) for s in write_states1]
-            write_states2 = [state_compress(args.mode, s) for s in write_states2]
-            '''
+        if len(w_s1) > 10:
+            # Do compression in parallel
+            if args.compressed:
+                w_s1 = Parallel(n_jobs=-1)(delayed(state_compress)
+                        (args.mode, s) for s in w_s1)
+                w_s2 = Parallel(n_jobs=-1)(delayed(state_compress)
+                        (args.mode, s) for s in w_s2)
+                '''
+                w_s1 = [state_compress(args.mode, s) for s in w_s1]
+                w_s2 = [state_compress(args.mode, s) for s in w_s2]
+                '''
 
-        # Feed into the replay buffer
-        for s1, s2, a, r, d, i in zip(
-                write_states1, write_states2, write_actions,
-                write_rewards, write_dones, write_procs):
-            replay_buffer.add([s1, s2, a, r, d], proc=i)
+            # Feed into the replay buffer
+            for s1, s2, a, r, d, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_procs):
+                replay_buffer.add([s1, s2, a, r, d], proc=p)
+            w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
 
         elapsed_time += time.time() - start_t
         if acted:
