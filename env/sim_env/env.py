@@ -648,14 +648,13 @@ class Environment(common_env.CommonEnv):
     def clean_up_env():
         # Check if a sim is running
         processes = psutil.process_iter()
-        sim_proc_list = []
         for p in processes:
             if 'h3drunner' in p.name().lower() and \
-                p.username() == getpass.getuser():
-                  sim_proc_list.append(p)
+                p.username() == getpass.getuser() and \
+                p.ppid() == 1: # zombie
+                  print "Cleaning up pid", p.pid
+                  os.kill(p.pid, signal.SIGTERM)
 
-        for p in sim_proc_list:
-            os.kill(p.pid, signal.SIGTERM)
 
     def combine_states(self, states):
         if self.mode == 'mixed':
