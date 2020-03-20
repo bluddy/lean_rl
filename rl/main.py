@@ -203,7 +203,8 @@ def run(args):
             raise ValueError(args.env + ' is not a recognized environment!')
 
     # Cleanup leftover envs
-    Environment.clean_up_env()
+    if args.clean:
+        Environment.clean_up_env()
 
     # Dummy env for access to some internal methods
     dummy_env = create_env(args, 0, dummy_env=True)
@@ -826,6 +827,9 @@ if __name__ == "__main__":
     parser.add_argument('--stereo', default=False, action='store_true',
             dest='stereo_mode',
             help='Use stereo images')
+
+    parser.add_argument('--no-clean', default=True, action='store_false',
+            dest='clean', help='Clean up previous envs')
 
     args = parser.parse_args()
 
