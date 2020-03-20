@@ -10,13 +10,40 @@ import random, time
 
 def state_compress(mode, state):
     ''' Should be called for compression mode '''
+
+    def compress_img(d):
+        l = []
+        for i in range(0, len(d), 3):
+            dd = d[i:i+3].transpose((1,2,0))
+            l.append(imageio.imwrite(imageio.RETURN_BYTES, dd, format='PNG'))
+        return l
+
     if mode == 'image':
-        d = np.transpose(state.squeeze(0), (1, 2, 0))
-        return imageio.imwrite(imageio.RETURN_BYTES, d, format='PNG')
+        d = state.squeeze(0)
+        return compress_img(d)
 
     elif mode == 'mixed':
-        d = np.transpose(state[0].squeeze(0), (1, 2, 0))
-        return imageio.imwrite(imageio.RETURN_BYTES, d, format='PNG')
+        d = state[0].squeeze(0)
+        s = compress_img(d)
+        return (s, state[1])
+
+def state_decompress(mode, state):
+    ''' Should be called for compression mode '''
+
+    def decompress_img(l):
+        limg = []
+        for d in l:
+            limg.append(imageio.imread(d, format='PNG').transpose((2,0,1)))
+        img = np.concatenate(limg, axis=0)
+        img = np.expand_dims(img, 0)
+        return img
+
+    if mode == 'image':
+        return decompress_img(state)
+
+    elif mode == 'mixed':
+        s = decompress_img(state[0])
+        return (s, state[1])
 
 # Expects tuples of (state, next_state, action, reward, done)
 class ReplayBuffer(object):
@@ -28,25 +55,13 @@ class ReplayBuffer(object):
         # Buffers to reuse memory
         self.compressed = compressed
 
-
     def decompress(self, data):
-        ''' Used when sampling '''
-        def read(d):
-            return imageio.imread(d, format='PNG')
-
-        if self.mode == 'image':
-            img1 = read(data[0])
-            img1 = np.expand_dims(np.transpose(img1, (2, 0, 1)), 0)
-            img2 = read(data[1])
-            img2 = np.expand_dims(np.transpose(img2, (2, 0, 1)), 0)
-            return [img1, img2] + data[2:]
-
-        elif self.mode == 'mixed':
-            img1 = read(data[0][0])
-            img1 = np.expand_dims(np.transpose(img1, (2, 0, 1)), 0)
-            img2 = read(data[1][0])
-            img2 = np.expand_dims(np.transpose(img2, (2, 0, 1)), 0)
-            return [(img1, data[0][1]), (img2, data[1][1])] + data[2:]
+        ''' Used when sampling
+            @data: [state1, state2, ...]
+        '''
+        img1 = state_decompress(self.mode, data[0])
+        img2 = state_decompress(self.mode, data[1])
+        return [img1, img2] + data[2:]
 
     def add(self, data, *args, **kwargs):
         ''' In compressed mode, the states must be pre-compressed '''

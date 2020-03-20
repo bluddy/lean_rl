@@ -444,13 +444,16 @@ def run(args):
                     (args.mode, s) for s in write_states1)
             write_states2 = Parallel(n_jobs=-1)(delayed(state_compress)
                     (args.mode, s) for s in write_states2)
+            '''
+            write_states1 = [state_compress(args.mode, s) for s in write_states1]
+            write_states2 = [state_compress(args.mode, s) for s in write_states2]
+            '''
 
         # Feed into the replay buffer
         for s1, s2, a, r, d, i in zip(
                 write_states1, write_states2, write_actions,
                 write_rewards, write_dones, write_procs):
-            if a is not None: # Not a reset, so we add
-                replay_buffer.add([s1, s2, a, r, d], proc=i)
+            replay_buffer.add([s1, s2, a, r, d], proc=i)
 
         elapsed_time += time.time() - start_t
         if acted:
