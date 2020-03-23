@@ -287,7 +287,11 @@ def run(args):
     # Load from files if requested
     if args.load_last and last_dir is not None:
         last_model_dir = pjoin(logbase, last_dir, 'model')
-        print 'last_model_dir is ', last_model_dir
+        timestep_file = pjoin(last_model_dir, 'timestep.txt')
+        timestep = None
+        if os.path.exists(timestep_file):
+            with open(timestep_file, 'r') as f:
+                timestep = int(f.read()) + 1
         policy.load(last_model_dir)
         last_csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
@@ -295,6 +299,9 @@ def run(args):
             t = 0
             for line in reader:
                 t = int(line[0])
+                # Stop if we know where to stop reading csv
+                if timestep is not None and t > timestep:
+                    break
                 r, q_avg, q_max, loss, best_avg_reward = map(
                     lambda x: float(x), line[1:6])
                 last_learn_t, last_eval_t = int(line[6]), int(line[7])
@@ -305,7 +312,9 @@ def run(args):
                 total_loss.append(loss)
                 csv_wr.writerow(line)
             csv_f.flush()
-            timestep = t + 1
+            if timestep is None:
+                timestep = t + 1
+        print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
 
     ## load pre-trained policy
     #try:
@@ -497,6 +506,8 @@ def run(args):
             if best_reward > best_avg_reward:
                 best_avg_reward = best_reward
                 policy.save(model_path)
+                with open(pjoin(model_path, 'timestep.txt'), 'w') as f:
+                    f.write(timestep)
 
         ## Train
         if timestep - last_learn_t > args.learn_freq and \
