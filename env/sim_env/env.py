@@ -180,8 +180,8 @@ class Environment(common_env.CommonEnv):
         # How often to reset the environment
         # Due to memory leaks or just errors
         self.reboot_eps = 300
-        # After 5 errors, reboot
-        self.max_error_ctr = 5
+        # Reboot after these many errors
+        self.max_error_ctr = 7
         self.error_ctr = 0
 
         self.episode = 0
@@ -216,9 +216,10 @@ class Environment(common_env.CommonEnv):
         self.action_dim = len(self.action_steps)
 
         if full_init:
-            self._connect_to_sim()
+            if not self._connect_to_sim():
+                self._reboot_until_up()
 
-    def _reboot(self):
+    def _reboot_until_up(self):
         ''' Reboot the sim and reconnect to it '''
         good = False
         while not good:
@@ -226,6 +227,7 @@ class Environment(common_env.CommonEnv):
             self._kill_sim()
             time.sleep(6)
             good = self._connect_to_sim()
+            self.clean_up_env() # Remove zombies
 
     def _kill_sim(self):
         self.sim_connection = None
@@ -309,26 +311,18 @@ class Environment(common_env.CommonEnv):
             self._init_shared_mem()
 
     def _connect_to_sim(self):
-        # First check for a running viewer
-        #sim_proc_list = [p[0] for p in processes if 'h3dviewer' in p[1]]
-        #if len(sim_proc_list) > 0:
-        #    self.program = 'viewer'
-        #else:
+        if self.sim_connection is not None:
+            return True
         self.program = 'runner'
 
         # Launch sim
-        if self.program == 'runner':
-            #sim_proc_list = [p[0] for p in processes if 'h3drunner' in p[1]]
+        path = pjoin(sim_path, 'ISIH3DModuleBase', 'modules', 'NeedleDriving')
+        self.sim_pid = ISISim.common_module_starter.startModule(
+            'NeedleDriving', 1, 'debug', 'runner', path,
+            resolution=self.resolution, random_num=random_num,
+            server_num=self.server_num)
 
-            #for p in sim_proc_list:
-            #    os.kill(p.pid, signal.SIGTERM)
-            path = pjoin(sim_path, 'ISIH3DModuleBase', 'modules', 'NeedleDriving')
-            self.sim_pid = ISISim.common_module_starter.startModule(
-                'NeedleDriving', 1, 'debug', 'runner', path,
-                resolution=self.resolution, random_num=random_num,
-                server_num=self.server_num)
-
-            time.sleep(6)
+        time.sleep(6)
 
         # Loop until sim is up
         while self.sim_connection is None:
@@ -511,8 +505,9 @@ class Environment(common_env.CommonEnv):
     def _step_real_sim(self, a_orig):
         ''' Take a real step in the sim '''
 
-        if self.sim_connection is None:
-            self._connect_to_sim()
+        if not self._connect_to_sim():
+            self._reboot_until_up()
+
         # Real sim
         a = np.copy(a_orig)
 
@@ -588,12 +583,11 @@ class Environment(common_env.CommonEnv):
             {"action": action_orig, "save_mode":self.get_save_mode()})
 
     def _reset_real(self):
-        if self.sim_connection is None:
-            self._connect_to_sim()
+        self._connect_to_sim()
 
         if self.episode % self.reboot_eps == 0 or \
            self.error_ctr >= self.max_error_ctr:
-            self._reboot()
+            self._reboot_until_up()
 
         self.error_ctr = 0
 
@@ -601,7 +595,7 @@ class Environment(common_env.CommonEnv):
         good = False
         while not good:
             if self.error_ctr > 5:
-                self._reboot()
+                self._reboot_until_up()
                 self.error_ctr = 0
 
             # Load the state
