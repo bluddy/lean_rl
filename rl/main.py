@@ -286,6 +286,8 @@ def run(args):
     # Load from files if requested
     if args.load_last and last_dir is not None:
         last_model_dir = pjoin(logbase, last_dir, 'model')
+        if args.load_best:
+            last_model_dir = pjoin(last_model_dir, 'best')
         timestep_file = pjoin(last_model_dir, 'timestep.txt')
         timestep = None
         if os.path.exists(timestep_file):
@@ -501,12 +503,18 @@ def run(args):
 
             temp_loss, temp_q_avg, temp_q_max = [], [], []
 
-            ## save model parameters if improved
-            if best_reward > best_avg_reward:
-                best_avg_reward = best_reward
-                policy.save(model_path)
-                with open(pjoin(model_path, 'timestep.txt'), 'w') as f:
+            def save_policy(path):
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                policy.save(path)
+                with open(pjoin(path, 'timestep.txt'), 'w') as f:
                     f.write(str(timestep))
+
+            if best_reward > best_avg_reward:
+                print "Saving new best avg reward: {}".format(best_avg_reward)
+                best_avg_reward = best_reward
+                save_policy(pjoin(model_path, 'best'))
+            save_policy(model_path)
 
         ## Train
         if timestep - last_learn_t > args.learn_freq and \
@@ -661,10 +669,10 @@ def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
     plt.savefig(pjoin(logdir, 'rewards.png'))
     tb_writer.add_figure('rewards', fig, global_step=timestep)
 
-    s = "\nEval Ep:{} R:{:.4f} a_avg:{:.2f} a_std:{:.2f} " \
+    s = "\nEval Ep:{} R:{:.4f} BR:{:.4f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward, avg_action, std_action,
+      env.episode, avg_reward, best_avg_reward, avg_action, std_action,
       min_action, max_action,
       q_avg, q_max, loss_avg)
     print s
@@ -803,6 +811,8 @@ if __name__ == "__main__":
         help="Continue training from a directory")
     parser.add_argument("--load-last", default=False, action='store_true',
         help="Continue training from last model")
+    parser.add_argument("--load-best", default=False, action='store_true',
+        help="If load-last is selected, continue from last best saved model")
 
     parser.add_argument("--policy", default="dqn", type=str,
             help="Policy type. dummy|ddpg|td3|dqn|ddqn|bdqn")
