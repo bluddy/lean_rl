@@ -10,7 +10,7 @@ feat_size = 7
 def calc_features(img_stack):
     return img_stack
 
-def make_linear(in_size, out_size, bn=False, drop=True, relu=True):
+def make_linear(in_size, out_size, bn=False, drop=False, relu=True):
     l = []
     l.append(nn.Linear(in_size, out_size))
     if relu:
@@ -18,7 +18,7 @@ def make_linear(in_size, out_size, bn=False, drop=True, relu=True):
     if bn:
         l.append(nn.BatchNorm1d(out_size))
     if drop:
-        l.append(nn.DropOut(p=0.2))
+        l.append(nn.Dropout(p=0.2))
     return l
 
 def hidden_init(layer):

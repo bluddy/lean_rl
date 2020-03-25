@@ -10,10 +10,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # DQN
 
-
-# NOTE: Batchnorm is a problem for these algorithms. We need consistency
-# and determinism, especially for the actor. Batchnorm seems to break that.
-
 # We have greyscale, and then one RGB
 
 class DQN(object):
@@ -211,30 +207,30 @@ class DQN(object):
 
         length = len(u)
 
-        state, next_state, action, reward, done, qorig, weights = \
+        state, state2, action, reward, done, qorig, weights = \
             self._copy_sample_to_dev(x, y, u, r, d, qorig, w, length)
 
-        target_Qs = self.q_target(next_state)
-        target_Q = torch.max(target_Qs, dim=-1, keepdim=True)[0]
+        Q_ts = self.q_target(state2)
+        Q_t = torch.max(Q_ts, dim=-1, keepdim=True)[0]
 
         # Compute the target Q value
         # done: We use reverse of done to not consider future rewards
 
-        target_Q = reward + (done * args.discount * target_Q).detach()
+        Q_t = reward + (done * args.discount * Q_t).detach()
 
         # Overwrite with q_orig
         if self.use_orig_q and qorig_prob > 0.:
             choose_probs = torch.rand(length).to(device)
             mask = choose_probs.le(qorig_prob)
             indices = mask.nonzero().squeeze(1)
-            target_Q[indices] = qorig[indices]
+            Q_t[indices] = qorig[indices]
 
         # Get current Q estimate
-        current_Q = self.q(state)
-        current_Q = torch.gather(current_Q, -1, action)
+        Q_now = self.q(state)
+        Q_now = torch.gather(Q_now, -1, action)
 
         # Compute loss
-        q_loss = (current_Q - target_Q).pow(2)
+        q_loss = (Q_now - Q_t).pow(2)
         prios = q_loss + 1e-5
         prios = prios.data.cpu().numpy()
         if weights is not None:
@@ -268,13 +264,11 @@ class DQN(object):
 
         replay_buffer.update_priorities(indices, prios)
 
-        tau = args.tau
-
         # Update the frozen target models
-        for param, param_t in zip(self.q.parameters(), self.q_target.parameters()):
-            param_t.data.copy_(tau * param.data + (1 - tau) * param_t.data)
+        for p, p_t in zip(self.q.parameters(), self.q_target.parameters()):
+            p_t.data.copy_(args.tau * p.data + (1 - args.tau) * p_t.data)
 
-        return q_loss.item(), None, current_Q.mean().item(), current_Q.max().item()
+        return q_loss.item(), None, Q_now.mean().item(), Q_now.max().item()
 
     def save(self, path):
         torch.save(self.q.state_dict(), os.path.join(path, 'q.pth'))
@@ -321,13 +315,13 @@ class DDQN(DQN):
                 replay_buffer.sample(args.batch_size, beta=beta)
             length = len(u)
 
-            state, next_state, action, reward, done, qorig, weights = \
+            state, state2, action, reward, done, qorig, weights = \
                 self._copy_sample_to_dev(x, y, u, r, d, qorig, w, length)
 
             #from rl.utils import ForkablePdb
             #ForkablePdb().set_trace()
 
-            Qt = [qt(next_state) for qt in self.qts]
+            Qt = [qt(state2) for qt in self.qts]
             Qt = torch.min(*Qt)
 
             Qt_max, _ = torch.max(Qt, dim=-1, keepdim=True)
@@ -431,16 +425,16 @@ class BatchDQN(DQN):
             replay_buffer.sample(args.batch_size, beta=beta)
         length = len(u)
 
-        state, next_state, action, reward, done, qorig, weights = \
+        state, state2, action, reward, done, qorig, weights = \
             self._copy_sample_to_dev(x, y, u, r, d, qorig, w, length)
 
         #import pdb
         #pdb.set_trace()
 
         with torch.no_grad():
-            a_weights = torch.exp(self.action_weights(next_state))
+            a_weights = torch.exp(self.action_weights(state2))
             sample_idx = torch.multinomial(a_weights, self.n_samples, replacement=True)
-            Qt = self.qt(next_state)
+            Qt = self.qt(state2)
             Qt = torch.gather(Qt, -1, sample_idx)
             Qt_max, _ = torch.max(Qt, dim=-1, keepdim=True)
             y = reward + (done * args.discount * Qt_max)
