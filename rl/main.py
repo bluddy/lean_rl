@@ -507,7 +507,7 @@ def run(args):
                 best_avg_reward = best_reward
                 policy.save(model_path)
                 with open(pjoin(model_path, 'timestep.txt'), 'w') as f:
-                    f.write(timestep)
+                    f.write(str(timestep))
 
         ## Train
         if timestep - last_learn_t > args.learn_freq and \
