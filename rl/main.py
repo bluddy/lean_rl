@@ -510,10 +510,11 @@ def run(args):
                 with open(pjoin(path, 'timestep.txt'), 'w') as f:
                     f.write(str(timestep))
 
-            if best_reward > best_avg_reward:
-                print "Saving new best avg reward: {}".format(best_avg_reward)
+            best_path = pjoin(model_path, 'best')
+            if best_reward > best_avg_reward or not os.path.exists(best_path):
                 best_avg_reward = best_reward
-                save_policy(pjoin(model_path, 'best'))
+                print "Saving best avg reward: {}".format(best_avg_reward)
+                save_policy(best_path)
             save_policy(model_path)
 
         ## Train
@@ -669,10 +670,10 @@ def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
     plt.savefig(pjoin(logdir, 'rewards.png'))
     tb_writer.add_figure('rewards', fig, global_step=timestep)
 
-    s = "\nEval Ep:{} R:{:.4f} BR:{:.4f} a_avg:{:.2f} a_std:{:.2f} " \
+    s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward, best_avg_reward, avg_action, std_action,
+      env.episode, avg_reward, r_avg[-1], best_avg_reward, avg_action, std_action,
       min_action, max_action,
       q_avg, q_max, loss_avg)
     print s
@@ -682,7 +683,8 @@ def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
         best_avg_reward, last_learn_t, last_eval_t
     ])
     csv_f.flush()
-    return avg_reward
+
+    return r_avg[-1]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
