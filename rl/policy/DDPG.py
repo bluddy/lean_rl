@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import os, sys
 import torch.nn.functional as F
 from models import ActorImage, CriticImage, ActorState, CriticState
 from os.path import join as pjoin
@@ -81,7 +80,7 @@ class DDPG(object):
         if self.mode == 'image':
             if state.ndim < 4:
                 state = np.expand_dims(state, 0)
-            state = torch.from_numpy(state).to(device).float() # possibly missing squeeze(1)
+            state = torch.from_numpy(state).to(device).float()
             state /= 255.0
         elif self.mode == 'state':
             state = torch.from_numpy(state).to(device).float()
@@ -95,7 +94,6 @@ class DDPG(object):
             state = (img, state2)
         else:
             raise ValueError('Unrecognized mode ' + mode)
-
         return state
 
     def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
@@ -124,10 +122,8 @@ class DDPG(object):
         [x, y, u, r, d, qorig, indices, w], qorig_prob = \
                 replay_buffer.sample(args.batch_size, beta=beta)
 
-        length = len(u)
-
         state, state2, action, reward, done, qorig, weights = \
-            self._copy_sample_to_dev(x, y, u, r, d, qorig, w, length)
+            self._copy_sample_to_dev(x, y, u, r, d, qorig, w, len(u))
 
         action2 = self.actor_t(state2)
 

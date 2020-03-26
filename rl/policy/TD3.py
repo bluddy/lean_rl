@@ -1,206 +1,227 @@
 import numpy as np
 import torch
-from os.path import join as pjoin
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
-import math
-import copy
 from models import ActorImage, CriticImage, ActorState, CriticState
+from os.path import join as pjoin
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
 # Paper: https://arxiv.org/abs/1802.09477
 
-class TD3:
-    def __init__(self, state_dim, action_dim, img_stack,
-            max_action, mode, lr, actor_lr=None, lr2=None,
-            bn=False, img_dim=224, load_encoder=''):
+def avg(l):
+    return sum(l)/float(len(l))
 
+class TD3(object):
+    def __init__(self, state_dim, action_dim, stack_size,
+            mode, lr=1e-4, img_depth=3, bn=True, actor_lr=None, lr2=None,
+            img_dim=224):
+
+        self.state_dim = state_dim
         self.action_dim = action_dim
-        self.max_action = max_action
+
+        self.total_stack = stack_size * img_depth
         self.mode = mode
-        lr2 = lr if lr2 is None else lr2
-        actor_lr = lr if actor_lr is None else actor_lr
 
+        self.lr = lr
+        self.bn = bn
+        self.img_dim = img_dim
+
+        self.lr2 = lr if lr2 is None else lr2
+        self.actor_lr = lr if actor_lr is None else actor_lr
+
+        self._create_models()
+
+        print "LR={}, actor_LR={}, LR2={}".format(lr, actor_lr, lr2)
+
+    def set_eval(self):
+        self.actor.eval()
+        for critic in self.critics:
+            critic.eval()
+
+    def set_train(self):
+        self.actor.train()
+        for critic in self.critics:
+            critic.train()
+
+    def _create_critic(self):
         if self.mode == 'image':
-            def create_actor():
-                return ActorImage(action_dim, img_stack, max_action,
-                        bn=bn, img_dim=img_dim).to(device)
-
-            self.actor = create_actor()
-            self.actor_target = create_actor()
-
-            def create_critic():
-                return CriticImage(action_dim, img_stack, bn=bn,
-                         img_dim=img_dim).to(device)
-
-            self.critics = [create_critic() for _ in xrange(2)]
-            self.critic_targets = [create_critic() for _ in xrange(2)]
-
-            # Load encoder if requested
-            if load_encoder != '':
-                print "Loading encoder model..."
-                for model in [self.actor] + self.critics:
-                     model.encoder.load_state_dict(torch.load(load_encoder))
-
+            n = CriticImage(self.action_dim, self.total_stack,
+                    bn=self.bn, img_dim=self.img_dim).to(device)
         elif self.mode == 'state':
-            self.actor = ActorState(
-                    state_dim, action_dim, max_action, bn=bn).to(device)
-            self.actor_target = ActorState(
-                    state_dim, action_dim, max_action, bn=bn).to(device)
-            def create_critic():
-                return CriticState(state_dim, action_dim, bn=bn).to(device)
-
-            self.critics = [create_critic() for _ in xrange(2)]
-            self.critic_targets = [create_critic() for _ in xrange(2)]
+            n = CriticState(self.state_dim, self.action_dim, bn=self.bn).to(device)
         else:
             raise ValueError('Unrecognized mode ' + mode)
+        return n
 
-        self.actor_target.load_state_dict(self.actor.state_dict())
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(),
-               lr=actor_lr)
-        #self.actor_optimizer = torch.optim.SGD(self.actor.parameters(),
-        #        lr=actor_lr, momentum=0.)
+    def _create_actor(self):
+        if self.mode == 'image':
+            n = ActorImage(self.action_dim, self.total_stack,
+                    bn=self.bn, img_dim=self.img_dim).to(device)
+        elif self.mode == 'state':
+            n = ActorState(self.state_dim, self.action_dim, max_action=1.0,
+                    bn=self.bn).to(device)
+        else:
+            raise ValueError('Unrecognized mode ' + mode)
+        return n
 
-        self.critic_optimizers = []
-        for critic, critic_target, crit_lr in zip(
-                self.critics, self.critic_targets, (lr,lr2)):
-            critic_target.load_state_dict(critic.state_dict())
-            self.critic_optimizers.append(torch.optim.Adam(
-                critic.parameters(), lr=crit_lr))
-            #self.critic_optimizers.append(torch.optim.SGD(
-            #    critic.parameters(), lr=crit_lr, momentum=0.))
+    def _create_models(self):
+        self.actor = self._create_actor()
+        self.actor_t = self._create_actor()
+        self.actor_t.load_state_dict(self.actor.state_dict())
 
-    def select_action(self, state):
+        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+
+        self.critics = [self._create_critic() for _ in range(2)]
+        self.critics_t = [self._create_critic() for _ in range(2)]
+        for critic, critic_t in zip(self.critics, self.critics_t):
+            critic_t.load_state_dict(critic.state_dict())
+
+        self.opts_c = []
+        for critic in self.critics:
+            self.opts_c.append(torch.optim.Adam(critic.parameters(), lr=self.lr))
+
+    def _process_state(self, state):
         # Copy as uint8
         if self.mode == 'image':
-            state = torch.from_numpy(state).unsqueeze(0).to(device).float()
+            if state.ndim < 4:
+                state = np.expand_dims(state, 0)
+            state = torch.from_numpy(state).to(device).float()
             state /= 255.0
         elif self.mode == 'state':
             state = torch.from_numpy(state).to(device).float()
+        elif self.mode == 'mixed':
+            img = state[0]
+            if img.ndim < 4:
+                img = np.expand_dims(img, 0)
+            img = torch.from_numpy(img).to(device).float()
+            img /= 255.0
+            state2 = torch.from_numpy(state[1]).to(device).float()
+            state = (img, state2)
         else:
             raise ValueError('Unrecognized mode ' + mode)
-        return self.actor(state).cpu().data.numpy().flatten()
+        return state
 
-    def copy_sample_to_device(self, x, y, u, r, d, w, batch_size):
-        # Copy as uint8
-        x = torch.from_numpy(x).squeeze(1).to(device).float()
-        y = torch.from_numpy(y).squeeze(1).to(device).float()
-        if self.mode == 'image':
-            x /= 255.0 # Normalize
-            y /= 255.0 # Normalize
-        u = u.reshape((batch_size, self.action_dim))
-        u = torch.FloatTensor(u).to(device)
+    def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
+        x = self._process_state(x)
+        y = self._process_state(y)
+        u = torch.FloatTensor(u).to(device) # actions
         r = torch.FloatTensor(r).to(device)
         d = torch.FloatTensor(1 - d).to(device)
-        w = w.reshape((batch_size, -1))
-        w = torch.FloatTensor(w).to(device)
-        return x, y, u, r, d, w
+        if qorig is not None:
+            qorig = qorig.reshape((batch_size, -1))
+            qorig = torch.FloatTensor(qorig).to(device)
+        if w is not None:
+            w = w.reshape((batch_size, -1))
+            w = torch.FloatTensor(w).to(device)
+        return x, y, u, r, d, qorig, w
 
-    def train(self, replay_buffer, timesteps, beta_PER, args):
+    def select_action(self, state):
+        # Copy as uint8
+        state = self._process_state(state)
+        action = self.actor(state).cpu().data.numpy()
+        return action
 
-        batch_size = args.batch_size
-        discount = args.discount
-        tau = args.tau
-        actor_tau = args.actor_tau
+    def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
+        x = self._process_state(x)
+        y = self._process_state(y)
+        u = torch.FloatTensor(u).to(device) # actions
+        r = torch.FloatTensor(r).to(device)
+        d = torch.FloatTensor(1 - d).to(device)
+        if qorig is not None:
+            qorig = qorig.reshape((batch_size, -1))
+            qorig = torch.FloatTensor(qorig).to(device)
+        if w is not None:
+            w = w.reshape((batch_size, -1))
+            w = torch.FloatTensor(w).to(device)
+        return x, y, u, r, d, qorig, w
 
-        # Noise to add smoothing
-        policy_noise = args.policy_noise
-        noise_clip = args.noise_clip
-        policy_freq = args.policy_freq
+    def select_action(self, state):
+        # Copy as uint8
+        state = self._process_state(state)
+        action = self.actor(state).cpu().data.numpy()
+        return action
+
+    def train(self, replay_buffer, timesteps, beta, args):
 
         # Sample replay buffer
-        x, y, u, r, d, indices, w = replay_buffer.sample(
-                batch_size, beta=beta_PER)
+        [x, y, u, r, d, qorig, indices, w], qorig_prob = \
+                replay_buffer.sample(batch_size, beta=beta)
 
-        state, next_state, action, reward, done, weights = \
-                self.copy_sample_to_device(x, y, u, r, d, w, batch_size)
+        state, state2, action, reward, done, weights = \
+                self._copy_sample_to_dev(x, y, u, r, d, qorig, w, len(u))
 
-        # Select action according to policy and add clipped noise
-        # for smoothing
+        # Add noise to action to add resilience
         noise = torch.FloatTensor(u).data.normal_(0, policy_noise).to(device)
         noise = noise.clamp(-noise_clip, noise_clip)
 
-        # NOTE: May need to scale noise for max_action
-        next_action = self.actor_target(next_state) + noise
-        next_action = torch.clamp(next_action,
-                -self.max_action,self.max_action)
+        with torch.no_grad():
+            action2 = self.actor_t(state2) + noise
 
-        # Compute the target Q value
-        target_Qs = [c_t(next_state, next_action)
-                for c_t in self.critic_targets]
-        target_Q = torch.min(*target_Qs)
-        target_Q = reward + (done * discount * target_Q).detach()
+            # Compute the target Q value
+            Qs_t = [c_t(state2, action2) for c_t in self.critics_t]
+            Q_t = torch.min(*Q_ts)
+            Q_t = reward + (done * args.discount * Q_t)
 
         # Get current Q estimates
-        current_Qs = [crit(state, action) for crit in self.critics]
+        Qs_now = [crit(state, action) for crit in self.critics]
 
         # Compute critic loss
-        critic_losses = []
-        critic_mean_losses = []
-        for current_Q in current_Qs:
-            critic_losses.append(weights * (current_Q - target_Q).pow(2))
-        for critic_loss in critic_losses:
-            critic_mean_losses.append(critic_loss.mean())
-
-        # No good way to do priorities for 2 networks
-        prios = (critic_losses[0] + critic_losses[1]) / 2. + 1e-5
+        losses_c = [(Q_now - Q_t).pow(2) for Q_now, Q_t in zip(Qs_now, Qs_t)]
+        prios = losses_c[0] + 1e-5
+        prios = prios.data.cpu().numpy()
+        if weights is not None:
+            losses_c = [loss_c * weights for loss_c in losses_c]
+        losses_c = [loss_c.mean() for loss_c in losses_c]
 
         # Optimize the critics
-        for c_opt, crit_loss in zip(self.critic_optimizers, critic_mean_losses):
-            c_opt.zero_grad()
-            crit_loss.backward()
-            c_opt.step()
-#             print("indices len: " + str(len(indices)))
-#             print("prios size:" + str(prios.size()))
+        for opt_c, loss_c in zip(self.opts_c, losses_c):
+            opt_c.zero_grad()
+            loss_c.backward()
+            opt_c.step()
 
-        replay_buffer.update_priorities(indices, prios.data.cpu().numpy())
+        replay_buffer.update_priorities(indices, prios)
 
-        # Delayed policy updates
-        ret_actor_loss = 0.
-        if timesteps % policy_freq == 0:
+        # Policy updates
+        if timesteps % args.policy_freq == 0:
 
             # Compute actor loss
-            actor_loss = -self.critics[0](state, self.actor(state)).mean()
+            loss_a = -self.critics[0](state, self.actor(state)).mean()
 
             # Optimize the actor
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor_optimizer.step()
+            self.opt_a.zero_grad()
+            loss_a.backward()
+            self.opt_a.step()
 
             # Update the frozen target models
-            for critic, critic_t in zip(self.critics, self.critic_targets):
-                for param, param_t in zip(critic.parameters(),
-                        critic_t.parameters()):
-                    param_t.data.copy_(tau * param.data +
-                            (1 - tau) * param_t.data)
+            for c, c_t in zip(self.critics, self.critics_t):
+                for p, p_t in zip(c.parameters(), c_t.parameters()):
+                    p_t.data.copy_(args.tau * p.data + (1 - args.tau) * p_t.data)
 
-            for param, param_t in zip(self.actor.parameters(),
-                    self.actor_target.parameters()):
-                param_t.data.copy_(actor_tau * param.data + (1 - actor_tau) * param_t.data)
+            tau = args.actor_tau
+            for p, p_t in zip(self.actor.parameters(), self.actor_t.parameters()):
+                p_t.data.copy_(tau * p.data + (1 - tau) * p_t.data)
 
-            ret_actor_loss = actor_loss.item()
-
-        mean_crit_loss = sum([c.item() for c in critic_mean_losses]) / 2.
-        return mean_crit_loss, ret_actor_loss
+        loss_c_mean = avg([loss_c.item() for loss_c in losses_c])
+        Q_mean = avg([Q_now.mean().item() for Q_now in Qs_now])
+        Q_max = max([Q_now.max().item() for Q_now in Qs_now])
+        return loss_c_mean, loss_a.item(), Q_mean, Q_max
 
     def save(self, path):
         torch.save(self.actor.state_dict(), pjoin(path, 'actor.pth'))
-        torch.save(self.actor_target.state_dict(), pjoin(path, 'actor_t.pth'))
-        for i, (critic, critic_t) in enumerate(
-                zip(self.critics, self.critic_targets)):
-            torch.save(critic.state_dict(), pjoin(path, 'critic{}.pth'.format(i)))
-            torch.save(critic_t.state_dict(), pjoin(path,
-                'critic_t{}.pth'.format(i)))
+        torch.save(self.actor_t.state_dict(), pjoin(path, 'actor_t.pth'))
+        for i, (critic, critic_t) in enumerate(zip(self.critics, self.critics_t)):
+            torch.save(critic.state_dict(),
+                pjoin(path, 'critic{}.pth'.format(i)))
+            torch.save(critic_t.state_dict(),
+                pjoin(path, 'critic{}_t.pth'.format(i)))
 
     def load(self, path):
         self.actor.load_state_dict(torch.load(pjoin(path, 'actor.pth')))
-        self.actor_target.load_state_dict(torch.load(pjoin(path, 'actor_t.pth')))
-        for i, (critic, critic_t) in enumerate(
-                zip(self.critics, self.critic_targets)):
+        self.actor_t.load_state_dict(torch.load(pjoin(path, 'actor_t.pth')))
+        for i, (critic, critic_t) in enumerate(zip(self.critics, self.critics_t)):
             critic.load_state_dic(torch.load(
                 pjoin(path, 'critic{}.pth'.format(i))))
             critic_t.load_state_dic(torch.load(
-                pjoin(path, 'critic_t{}.pth'.format(i))))
+                pjoin(path, 'critic{}_t.pth'.format(i))))
