@@ -147,21 +147,21 @@ class TD3(object):
 
         # Sample replay buffer
         [x, y, u, r, d, qorig, indices, w], qorig_prob = \
-                replay_buffer.sample(batch_size, beta=beta)
+                replay_buffer.sample(args.batch_size, beta=beta)
 
-        state, state2, action, reward, done, weights = \
+        state, state2, action, reward, done, qorig, weights = \
                 self._copy_sample_to_dev(x, y, u, r, d, qorig, w, len(u))
 
         # Add noise to action to add resilience
-        noise = torch.FloatTensor(u).data.normal_(0, policy_noise).to(device)
-        noise = noise.clamp(-noise_clip, noise_clip)
+        noise = torch.FloatTensor(u).data.normal_(0, args.policy_noise).to(device)
+        noise = noise.clamp(-args.noise_clip, args.noise_clip)
 
         with torch.no_grad():
             action2 = self.actor_t(state2) + noise
 
             # Compute the target Q value
             Qs_t = [c_t(state2, action2) for c_t in self.critics_t]
-            Q_t = torch.min(*Q_ts)
+            Q_t = torch.min(*Qs_t)
             Q_t = reward + (done * args.discount * Q_t)
 
         # Get current Q estimates
@@ -183,6 +183,12 @@ class TD3(object):
 
         replay_buffer.update_priorities(indices, prios)
 
+        # Compute mean values for returning
+        loss_c_mean = avg([loss_c.item() for loss_c in losses_c])
+        Q_mean = avg([Q_now.mean().item() for Q_now in Qs_now])
+        Q_max = max([Q_now.max().item() for Q_now in Qs_now])
+        ret_loss_a = 0.
+
         # Policy updates
         if timesteps % args.policy_freq == 0:
 
@@ -203,10 +209,9 @@ class TD3(object):
             for p, p_t in zip(self.actor.parameters(), self.actor_t.parameters()):
                 p_t.data.copy_(tau * p.data + (1 - tau) * p_t.data)
 
-        loss_c_mean = avg([loss_c.item() for loss_c in losses_c])
-        Q_mean = avg([Q_now.mean().item() for Q_now in Qs_now])
-        Q_max = max([Q_now.max().item() for Q_now in Qs_now])
-        return loss_c_mean, loss_a.item(), Q_mean, Q_max
+            ret_loss_a = loss_a.item()
+
+        return loss_c_mean, ret_loss_a, Q_mean, Q_max
 
     def save(self, path):
         torch.save(self.actor.state_dict(), pjoin(path, 'actor.pth'))

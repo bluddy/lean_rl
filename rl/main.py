@@ -244,9 +244,8 @@ def run(args):
     if args.policy == 'td3':
         from policy.TD3 import TD3
         policy = TD3(state_dim, action_dim, args.stack_size,
-            args.mode, lr=args.lr, lr2=args.lr2,
-            actor_lr=args.actor_lr, bn=args.batchnorm, img_dim=args.img_dim,
-            img_depth=img_depth, load_encoder=args.load_encoder)
+            args.mode, lr=args.lr, img_depth=img_depth,
+            bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'ddpg':
         from policy.DDPG import DDPG
         policy = DDPG(state_dim, action_dim, args.stack_size,
