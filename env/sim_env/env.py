@@ -139,6 +139,13 @@ class State(object):
         self.needle_tip_grabbed = data[index]; index += 1
         self.incorrect_needle_throws = data[index]; index += 1
 
+        # Handle older data
+        if len(data) > index:
+            self.tissue_corners = []
+            self.tissue_corners.append(np.array(data[index:index+3]); index += 3
+            self.tissue_corners.append(np.array(data[index:index+3]); index += 3
+
+
 class Environment(common_env.CommonEnv):
 
     def __init__(self, mode='state', start_port=50001,
