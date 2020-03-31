@@ -142,8 +142,8 @@ class State(object):
         # Handle older data
         if len(data) > index:
             self.tissue_corners = []
-            self.tissue_corners.append(np.array(data[index:index+3]); index += 3
-            self.tissue_corners.append(np.array(data[index:index+3]); index += 3
+            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
+            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
 
 
 class Environment(common_env.CommonEnv):
