@@ -179,14 +179,18 @@ class Reward_suture_v0(object):
                 #last_sub = len(needle) - 1
                 # Fully submerged? Impossible in status 1
                 raise ValueError("[{}] Error: status 1 but all submerged".
-                        format(self.server_num))
+                        format(self.env.server_num))
 
             first_unsub = idxs[0]
-            if first_unsub == 0:
-                raise ValueError("[{}] Error: status 1 but no submerged points".
-                        format(self.server_num))
+            #if first_unsub == 0:
+            #    raise ValueError("[{}] Error: status 1 but no submerged points".
+            #            format(self.env.server_num))
 
             if np.any(submerged[first_unsub:]):
+
+                from rl.utils import ForkablePdb
+                ForkablePdb().set_trace()
+
                 raise ValueError("[{}] Error: status 1: found submerged "
                     "in wrong place!".format(self.env.server_num))
 
@@ -200,6 +204,7 @@ class Reward_suture_v0(object):
             # Check which points have y lower than exit target
             submerged = needle[:,1] <= self.targets[1,1]
             idxs = np.where(submerged)[0]
+
             if len(idxs) == 0:
                 raise ValueError(
                     "Error: status {} but no submerged points".format(status))
@@ -271,8 +276,8 @@ class Reward_suture_v0(object):
 
             self.last_dist = dist
 
-        from rl.utils import ForkablePdb
-        ForkablePdb().set_trace()
+        #from rl.utils import ForkablePdb
+        #ForkablePdb().set_trace()
 
         reward += 10 * (d + d_a_ideal + d_dist_ideal * 10)
 
