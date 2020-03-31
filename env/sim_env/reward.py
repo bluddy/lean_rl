@@ -173,8 +173,8 @@ class Reward_suture_v0(object):
 
         elif status == 1: # only entry
             # Check which points have y lower than target
-            sumberged = needle[:,1] <= self.targets[0,1]
-            idxs = np.where(not submerged)
+            submerged = needle[:,1] <= self.targets[0,1]
+            idxs = np.where(submerged == False)[0]
             if len(idxs) == 0: # Fully submerged
                 #last_sub = len(needle) - 1
                 # Fully submerged? Impossible in status 1
@@ -188,7 +188,7 @@ class Reward_suture_v0(object):
 
             if np.any(submerged[first_unsub:]):
                 raise ValueError("[{}] Error: status 1: found submerged "
-                    "in wrong place!".format(self.server_num))
+                    "in wrong place!".format(self.env.server_num))
 
             # Relevant dist is to entry point
             dist = calc_dist(needle[first_unsub], self.targets[0])
@@ -198,8 +198,8 @@ class Reward_suture_v0(object):
 
         elif status in [2, 3]: # entry and exit/exit
             # Check which points have y lower than exit target
-            sumberged = needle[:,1] <= self.targets[1,1]
-            idxs = np.where(submerged)
+            submerged = needle[:,1] <= self.targets[1,1]
+            idxs = np.where(submerged)[0]
             if len(idxs) == 0:
                 raise ValueError(
                     "Error: status {} but no submerged points".format(status))
@@ -249,7 +249,7 @@ class Reward_suture_v0(object):
 
         # Make sure we never get further than reset distance
         # In status 0
-        if status == 0 and dist > 2. * self.reset_dist:
+        if status == 0 and dist > 20. * self.reset_dist:
             done = True
             reward -= 5.
 
@@ -274,7 +274,7 @@ class Reward_suture_v0(object):
         from rl.utils import ForkablePdb
         ForkablePdb().set_trace()
 
-        reward += 10 * (d + d_a_ideal + d_dist_ideal)
+        reward += 10 * (d + d_a_ideal + d_dist_ideal * 10)
 
         if status == 3: # Goal for now
             reward += 1.
