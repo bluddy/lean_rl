@@ -47,7 +47,7 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
     return l
 
 class BaseImage(nn.Module):
-    def __init__(self, img_stack, bn=True, drop=False, img_dim=224):
+    def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
         super(BaseImage, self).__init__()
 
         ## input size:[img_stack, 224, 224]
@@ -55,12 +55,22 @@ class BaseImage(nn.Module):
         ll = []
         in_f = calc_features(img_stack)
         if img_dim == 224:
-            ll.extend(make_conv(in_f, 16,  3, 1, 1, bn=bn, drop=drop)),
-            ll.extend(make_conv(16,   32,  3, 2, 1, bn=bn, drop=drop)), # 112
-            ll.extend(make_conv(32,   64,  3, 2, 1, bn=bn, drop=drop)), # 56
-            ll.extend(make_conv(64,  128,  3, 2, 1, bn=bn, drop=drop)), # 28
-            ll.extend(make_conv(128, 256,  3, 2, 1, bn=bn, drop=drop)), # 14
-            ll.extend(make_conv(256, 512,  3, 2, 1, bn=bn, drop=drop)), # 7
+            ll.extend(make_conv(in_f, 16,  3, 1, 1, bn=bn, drop=drop))
+            if deep:
+                ll.extend(make_conv(16, 16,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(16,   32,  3, 2, 1, bn=bn, drop=drop)) # 112
+            if deep:
+                ll.extend(make_conv(32, 32,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(32,   64,  3, 2, 1, bn=bn, drop=drop)) # 56
+            if deep:
+                ll.extend(make_conv(64, 64,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(64,  128,  3, 2, 1, bn=bn, drop=drop)) # 28
+            if deep:
+                ll.extend(make_conv(128, 128,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(128, 256,  3, 2, 1, bn=bn, drop=drop)) # 14
+            if deep:
+                ll.extend(make_conv(256, 256,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(256, 512,  3, 2, 1, bn=bn, drop=drop)) # 7
             self.latent_dim = 7 * 7 * 512
         elif img_dim == 64:
             ll.extend(make_conv(in_f, 16,  3, 1, 1, bn=bn, drop=drop)),
@@ -93,8 +103,8 @@ class ImageToPos(BaseImage):
         return x
 
 class ActorImage(BaseImage):
-    def __init__(self, action_dim, img_stack, bn=False, img_dim=224):
-        super(ActorImage, self).__init__(img_stack, bn=bn, img_dim=img_dim)
+    def __init__(self, action_dim, bn=False, **kwargs):
+        super(ActorImage, self).__init__(bn=bn, **kwargs)
 
         ll = []
         ll.extend(make_linear(self.latent_dim, 400, bn=bn))
@@ -112,8 +122,8 @@ class ActorImage(BaseImage):
         return x
 
 class CriticImage(BaseImage):
-    def __init__(self, action_dim, img_stack, bn=False, img_dim=224):
-        super(CriticImage, self).__init__(img_stack, bn=bn, img_dim=img_dim)
+    def __init__(self, action_dim, bn=False, **kwargs):
+        super(CriticImage, self).__init__(bn=bn, **kwargs)
 
         ll = []
         ll.extend(make_linear(self.latent_dim + action_dim, 400, bn=bn))
@@ -128,8 +138,8 @@ class CriticImage(BaseImage):
         return x
 
 class QImage(BaseImage):
-    def __init__(self, action_dim, img_stack, bn=True, drop=False, img_dim=224):
-        super(QImage, self).__init__(img_stack, bn=bn, drop=drop, img_dim=img_dim)
+    def __init__(self, action_dim, bn=True, drop=False, **kwargs):
+        super(QImage, self).__init__(bn=bn, drop=drop, **kwargs)
 
         ll = []
         ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
@@ -156,8 +166,8 @@ class QImageDenseNet(nn.Module):
 
 class QImageSoftMax(BaseImage):
     ''' Image network with softmax '''
-    def __init__(self, action_dim, img_stack, bn=True, drop=False, img_dim=224):
-        super(QImageSoftMax, self).__init__(img_stack, bn=bn, drop=drop, img_dim=img_dim)
+    def __init__(self, action_dim, bn=True, drop=False, **kwargs):
+        super(QImageSoftMax, self).__init__(bn=bn, drop=drop, **kwargs)
 
         ll = []
         ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
@@ -230,8 +240,8 @@ class QState(nn.Module):
 
 class QMixed(BaseImage):
     def __init__(self, state_dim, action_dim,
-            img_stack, bn=True, drop=False, img_dim=224):
-        super(QMixed, self).__init__(img_stack, bn=bn, drop=drop, img_dim=img_dim)
+            bn=True, drop=False, **kwargs):
+        super(QMixed, self).__init__(bn=bn, drop=drop, **kwargs)
 
         ll = []
         ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
