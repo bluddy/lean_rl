@@ -43,20 +43,21 @@ class DDPG(object):
 
     def _create_critic(self):
         if self.mode == 'image':
-            n = CriticImage(self.action_dim, self.total_stack,
+            n = CriticImage(action_dim=self.action_dim, img_stack=self.total_stack,
                     bn=self.bn, img_dim=self.img_dim).to(device)
         elif self.mode == 'state':
-            n = CriticState(self.state_dim, self.action_dim, bn=self.bn).to(device)
+            n = CriticState(state_dim=self.state_dim, action_dim=self.action_dim,
+                    bn=self.bn).to(device)
         else:
             raise ValueError('Unrecognized mode ' + mode)
         return n
 
     def _create_actor(self):
         if self.mode == 'image':
-            n = ActorImage(self.action_dim, self.total_stack,
+            n = ActorImage(action_dim=self.action_dim, img_stack=self.total_stack,
                     bn=self.bn, img_dim=self.img_dim).to(device)
         elif self.mode == 'state':
-            n = ActorState(self.state_dim, self.action_dim, max_action=1.0,
+            n = ActorState(state_dim=self.state_dim, action_dim=self.action_dim,
                     bn=self.bn).to(device)
         else:
             raise ValueError('Unrecognized mode ' + mode)
