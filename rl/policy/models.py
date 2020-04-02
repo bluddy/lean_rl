@@ -51,6 +51,7 @@ class BaseImage(nn.Module):
         super(BaseImage, self).__init__()
 
         ## input size:[img_stack, 224, 224]
+        print "BaseImage. drop:{}, deep:{}, bn:{}".format(drop, deep, bn)
 
         ll = []
         in_f = calc_features(img_stack)

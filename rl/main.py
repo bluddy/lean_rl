@@ -257,7 +257,7 @@ def run(args):
             args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
             img_dim=args.img_dim, img_depth=img_depth,
             load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q)
+            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
@@ -772,6 +772,8 @@ if __name__ == "__main__":
         action='store_false', help="Choose whether to use batchnorm")
     parser.add_argument("--dropout", default = False,
         action='store_true', help="Choose whether to use dropout")
+    parser.add_argument("--deep", default = False,
+        action='store_true', help="Use a deeper NN")
     parser.add_argument("--img-dim", default = 224, type=int,
         help="Size of img [224|128|64]")
     parser.add_argument("--img-depth", default = 3, type=int,
