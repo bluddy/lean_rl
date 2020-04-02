@@ -68,7 +68,7 @@ class Reward_reach_v0(object):
             #print "low needle: needle y:{} z:{} < tissue y: {}. target y:{}, z:{} ".format(
             #        y_needle, z_needle, y_tissue, y_target, z_target)
             if not done:
-                reward -= 2.
+                reward -= 5.
                 done = True
 
         d = self.last_dist - dist
