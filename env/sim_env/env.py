@@ -631,6 +631,9 @@ class Environment(common_env.CommonEnv):
         self.total_reward = 0.
         self.last_reward = 0.
         self.last_target = None
+        self.state = None
+        self.last_state = None
+        self.image = None
 
         w, h = self._get_width_height(hires=True, stereo=True)
         if not self._reset_try_play(w, h):
