@@ -84,7 +84,7 @@ class Reward_reach_v0(object):
         self.last_dist = dist
 
         # Reduce for timestep
-        reward -= 0.05
+        reward -= 0.02
 
         # Check for collisions
         if ls is not None and \
