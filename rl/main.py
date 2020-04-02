@@ -117,8 +117,9 @@ def run(args):
                     break
     else:
         # Use load_last mechanism to load with direct path
-        if os.path.exists(args.load_model):
-            model_dir = pjoin(args.load_model, 'model')
+        load_path = pjoin(logbase, args.load_model)
+        if os.path.exists(load_path):
+            model_dir = pjoin(load_path, 'model')
             if os.path.exists(model_dir) and len(os.listdir(model_dir)) > 0:
                 last_dir = args.load_model
                 args.load_last = True
@@ -811,7 +812,7 @@ if __name__ == "__main__":
     parser.add_argument("--load-encoder", default='', type=str,
         help="File from which to load the encoder model")
     parser.add_argument("--load-model", default=None, type=str,
-        help="Continue training from a directory")
+        help="Continue training from a subdir of ./logs")
     parser.add_argument("--load-last", default=False, action='store_true',
         help="Continue training from last model")
     parser.add_argument("--load-best", default=False, action='store_true',
