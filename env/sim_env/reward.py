@@ -54,7 +54,7 @@ class Reward_reach_v0(object):
         # Check for end condition
         if dist <= self.dist_epsilon:
             done = True
-            reward += 2.
+            reward += 5.
 
         # End if we've touched the skin
         # y is height going up
@@ -95,7 +95,7 @@ class Reward_reach_v0(object):
 
         # Check for out of view
         if s.tools_out_of_view > 0:
-            reward -= 1.
+            reward -= 5.
             done = True
 
         if self.env.t >= self.env.max_steps:
@@ -106,7 +106,7 @@ class Reward_reach_v0(object):
         if not s.needle_grasped:
             print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
             done = True
-            reward -= 2.
+            reward -= 5.
 
         # Check for errors
         if s.error:
