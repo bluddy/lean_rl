@@ -9,18 +9,19 @@ def calc_dist(p1, p2):
 
 def unit_v(v):
     """ Returns the unit vector of the vector.  """
-    return v / np.linalg.norm(v)
+    return v / np.linalg.norm(v, axis=-1, keepdims=True)
 
 def angle_between(v1, v2):
     v1_u = unit_v(v1)
     v2_u = unit_v(v2)
-    return np.arccos(np.dot(v1_u, v2_u))
+    dot = np.tensordot(v1_u, v2_u, axes=(-1,-1))
+    return np.arccos(dot)
 
-pi2 = math.pi / 2
+pidiv2 = math.pi / 2
 def norm_angle_between(v1, v2):
     ''' Angle normalized up to pi/2 '''
     a = angle_between(v1, v2)
-    if a > pi2:
+    if a > pidiv2:
         a = math.pi - a
     return a
 
@@ -142,7 +143,12 @@ class Reward_suture_v0(object):
         self.last_dist = dist
         self.reset_dist = dist
 
-        self.surf_norm = np.array([0,1,0]) # approximate norm
+        # Get surface normal
+        v1 = ss.tissue_corners[0] - ss.tissue_corners[1]
+        v2 = ss.tissue_corners[0] - ss.tissue_corners[2]
+        self.surf_norm = unit_v(np.cross(v1, v2))
+        self.surf_pt = ss.tissue_corners[0]
+        #self.surf_norm = np.array([0,1,0]) # approximate norm
 
         # Compute ideal circle center
         target_diam = calc_dist(self.targets[0], self.targets[1])
@@ -153,70 +159,87 @@ class Reward_suture_v0(object):
 
         # Compute ideal circle plane vector
         v1 = self.targets[0] - self.targets[1]
-        v2 = np.array([0, -1, 0])
+        #v2 = np.array([0, -1, 0], dtype=np.float32)
+        v2 = -self.surf_norm
         self.circle_v = unit_v(np.cross(v1, v2))
 
         self.last_dist_ideal = None
         self.last_a_ideal = None
+
+    def _get_submerged_points(self, points):
+        vectors = points - self.surf_pt
+        angles = angle_between(self.surf_norm, vectors)
+        submerged = angles > pidiv2
+        return submerged
 
     def _get_needle_dist(self):
         ''' Find the point of the needle we care about most.
             If we're submerging, it's the point above the surface.
             If we're exiting, it's the point under the surface.
         '''
+        ok = True
         ss = self.env.state
         status = ss.needle_insert_status
         needle = ss.needle_points_pos
 
         if status == 0:
             dist = calc_dist(needle[0], self.targets[0])
-
-        elif status == 1: # only entry
-            # Check which points have y lower than target
-            submerged = needle[:,1] <= self.targets[0,1]
-            idxs = np.where(submerged == False)[0]
-            if len(idxs) == 0: # Fully submerged
-                #last_sub = len(needle) - 1
-                # Fully submerged? Impossible in status 1
-                raise ValueError("[{}] Error: status 1 but all submerged".
-                        format(self.env.server_num))
-
-            first_unsub = idxs[0]
-            #if first_unsub == 0:
-            #    raise ValueError("[{}] Error: status 1 but no submerged points".
-            #            format(self.env.server_num))
-
-            if np.any(submerged[first_unsub:]):
-
-                from rl.utils import ForkablePdb
-                ForkablePdb().set_trace()
-
-                raise ValueError("[{}] Error: status 1: found submerged "
-                    "in wrong place!".format(self.env.server_num))
-
-            # Relevant dist is to entry point
-            dist = calc_dist(needle[first_unsub], self.targets[0])
-            # Add the length of the segments not submerged
-            extra_dist = np.sum(self.needle_lengths[first_unsub:])
-            dist += extra_dist
-
-        elif status in [2, 3]: # entry and exit/exit
-            # Check which points have y lower than exit target
-            submerged = needle[:,1] <= self.targets[1,1]
-            idxs = np.where(submerged)[0]
-
-            if len(idxs) == 0:
-                raise ValueError(
-                    "Error: status {} but no submerged points".format(status))
-
-            first_sub = idxs[0]
-            dist = calc_dist(needle[first_sub], self.targets[1])
-            extra_dist = np.sum(self.needle_lengths[first_sub:])
-            dist += extra_dist
         else:
-            raise ValueError("Error: status 4 not yet supported")
+            #from rl.utils import ForkablePdb
+            #ForkablePdb().set_trace()
 
-        return dist
+            submerged = self._get_submerged_points(needle)
+
+            if status == 1: # only entry
+                # Check which points have y lower than target
+                #submerged = needle[:,1] <= self.targets[0,1]
+                idxs = np.where(submerged == False)[0]
+                if len(idxs) == 0: # Fully submerged
+                    #last_sub = len(needle) - 1
+                    # Fully submerged? Impossible in status 1
+                    ok = False
+                    raise ValueError("[{}] Error: status 1 but all submerged".
+                            format(self.env.server_num))
+
+                first_unsub = idxs[0]
+                #if first_unsub == 0:
+                #    raise ValueError("[{}] Error: status 1 but no submerged points".
+                #            format(self.env.server_num))
+
+                if np.any(submerged[first_unsub:]):
+
+                    #from rl.utils import ForkablePdb
+                    #ForkablePdb().set_trace()
+                    ok = False
+
+                    #raise ValueError("[{}] Error: status 1: found submerged "
+                    #    "in wrong place!".format(self.env.server_num))
+
+                # Relevant dist is to entry point
+                dist = calc_dist(needle[first_unsub], self.targets[0])
+                # Add the length of the segments not submerged
+                extra_dist = np.sum(self.needle_lengths[first_unsub:])
+                dist += extra_dist
+
+            elif status in [2, 3]: # entry and exit/exit
+                # Check which points have y lower than exit target
+                #submerged = needle[:,1] <= self.targets[1,1]
+                idxs = np.where(submerged)[0]
+
+                if len(idxs) == 0:
+                    ok = False
+                    raise ValueError(
+                        "Error: status {} but no submerged points".format(status))
+
+                first_sub = idxs[0]
+                dist = calc_dist(needle[first_sub], self.targets[1])
+                extra_dist = np.sum(self.needle_lengths[first_sub:])
+                dist += extra_dist
+            else:
+                ok = False
+                raise ValueError("Error: status 4 not yet supported")
+
+        return dist, ok
 
     def get_reward_and_done(self):
 
@@ -250,43 +273,32 @@ class Reward_suture_v0(object):
         self.last_dist_ideal = dist_ideal
         # -------------------------------------------
 
-        dist = self._get_needle_dist()
-
-        # Make sure we never get further than reset distance
-        # In status 0
-        if status == 0 and dist > 20. * self.reset_dist:
+        if ss.target_insert_status == -1 or \
+           ss.outside_insert_radius or \
+           ss.outside_exit_radius:
             done = True
-            reward -= 5.
+            reward -= 2.
 
-        # Compute distance of next point from surface
+        if ls is not None and \
+            (ss.excessive_needle_pierces > ls.excessive_needle_pierces or \
+            ss.excessive_insert_needle_pierces > ls.excessive_insert_needle_pierces or \
+            ss.excessive_exit_needle_pierces > ls.excessive_exit_needle_pierces or \
+            ss.incorrect_needle_throws > ls.incorrect_needle_throws):
+            done = True
+            reward -= 2.
 
-        d = 0.
-        if ls is not None:
-            last_status = ls.needle_insert_status
-            if status > last_status:
-                # progress, but don't reward for dist change
-                reward += 1.
-            elif status == last_status:
-                # Check for change of dist
-                d = self.last_dist - dist
-            else:
-                # regression. no good
-                reward -= 2.
+        # Check for collisions
+        if ls is not None and \
+            (ls.instr_collisions < ss.instr_collisions or \
+            ls.instr_endo_collisions < ss.instr_endo_collisions):
+              reward -= 2.
+              done = True
+
+        # Check for errors
+        if ss.error:
+            self.env.error_ctr += 1
+            if self.env.error_ctr >= self.env.max_error_ctr:
                 done = True
-
-            self.last_dist = dist
-
-        #from rl.utils import ForkablePdb
-        #ForkablePdb().set_trace()
-
-        reward += 10 * (d + d_a_ideal + d_dist_ideal * 10)
-
-        if status == 3: # Goal for now
-            reward += 1.
-            done = True
-
-        # Reduce for timestep
-        reward -= 0.05
 
         # Check for out of view
         if ss.tools_out_of_view > 0:
@@ -301,11 +313,53 @@ class Reward_suture_v0(object):
             done = True
             reward -= 2.
 
-        # Check for errors
-        if ss.error:
-            self.env.error_ctr += 1
-            if self.env.error_ctr >= self.env.max_error_ctr:
+        if done:
+            return reward, done
+
+        dist, is_ok = self._get_needle_dist()
+        if not is_ok:
+            reward -= 2.
+            done = True
+
+        # Make sure we never get further than reset distance
+        # In status 0
+        if status == 0 and dist > 20. * self.reset_dist:
+            done = True
+            reward -= 2.
+
+        elif dist > 20. * self.reset_dist:
+            done = True
+            reward -= 2.
+
+        # Compute distance of next point from surface
+
+        d = 0.
+        if ls is not None:
+            last_status = ls.needle_insert_status
+            if status > last_status:
+                # progress, but don't reward for dist change
+                reward += 5.
+            elif status == last_status:
+                # Check for change of dist
+                d = self.last_dist - dist
+            else:
+                # regression. no good
+                reward -= 5.
                 done = True
+
+            self.last_dist = dist
+
+        #from rl.utils import ForkablePdb
+        #ForkablePdb().set_trace()
+
+        reward += 10 * (d + d_a_ideal + d_dist_ideal * 10)
+
+        if status == 3: # Goal for now
+            reward += 1.
+            done = True
+
+        # Reduce for timestep
+        reward -= 0.02
 
         return reward, done
 

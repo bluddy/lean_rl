@@ -146,6 +146,10 @@ class State(object):
             self.tissue_corners.append(np.array(data[index:index+3])); index += 3
             self.tissue_corners.append(np.array(data[index:index+3])); index += 3
 
+        if len(data) > index:
+            self.outside_insert_radius = data[index]; index += 1
+            self.outside_exit_radius = data[index]; index += 1
+
 class Environment(common_env.CommonEnv):
 
     def __init__(self, mode='state', start_port=50001,
@@ -384,12 +388,18 @@ class Environment(common_env.CommonEnv):
         if not sim_save:
             n = self.state.needle_tip_pos
             t = self.state.cur_target_pos
-            reward_s = 'S{} TR {:.3f}  R {:.3f}  EP {}  d {:.3f}' \
-                ' n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
-                self.server_num, self.total_reward, self.last_reward,
-                self.episode, self.reward.last_dist,
-                n[0], n[1], n[2], t[0], t[1], t[2]
-                )
+            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{}'.format(
+                  self.server_num, self.total_reward, self.last_reward,
+                  self.episode, self.reward.last_dist)
+
+            if self.task == 'reach':
+              reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                  n[0], n[1], n[2], t[0], t[1], t[2])
+
+            elif self.task == 'suture':
+              reward_s += 'ai:{:.2f}, di:{:.2f}, ns:{}, ts:{}'.format(
+                  float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal),
+                  self.state.needle_insert_status, self.state.target_insert_status)
             try:
                 txt_surface = self.font.render(reward_s, False, (255,0,0))
             except:
