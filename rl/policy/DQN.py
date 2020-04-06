@@ -289,8 +289,6 @@ class DDQN(DQN):
     def __init__(self, *args, **kwargs):
         super(DDQN, self).__init__(*args, **kwargs)
 
-        self.cur_model = 0
-
     def _create_models(self):
         # q is now 2 networks
         self.qs = [self._create_model() for _ in range(2)]

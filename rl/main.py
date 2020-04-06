@@ -108,7 +108,7 @@ def run(args):
 
     # Find last dir
     last_dir = None
-    if args.load_model is None:
+    if args.load is None:
         if os.path.exists(logbase):
             for d in sorted(os.listdir(logbase), reverse=True):
                 model_dir = pjoin(logbase, d, 'model')
@@ -117,11 +117,11 @@ def run(args):
                     break
     else:
         # Use load_last mechanism to load with direct path
-        load_path = pjoin(logbase, args.load_model)
+        load_path = pjoin(logbase, args.load)
         if os.path.exists(load_path):
             model_dir = pjoin(load_path, 'model')
             if os.path.exists(model_dir) and len(os.listdir(model_dir)) > 0:
-                last_dir = args.load_model
+                last_dir = args.load
                 args.load_last = True
 
 
@@ -265,7 +265,7 @@ def run(args):
             args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
             img_dim=args.img_dim, img_depth=img_depth,
             load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q)
+            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -811,8 +811,8 @@ if __name__ == "__main__":
     #--- Model save/load
     parser.add_argument("--load-encoder", default='', type=str,
         help="File from which to load the encoder model")
-    parser.add_argument("--load-model", default=None, type=str,
-        help="Continue training from a subdir of ./logs")
+    parser.add_argument("--load", default=None, type=str,
+        help="Continue training from a subdir of ./logs/specific_model")
     parser.add_argument("--load-last", default=False, action='store_true',
         help="Continue training from last model")
     parser.add_argument("--load-best", default=False, action='store_true',
