@@ -313,11 +313,12 @@ class DDQN(DQN):
 
         losses, Q_max, Q_mean = [], [], []
 
-        for update_q, update_qt, opt in zip(self.qs, self.qts, self.opts):
+        for num, (update_q, update_qt, opt) in \
+                enumerate(zip(self.qs, self.qts, self.opts)):
 
             # Get samples
             [x, y, u, r, d, qorig, indices, w], qorig_prob = \
-                replay_buffer.sample(args.batch_size, beta=beta)
+                replay_buffer.sample(args.batch_size, beta=beta, num=num)
             length = len(u)
 
             state, state2, action, reward, done, qorig, weights = \

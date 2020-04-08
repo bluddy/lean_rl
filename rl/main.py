@@ -34,6 +34,7 @@ def run(args):
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     timestep = 0
+    warmup_t = args.learning_start
 
     program_start_t = time.time()
 
@@ -293,6 +294,7 @@ def run(args):
         if os.path.exists(timestep_file):
             with open(timestep_file, 'r') as f:
                 timestep = int(f.read()) + 1
+                warmup_t = args.learning_start
         policy.load(last_model_dir)
         last_csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
@@ -315,6 +317,7 @@ def run(args):
             csv_f.flush()
             if timestep is None:
                 timestep = t + 1
+                warmup_t = args.learning_start
         print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
 
     ## load pre-trained policy
@@ -329,6 +332,9 @@ def run(args):
     elif args.buffer == 'priority':
         replay_buffer = NaivePrioritizedBuffer(args.mode, args.capacity,
                 compressed=args.compressed, vacate=args.vacate_buffer)
+    elif args.buffer == 'multi':
+        replay_buffer = MultiBuffer(args.mode, args.capacity,
+                compressed=args.compressed, sub_buffer='priority')
     elif args.buffer == 'disk':
         replay_buffer = DiskReplayBuffer(args.mode, args.capacity, logdir)
     elif args.buffer == 'tier':
@@ -386,10 +392,7 @@ def run(args):
             noises = zero_noises
 
         """ action selected based on pure policy """
-        if timestep > args.learning_start:
-            actions2 = policy.select_action(states_nd)
-        else:
-            actions2 = zero_noises
+        actions2 = policy.select_action(states_nd)
 
         # Track stdev of chosen actions between procs
         proc_std.append(np.mean(np.std(actions2, axis=0)))
@@ -444,7 +447,10 @@ def run(args):
                     ou_noise.reset() # Reset to mean
 
                 acted = True
-                timestep += 1
+                if warmup_t <= 0:
+                    timestep += 1
+                else:
+                    warmup_t -= 1
             else:
                 # Nothing to do with the env yet
                 new_states.append(state)
@@ -463,7 +469,7 @@ def run(args):
 
             # Feed into the replay buffer
             for s1, s2, a, r, d, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_procs):
-                replay_buffer.add([s1, s2, a, r, d], proc=p)
+                replay_buffer.add([s1, s2, a, r, d], num=p)
             w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
 
         elapsed_time += time.time() - start_t
@@ -474,8 +480,7 @@ def run(args):
             elapsed_time = 0.
 
         # Evaluate episode
-        if timestep > args.learning_start \
-            and timestep - last_eval_t > args.eval_freq:
+        if warmup_t <= 0 and timestep - last_eval_t > args.eval_freq:
 
             last_eval_t = timestep
 
@@ -518,7 +523,8 @@ def run(args):
             save_policy(model_path)
 
         ## Train
-        if timestep - last_learn_t > args.learn_freq and \
+        if warmup_t <= 0 and \
+            timestep - last_learn_t > args.learn_freq and \
             len(replay_buffer) > args.batch_size:
 
             last_learn_t = timestep
@@ -718,7 +724,7 @@ if __name__ == "__main__":
         help='How often (timesteps) we save the images in a saved episode')
     parser.add_argument("--max-timesteps", default=2e7, type=float,
         help='Max time steps to run environment for')
-    parser.add_argument("--learning-start", default=0, type=int,
+    parser.add_argument("--learning-start", default=None,
         help='Timesteps before learning')
     parser.add_argument("--save_models", action= "store",
         help='Whether or not models are saved')
@@ -863,6 +869,11 @@ if __name__ == "__main__":
     args.batchnorm = True if args.mode in ['image', 'mixed'] else args.batchnorm
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
+
+    if args.learning_start is None:
+        args.learning_start = args.capacity
+    else:
+        args.learning_start = int(args.learning_start)
 
     # Set default task
     if args.task is None:

@@ -43,7 +43,7 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
     if bn:
         l.append(nn.BatchNorm2d(out_channels))
     if drop:
-        l.append(nn.DropOut2d(0.2))
+        l.append(nn.Dropout2d(0.2))
     return l
 
 class BaseImage(nn.Module):
