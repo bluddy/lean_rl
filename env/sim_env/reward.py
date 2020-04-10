@@ -172,6 +172,10 @@ class Reward_suture_v0(object):
         submerged = angles > pidiv2
         return submerged
 
+    def _submerged_s(self, submerged):
+        l = ['T' if x else 'F' for x in submerged]
+        return '[' + ','.join(l) + ']'
+
     def _get_needle_dist(self):
         ''' Find the point of the needle we care about most.
             If we're submerging, it's the point above the surface.
@@ -179,10 +183,13 @@ class Reward_suture_v0(object):
         '''
         ok = True
         ss = self.env.state
-        status = ss.needle_insert_status
+        tstatus = ss.target_insert_status
         needle = ss.needle_points_pos
 
-        if status == 0:
+        if tstatus == -1:
+            return 0., False
+
+        if tstatus == 0:
             dist = calc_dist(needle[0], self.targets[0])
         else:
             #from rl.utils import ForkablePdb
@@ -190,20 +197,23 @@ class Reward_suture_v0(object):
 
             submerged = self._get_submerged_points(needle)
 
-            if status == 1: # only entry
+            if tstatus == 1: # only entry
                 # Check which points have y lower than target
                 #submerged = needle[:,1] <= self.targets[0,1]
                 idxs = np.where(submerged == False)[0]
                 if len(idxs) == 0: # Fully submerged
                     #last_sub = len(needle) - 1
-                    # Fully submerged? Impossible in status 1
+                    # Fully submerged? Impossible in tstatus 1
                     ok = False
-                    raise ValueError("[{}] Error: status 1 but all submerged".
-                            format(self.env.server_num))
+                    text = "[{}] Error: tstatus 1 but all submerged, {}".format(
+                            self.env.server_num, self._submerged_s(submerged))
+                    print text
+                    self.env.render(text=text)
+                    return 0., False
 
                 first_unsub = idxs[0]
                 #if first_unsub == 0:
-                #    raise ValueError("[{}] Error: status 1 but no submerged points".
+                #    raise ValueError("[{}] Error: tstatus 1 but no submerged points".
                 #            format(self.env.server_num))
 
                 if np.any(submerged[first_unsub:]):
@@ -212,8 +222,10 @@ class Reward_suture_v0(object):
                     #ForkablePdb().set_trace()
                     ok = False
 
-                    #raise ValueError("[{}] Error: status 1: found submerged "
-                    #    "in wrong place!".format(self.env.server_num))
+                    text = "[{}] Error: tstatus 1: found submerged " \
+                        "in wrong place: {}".format(self.env.server_num, self._submerged_s(submerged))
+                    print text
+                    self.env.render(text=text)
 
                 # Relevant dist is to entry point
                 dist = calc_dist(needle[first_unsub], self.targets[0])
@@ -221,15 +233,17 @@ class Reward_suture_v0(object):
                 extra_dist = np.sum(self.needle_lengths[first_unsub:])
                 dist += extra_dist
 
-            elif status in [2, 3]: # entry and exit/exit
+            elif tstatus in [2, 3]: # entry and exit/exit
                 # Check which points have y lower than exit target
                 #submerged = needle[:,1] <= self.targets[1,1]
                 idxs = np.where(submerged)[0]
 
                 if len(idxs) == 0:
                     ok = False
-                    raise ValueError(
-                        "Error: status {} but no submerged points".format(status))
+                    text = "[{}] Error: tstatus {} but no submerged points: ".format(
+                            self.env.server_num, tstatus, self._submerged_s(submerged))
+                    print text
+                    self.env.render(text=text)
 
                 first_sub = idxs[0]
                 dist = calc_dist(needle[first_sub], self.targets[1])
@@ -237,7 +251,7 @@ class Reward_suture_v0(object):
                 dist += extra_dist
             else:
                 ok = False
-                raise ValueError("Error: status 4 not yet supported")
+                print "Error: tstatus 4 not yet supported"
 
         return dist, ok
 
@@ -245,7 +259,8 @@ class Reward_suture_v0(object):
 
         ss = self.env.state
         ls = self.env.last_state
-        status = ss.needle_insert_status
+        nstatus = ss.needle_insert_status
+        tstatus = ss.target_insert_status
 
         done = False
         reward = 0.
@@ -273,7 +288,7 @@ class Reward_suture_v0(object):
         self.last_dist_ideal = dist_ideal
         # -------------------------------------------
 
-        if ss.target_insert_status == -1 or \
+        if tstatus == -1 or \
            ss.outside_insert_radius or \
            ss.outside_exit_radius:
             done = True
@@ -313,6 +328,13 @@ class Reward_suture_v0(object):
             done = True
             reward -= 2.
 
+        if nstatus != tstatus:
+            print "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
+                    self.env.server_num, nstatus, tstatus,
+                    ls.needle_insert_status, ls.target_insert_status)
+            done = True
+            reward -= 2.
+
         if done:
             return reward, done
 
@@ -322,8 +344,8 @@ class Reward_suture_v0(object):
             done = True
 
         # Make sure we never get further than reset distance
-        # In status 0
-        if status == 0 and dist > 20. * self.reset_dist:
+        # In tstatus 0
+        if tstatus == 0 and dist > 20. * self.reset_dist:
             done = True
             reward -= 2.
 
@@ -335,11 +357,11 @@ class Reward_suture_v0(object):
 
         d = 0.
         if ls is not None:
-            last_status = ls.needle_insert_status
-            if status > last_status:
+            last_tstatus = ls.target_insert_status
+            if tstatus > last_tstatus:
                 # progress, but don't reward for dist change
                 reward += 5.
-            elif status == last_status:
+            elif tstatus == last_tstatus:
                 # Check for change of dist
                 d = self.last_dist - dist
             else:
@@ -354,8 +376,14 @@ class Reward_suture_v0(object):
 
         reward += 10 * (d + d_a_ideal + d_dist_ideal * 10)
 
-        if status == 3: # Goal for now
-            reward += 1.
+        if not done and tstatus == 0:
+            # Don't forgive regressions in status 0
+            if d < 0:
+                done = True
+                reward -= 2.
+
+        if tstatus == 3: # Goal for now
+            reward += 5.
             done = True
 
         # Reduce for timestep

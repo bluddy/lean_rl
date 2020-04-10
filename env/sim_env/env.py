@@ -377,7 +377,7 @@ class Environment(common_env.CommonEnv):
         # Now our connection to the sim is complete
         return True
 
-    def render(self, save_path='./out', sim_save=False):
+    def render(self, save_path='./out', sim_save=False, text=''):
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
@@ -388,7 +388,7 @@ class Environment(common_env.CommonEnv):
         if not sim_save:
             n = self.state.needle_tip_pos
             t = self.state.cur_target_pos
-            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{}'.format(
+            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{:.2f}'.format(
                   self.server_num, self.total_reward, self.last_reward,
                   self.episode, self.reward.last_dist)
 
@@ -397,9 +397,14 @@ class Environment(common_env.CommonEnv):
                   n[0], n[1], n[2], t[0], t[1], t[2])
 
             elif self.task == 'suture':
-              reward_s += 'ai:{:.2f}, di:{:.2f}, ns:{}, ts:{}'.format(
+              reward_s += 'ai:{:.2f}, di:{:.2f}, ns:{}, ts:{}, {}'.format(
                   float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal),
-                  self.state.needle_insert_status, self.state.target_insert_status)
+                  self.state.needle_insert_status, self.state.target_insert_status,
+                  text)
+              n = self.state.needle_tip_pos
+              t = self.state.cur_target_pos
+              reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                  n[0], n[1], n[2], t[0], t[1], t[2])
             try:
                 txt_surface = self.font.render(reward_s, False, (255,0,0))
             except:
