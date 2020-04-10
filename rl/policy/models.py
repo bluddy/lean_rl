@@ -223,7 +223,7 @@ class CriticState(nn.Module):
         return x
 
 class QState(nn.Module):
-    def __init__(self, state_dim, action_dim, bn=True, drop=False):
+    def __init__(self, state_dim, action_dim, bn=True, drop=False, **kwargs):
         super(QState, self).__init__()
 
         ll = []
