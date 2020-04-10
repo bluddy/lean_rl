@@ -34,6 +34,7 @@ def run(args):
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     timestep = 0
+    warmup_t = args.learning_start
 
     program_start_t = time.time()
 
@@ -108,7 +109,7 @@ def run(args):
 
     # Find last dir
     last_dir = None
-    if args.load_model is None:
+    if args.load is None:
         if os.path.exists(logbase):
             for d in sorted(os.listdir(logbase), reverse=True):
                 model_dir = pjoin(logbase, d, 'model')
@@ -117,10 +118,11 @@ def run(args):
                     break
     else:
         # Use load_last mechanism to load with direct path
-        if os.path.exists(args.load_model):
-            model_dir = pjoin(args.load_model, 'model')
+        load_path = pjoin(logbase, args.load)
+        if os.path.exists(load_path):
+            model_dir = pjoin(load_path, 'model')
             if os.path.exists(model_dir) and len(os.listdir(model_dir)) > 0:
-                last_dir = args.load_model
+                last_dir = args.load
                 args.load_last = True
 
 
@@ -257,14 +259,14 @@ def run(args):
             args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
             img_dim=args.img_dim, img_depth=img_depth,
             load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q)
+            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
             img_dim=args.img_dim, img_depth=img_depth,
             load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q)
+            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -292,6 +294,7 @@ def run(args):
         if os.path.exists(timestep_file):
             with open(timestep_file, 'r') as f:
                 timestep = int(f.read()) + 1
+                warmup_t = args.learning_start
         policy.load(last_model_dir)
         last_csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
@@ -314,6 +317,7 @@ def run(args):
             csv_f.flush()
             if timestep is None:
                 timestep = t + 1
+                warmup_t = args.learning_start
         print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
 
     ## load pre-trained policy
@@ -328,6 +332,9 @@ def run(args):
     elif args.buffer == 'priority':
         replay_buffer = NaivePrioritizedBuffer(args.mode, args.capacity,
                 compressed=args.compressed, vacate=args.vacate_buffer)
+    elif args.buffer == 'multi':
+        replay_buffer = MultiBuffer(args.mode, args.capacity,
+                compressed=args.compressed, sub_buffer='priority')
     elif args.buffer == 'disk':
         replay_buffer = DiskReplayBuffer(args.mode, args.capacity, logdir)
     elif args.buffer == 'tier':
@@ -385,10 +392,7 @@ def run(args):
             noises = zero_noises
 
         """ action selected based on pure policy """
-        if timestep > args.learning_start:
-            actions2 = policy.select_action(states_nd)
-        else:
-            actions2 = zero_noises
+        actions2 = policy.select_action(states_nd)
 
         # Track stdev of chosen actions between procs
         proc_std.append(np.mean(np.std(actions2, axis=0)))
@@ -443,7 +447,10 @@ def run(args):
                     ou_noise.reset() # Reset to mean
 
                 acted = True
-                timestep += 1
+                if warmup_t <= 0:
+                    timestep += 1
+                else:
+                    warmup_t -= 1
             else:
                 # Nothing to do with the env yet
                 new_states.append(state)
@@ -462,7 +469,7 @@ def run(args):
 
             # Feed into the replay buffer
             for s1, s2, a, r, d, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_procs):
-                replay_buffer.add([s1, s2, a, r, d], proc=p)
+                replay_buffer.add([s1, s2, a, r, d], num=p)
             w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
 
         elapsed_time += time.time() - start_t
@@ -473,8 +480,7 @@ def run(args):
             elapsed_time = 0.
 
         # Evaluate episode
-        if timestep > args.learning_start \
-            and timestep - last_eval_t > args.eval_freq:
+        if warmup_t <= 0 and timestep - last_eval_t > args.eval_freq:
 
             last_eval_t = timestep
 
@@ -517,7 +523,8 @@ def run(args):
             save_policy(model_path)
 
         ## Train
-        if timestep - last_learn_t > args.learn_freq and \
+        if warmup_t <= 0 and \
+            timestep - last_learn_t > args.learn_freq and \
             len(replay_buffer) > args.batch_size:
 
             last_learn_t = timestep
@@ -717,7 +724,7 @@ if __name__ == "__main__":
         help='How often (timesteps) we save the images in a saved episode')
     parser.add_argument("--max-timesteps", default=2e7, type=float,
         help='Max time steps to run environment for')
-    parser.add_argument("--learning-start", default=0, type=int,
+    parser.add_argument("--learning-start", default=None,
         help='Timesteps before learning')
     parser.add_argument("--save_models", action= "store",
         help='Whether or not models are saved')
@@ -772,6 +779,8 @@ if __name__ == "__main__":
         action='store_false', help="Choose whether to use batchnorm")
     parser.add_argument("--dropout", default = False,
         action='store_true', help="Choose whether to use dropout")
+    parser.add_argument("--deep", default = False,
+        action='store_true', help="Use a deeper NN")
     parser.add_argument("--img-dim", default = 224, type=int,
         help="Size of img [224|128|64]")
     parser.add_argument("--img-depth", default = 3, type=int,
@@ -808,8 +817,8 @@ if __name__ == "__main__":
     #--- Model save/load
     parser.add_argument("--load-encoder", default='', type=str,
         help="File from which to load the encoder model")
-    parser.add_argument("--load-model", default=None, type=str,
-        help="Continue training from a directory")
+    parser.add_argument("--load", default=None, type=str,
+        help="Continue training from a subdir of ./logs/specific_model")
     parser.add_argument("--load-last", default=False, action='store_true',
         help="Continue training from last model")
     parser.add_argument("--load-best", default=False, action='store_true',
@@ -860,6 +869,11 @@ if __name__ == "__main__":
     args.batchnorm = True if args.mode in ['image', 'mixed'] else args.batchnorm
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
+
+    if args.learning_start is None:
+        args.learning_start = args.capacity
+    else:
+        args.learning_start = int(args.learning_start)
 
     # Set default task
     if args.task is None:

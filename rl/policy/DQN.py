@@ -15,11 +15,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
-            load_encoder='', amp=False, use_orig_q=False):
+            load_encoder='', amp=False, use_orig_q=False,
+            deep=False, dropout=False):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.action_steps = action_steps
+        self.deep = deep
+        self.dropout = dropout
+
         # odd dims should be centered at 0
         odd_dims = action_steps % 2 == 1
         # full range is 2: -1 to 1
@@ -54,17 +58,18 @@ class DQN(object):
         if self.mode == 'image':
             if self.network == 'simple':
                 n = QImage(action_dim=self.total_steps, img_stack=self.total_stack,
-                        bn=self.bn, img_dim=self.img_dim).to(device)
+                        bn=self.bn, img_dim=self.img_dim, deep=self.deep,
+                        drop=self.dropout).to(device)
             elif self.network == 'densenet':
                 n = QImageDenseNet(action_dim=self.total_steps,
                         img_stack=self.total_stack, img_dim=self.img_dim).to(device)
         elif self.mode == 'state':
             n = QState(state_dim=self.state_dim, action_dim=self.total_steps,
-                    bn=self.bn).to(device)
+                    bn=self.bn, deep=self.deep, drop=self.dropout).to(device)
         elif self.mode == 'mixed':
             n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
                     img_stack=self.total_stack, bn=self.bn,
-                    img_dim=self.img_dim).to(device)
+                    img_dim=self.img_dim, deep=self.deep, drop=self.dropout).to(device)
         else:
             raise ValueError('Unrecognized mode ' + mode)
         return n
@@ -284,8 +289,6 @@ class DDQN(DQN):
     def __init__(self, *args, **kwargs):
         super(DDQN, self).__init__(*args, **kwargs)
 
-        self.cur_model = 0
-
     def _create_models(self):
         # q is now 2 networks
         self.qs = [self._create_model() for _ in range(2)]
@@ -310,11 +313,12 @@ class DDQN(DQN):
 
         losses, Q_max, Q_mean = [], [], []
 
-        for update_q, update_qt, opt in zip(self.qs, self.qts, self.opts):
+        for num, (update_q, update_qt, opt) in \
+                enumerate(zip(self.qs, self.qts, self.opts)):
 
             # Get samples
             [x, y, u, r, d, qorig, indices, w], qorig_prob = \
-                replay_buffer.sample(args.batch_size, beta=beta)
+                replay_buffer.sample(args.batch_size, beta=beta, num=num)
             length = len(u)
 
             state, state2, action, reward, done, qorig, weights = \

@@ -43,7 +43,7 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
     if bn:
         l.append(nn.BatchNorm2d(out_channels))
     if drop:
-        l.append(nn.DropOut2d(0.2))
+        l.append(nn.Dropout2d(0.2))
     return l
 
 class BaseImage(nn.Module):
@@ -51,6 +51,7 @@ class BaseImage(nn.Module):
         super(BaseImage, self).__init__()
 
         ## input size:[img_stack, 224, 224]
+        print "BaseImage. drop:{}, deep:{}, bn:{}".format(drop, deep, bn)
 
         ll = []
         in_f = calc_features(img_stack)
@@ -222,7 +223,7 @@ class CriticState(nn.Module):
         return x
 
 class QState(nn.Module):
-    def __init__(self, state_dim, action_dim, bn=True, drop=False):
+    def __init__(self, state_dim, action_dim, bn=True, drop=False, **kwargs):
         super(QState, self).__init__()
 
         ll = []

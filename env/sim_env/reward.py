@@ -55,7 +55,7 @@ class Reward_reach_v0(object):
         # Check for end condition
         if dist <= self.dist_epsilon:
             done = True
-            reward += 2.
+            reward += 5.
 
         # End if we've touched the skin
         # y is height going up
@@ -69,7 +69,7 @@ class Reward_reach_v0(object):
             #print "low needle: needle y:{} z:{} < tissue y: {}. target y:{}, z:{} ".format(
             #        y_needle, z_needle, y_tissue, y_target, z_target)
             if not done:
-                reward -= 2.
+                reward -= 5.
                 done = True
 
         d = self.last_dist - dist
@@ -85,7 +85,7 @@ class Reward_reach_v0(object):
         self.last_dist = dist
 
         # Reduce for timestep
-        reward -= 0.05
+        reward -= 0.02
 
         # Check for collisions
         if ls is not None and \
@@ -96,7 +96,7 @@ class Reward_reach_v0(object):
 
         # Check for out of view
         if s.tools_out_of_view > 0:
-            reward -= 1.
+            reward -= 5.
             done = True
 
         if self.env.t >= self.env.max_steps:
@@ -107,7 +107,7 @@ class Reward_reach_v0(object):
         if not s.needle_grasped:
             print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
             done = True
-            reward -= 2.
+            reward -= 5.
 
         # Check for errors
         if s.error:

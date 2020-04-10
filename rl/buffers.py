@@ -385,8 +385,9 @@ class TieredBuffer(ReplayBuffer):
 
         self.last_tier = None
 
-    def add(self, data, proc=0, *args, **kwargs):
+    def add(self, data, num=0, *args, **kwargs):
         ''' In compressed mode, the states must be pre-compressed '''
+        proc=num
 
         # data: [s1, s2, a, r, d]
 
@@ -452,4 +453,39 @@ class TieredBuffer(ReplayBuffer):
         for i, buf in enumerate(self.buffers):
             print "{}:{}, ".format(i, len(buf)),
         print ""
+
+class MultiBuffer(ReplayBuffer):
+    ''' Buffer that contains other buffers
+        Buffer choice is using
+    '''
+    def __init__(self, mode, capacity, compressed, count=2, sub_buffer='priority', **kwargs):
+        super(MultiBuffer, self).__init__(mode, capacity, compressed)
+
+        self.count = count
+
+        if sub_buffer == 'replay':
+            create_buf = ReplayBuffer
+        elif sub_buffer == 'priority':
+            create_buf = NaivePrioritizedBuffer
+
+        self.buffers = [create_buf(mode=mode, capacity=capacity//count, compressed=compressed)
+                for _ in range(self.count)]
+
+    def add(self, data, num=None, **kwargs):
+        ''' In compressed mode, the states must be pre-compressed '''
+        target = num % self.count
+
+        #print "Adding to ", target # debug
+        self.buffers[target].add(data, **kwargs)
+
+    def sample(self, batch_size, num=None, **kwargs):
+        target = num % self.count
+
+        #print "Sampling from ", target # debug
+        assert(len(self.buffers[target]) > 0)
+
+        return self.buffers[target].sample(batch_size, **kwargs)
+
+    def __len__(self):
+        return sum((len(b) for b in self.buffers))
 
