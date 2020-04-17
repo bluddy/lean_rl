@@ -68,8 +68,6 @@ shared_path = "/H3D"
 SHARED_VAR_NUM = 3  # Variables before array
 SHARED_VAR_SIZE = SHARED_VAR_NUM * 4  # size of variables
 
-EXPERT_STRATEGY = False
-
 class State(object):
     def __init__(self):
         pass
@@ -157,7 +155,7 @@ class Environment(common_env.CommonEnv):
         stack_size=1, img_dim=224, program='runner', max_steps=100,
         random_target=False, task='reach',
         hi_res_mode=False, stereo_mode=False, full_init=True,
-        *args, **kwargs):
+        reward='simple', *args, **kwargs):
         '''
         @server_num: which number environment this is
         '''
@@ -183,6 +181,7 @@ class Environment(common_env.CommonEnv):
         self.img_count = 1
         self.last_event = None
         self.task = task
+        self.reward_type = reward
         self.random_target = random_target
 
         self.hi_res_mode = hi_res_mode
@@ -218,7 +217,13 @@ class Environment(common_env.CommonEnv):
             # pos/rot(3)
             self.action_steps = np.array([3, 3, 3])
         elif task == 'suture':
-            self.reward = Reward_suture_v0(self)
+            if self.reward_type == 'simple':
+                self.reward = Reward_suture_simple(self)
+            elif self.reward_type == 'v1':
+                self.reward = Reward_suture_v0(self)
+            else:
+                raise ValueError('Unrecognized reward: ' + reward)
+
             # selector, pos/rot(3)
             self.action_steps = np.array([2, 3, 3, 3, 3])
         else:
@@ -393,18 +398,20 @@ class Environment(common_env.CommonEnv):
                   self.episode, self.reward.last_dist)
 
             if self.task == 'reach':
-              reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
-                  n[0], n[1], n[2], t[0], t[1], t[2])
+                reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                    n[0], n[1], n[2], t[0], t[1], t[2])
 
             elif self.task == 'suture':
-              reward_s += 'ai:{:.2f}, di:{:.2f}, ns:{}, ts:{}, {}'.format(
-                  float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal),
-                  self.state.needle_insert_status, self.state.target_insert_status,
-                  text)
-              n = self.state.needle_tip_pos
-              t = self.state.cur_target_pos
-              reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
-                  n[0], n[1], n[2], t[0], t[1], t[2])
+                if self.reward_type == 'v1':
+                    reward_s += 'ai:{:.2f}, di:{:.2f}'.format(
+                        float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal))
+                reward_s += 'ns:{}, ts:{}, {}'.format(
+                    self.state.needle_insert_status, self.state.target_insert_status,
+                    text)
+                n = self.state.needle_tip_pos
+                t = self.state.cur_target_pos
+                reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                    n[0], n[1], n[2], t[0], t[1], t[2])
             try:
                 txt_surface = self.font.render(reward_s, False, (255,0,0))
             except:
@@ -545,20 +552,17 @@ class Environment(common_env.CommonEnv):
             a *= 0.001 # pos
             pos = a.tolist()
             orn = [0., 0., 0.]
+
         elif self.task == 'suture':
             # Suture expects a 7-member action (1st is dummy)
             arm = 2
 
-            if EXPERT_STRATEGY:
-                if self.t>5:
-                    pos = [0., 0., 0.]
-                    orn = [0., 0., -0.15]
-                else:
-                    pos = [0., -0.001, 0.]
-                    orn = [0., 0., 0.]
-            else:
-                pos = [a[1]*0.001, a[2]*0.001, a[3]*0.001]
-                orn = [0., 0., a[4]*0.1]
+            # 0,0,0 isn't accepted
+            if np.all(a == 0):
+                a[1] = 1.
+
+            pos = (a[1:4] * 0.001).tolist()
+            orn = [0., 0., a[4]*0.1]
         else:
             raise ValueError("Invalid task " + str(self.task))
 

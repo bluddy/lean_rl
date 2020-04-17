@@ -117,9 +117,146 @@ class Reward_reach_v0(object):
 
         return reward, done
 
-class Reward_suture_v0(object):
+class Reward_suture_simple(object):
+    ''' A sparse reward '''
     def __init__(self, env):
         self.env = env
+
+    def _needle_to_target_d(self, src=0, dst=0):
+        ss = self.env.state
+        needle = ss.needle_points_pos
+        dist = calc_dist(needle[src], self.targets[dst])
+        return dist
+
+    def reset(self):
+        ss = self.env.state
+        self.targets = np.array([ss.cur_target_pos, ss.next_target_pos])
+        dist = self._needle_to_target_d()
+        self.reset_dist = dist
+        self.last_dist = dist
+
+    def _check_basic_errors(self):
+        ss = self.env.state
+        ls = self.env.last_state
+        nstatus = ss.needle_insert_status
+        tstatus = ss.target_insert_status
+        done = False
+        reward = 0.
+
+        if tstatus == -1 or \
+           ss.outside_insert_radius or \
+           ss.outside_exit_radius:
+            done = True
+            reward -= 2.
+
+        if ls is not None and \
+            (ss.excessive_needle_pierces > ls.excessive_needle_pierces or \
+            ss.excessive_insert_needle_pierces > ls.excessive_insert_needle_pierces or \
+            ss.excessive_exit_needle_pierces > ls.excessive_exit_needle_pierces or \
+            ss.incorrect_needle_throws > ls.incorrect_needle_throws):
+            done = True
+            reward -= 2.
+
+        # Check for collisions
+        if ls is not None and \
+            (ls.instr_collisions < ss.instr_collisions or \
+            ls.instr_endo_collisions < ss.instr_endo_collisions):
+              reward -= 2.
+              done = True
+
+        # check for errors
+        if ss.error:
+            self.env.error_ctr += 1
+            if self.env.error_ctr >= self.env.max_error_ctr:
+                done = True
+
+        # Check for out of view
+        if ss.tools_out_of_view > 0:
+            reward -= 2.
+            done = True
+
+        if not ss.needle_grasped:
+            print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
+            done = True
+            reward -= 2.
+
+        if not done and nstatus != tstatus:
+            # Insert in wrong place
+            print "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
+                    self.env.server_num, nstatus, tstatus,
+                    ls.needle_insert_status, ls.target_insert_status)
+            done = True
+            reward -= 2.
+
+        if self.env.t >= self.env.max_steps:
+            done = True
+
+        return reward, done
+
+    def _get_dist(self):
+        ss = self.env.state
+        tstatus = ss.target_insert_status
+        dist = 0.
+        if tstatus == 0:
+            dist = self._needle_to_target_d()
+        elif tstatus == 1:
+            dist = self._needle_to_target_d(src=-1, dst=0)
+        elif tstatus == 2:
+            dist = -self._needle_to_target_d(src=0, dst=1)
+        elif tstatus == 3:
+            dist = -self._needle_to_target_d(src=0, dst=1)
+        return dist
+
+
+    def get_reward_and_done(self):
+        ss = self.env.state
+        ls = self.env.last_state
+        nstatus = ss.needle_insert_status
+        tstatus = ss.target_insert_status
+        needle = ss.needle_points_pos
+        done = False
+        reward = 0.
+
+        reward2, done2 = self._check_basic_errors()
+        done = done or done2
+        reward += reward2
+
+        if done:
+            return reward, done
+
+        dist = self._get_dist()
+        if (tstatus == 0 and dist > self.reset_dist * 1.5) or \
+            dist > self.reset_dist * 3.:
+            done = True
+            reward -= 5.
+
+        if ls is not None:
+            last_tstatus = ls.target_insert_status
+            if tstatus > last_tstatus:
+                # progress, but don't reward for dist change
+                reward += 5.
+                #print "ts>ls, r={}".format(reward) #debug
+            elif tstatus == last_tstatus:
+                # Check for change of dist
+                d = self.last_dist - dist
+                reward += d
+                #print "ts=ls, r={}, d={}".format(reward, dist) #debug
+            else:
+                # regression. no good
+                reward -= 5.
+                done = True
+                #print "ts=ls, r={}".format(reward) #debug
+
+            self.last_dist = dist
+
+        reward -= 0.005
+
+        return reward, done
+
+
+class Reward_suture_v1(Reward_suture_simple):
+    def __init__(self, *args, **kwargs):
+        super(Reward_suture_v1, self).__init__(*args, **kwargs)
 
     def reset(self):
         ss = self.env.state
@@ -185,9 +322,6 @@ class Reward_suture_v0(object):
         ss = self.env.state
         tstatus = ss.target_insert_status
         needle = ss.needle_points_pos
-
-        if tstatus == -1:
-            return 0., False
 
         if tstatus == 0:
             dist = calc_dist(needle[0], self.targets[0])
@@ -288,52 +422,9 @@ class Reward_suture_v0(object):
         self.last_dist_ideal = dist_ideal
         # -------------------------------------------
 
-        if tstatus == -1 or \
-           ss.outside_insert_radius or \
-           ss.outside_exit_radius:
-            done = True
-            reward -= 2.
-
-        if ls is not None and \
-            (ss.excessive_needle_pierces > ls.excessive_needle_pierces or \
-            ss.excessive_insert_needle_pierces > ls.excessive_insert_needle_pierces or \
-            ss.excessive_exit_needle_pierces > ls.excessive_exit_needle_pierces or \
-            ss.incorrect_needle_throws > ls.incorrect_needle_throws):
-            done = True
-            reward -= 2.
-
-        # Check for collisions
-        if ls is not None and \
-            (ls.instr_collisions < ss.instr_collisions or \
-            ls.instr_endo_collisions < ss.instr_endo_collisions):
-              reward -= 2.
-              done = True
-
-        # Check for errors
-        if ss.error:
-            self.env.error_ctr += 1
-            if self.env.error_ctr >= self.env.max_error_ctr:
-                done = True
-
-        # Check for out of view
-        if ss.tools_out_of_view > 0:
-            reward -= 1.
-            done = True
-
-        if self.env.t >= self.env.max_steps:
-            done = True
-
-        if not ss.needle_grasped:
-            print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
-            done = True
-            reward -= 2.
-
-        if nstatus != tstatus:
-            print "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
-                    self.env.server_num, nstatus, tstatus,
-                    ls.needle_insert_status, ls.target_insert_status)
-            done = True
-            reward -= 2.
+        done2, reward2 = self._check_basic_errors()
+        done = done or done2
+        reward += reward2
 
         if done:
             return reward, done
@@ -354,7 +445,6 @@ class Reward_suture_v0(object):
             reward -= 2.
 
         # Compute distance of next point from surface
-
         d = 0.
         if ls is not None:
             last_tstatus = ls.target_insert_status
@@ -374,7 +464,7 @@ class Reward_suture_v0(object):
         #from rl.utils import ForkablePdb
         #ForkablePdb().set_trace()
 
-        reward += 10 * (d + d_a_ideal + d_dist_ideal * 10)
+        reward += (d + d_a_ideal + d_dist_ideal * 10)
 
         if not done and tstatus == 0:
             # Don't forgive regressions in status 0
@@ -390,5 +480,4 @@ class Reward_suture_v0(object):
         reward -= 0.02
 
         return reward, done
-
 

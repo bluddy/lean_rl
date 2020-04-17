@@ -836,7 +836,10 @@ if __name__ == "__main__":
             help="Activate 16-bit support if available")
 
     parser.add_argument('--task', default=None, type=str,
-            help="Task to carry out for env")
+            help="Task to carry out for env (reach|suture)")
+    parser.add_argument('--reward', default='simple', type=str,
+            help="Reward to use for the task (simple|v1)")
+
 
     # -- save mode
     parser.add_argument('--playback', default=False, action='store_true',
