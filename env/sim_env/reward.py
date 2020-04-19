@@ -224,8 +224,13 @@ class Reward_suture_simple(object):
         if done:
             return reward, done
 
+        # Get into tstatus 1 quickly
+        if self.env.t >= 12 and tstatus < 1:
+            done = True
+            reward -= 5.
+
         dist = self._get_dist()
-        if (tstatus == 0 and dist > self.reset_dist * 1.5) or \
+        if (tstatus == 0 and dist > self.reset_dist * 1.2) or \
             dist > self.reset_dist * 3.:
             done = True
             reward -= 5.
@@ -234,7 +239,7 @@ class Reward_suture_simple(object):
             last_tstatus = ls.target_insert_status
             if tstatus > last_tstatus:
                 # progress, but don't reward for dist change
-                reward += 5.
+                reward += 10.
                 #print "ts>ls, r={}".format(reward) #debug
             elif tstatus == last_tstatus:
                 # Check for change of dist
