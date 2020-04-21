@@ -225,7 +225,7 @@ class Environment(common_env.CommonEnv):
                 raise ValueError('Unrecognized reward: ' + reward)
 
             # selector, pos/rot(3)
-            self.action_steps = np.array([2, 3, 3, 3, 3])
+            self.action_steps = np.array([3, 3, 3, 3])
         else:
             raise ValueError("Unknown task " + task)
 
@@ -554,19 +554,19 @@ class Environment(common_env.CommonEnv):
             orn = [0., 0., 0.]
 
         elif self.task == 'suture':
-            # Suture expects a 7-member action (1st is dummy)
+            # Suture expects a 4-member action (1st is dummy)
             arm = 2
 
             # Help algorithm reach target
             if self.state.target_insert_status == 0:
-                a[4] = 0.
+                a[3] = 0.
 
             # 0,0,0 isn't accepted
             if np.all(a == 0):
-                a[1] = 1.
+                a[0] = 1.
 
-            pos = (a[1:4] * 0.001).tolist()
-            orn = [0., 0., a[4]*0.1]
+            pos = (a[0:3] * 0.001).tolist()
+            orn = [0., 0., a[3]*0.1]
         else:
             raise ValueError("Invalid task " + str(self.task))
 
