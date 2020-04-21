@@ -225,7 +225,7 @@ class Reward_suture_simple(object):
             return reward, done
 
         # Get into tstatus 1 quickly
-        if self.env.t >= 12 and tstatus < 1:
+        if self.env.t >= 20 and tstatus < 1:
             done = True
             reward -= 5.
 

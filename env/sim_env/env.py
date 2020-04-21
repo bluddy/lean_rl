@@ -557,6 +557,10 @@ class Environment(common_env.CommonEnv):
             # Suture expects a 7-member action (1st is dummy)
             arm = 2
 
+            # Help algorithm reach target
+            if self.state.target_insert_status == 0:
+                a[4] = 0.
+
             # 0,0,0 isn't accepted
             if np.all(a == 0):
                 a[1] = 1.
