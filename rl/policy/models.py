@@ -265,3 +265,65 @@ class QMixed(BaseImage):
         y = self.linear2(state)
         x = self.linear3(torch.cat((x, y), dim=-1))
         return x
+
+class QMixed2(nn.Module):
+    def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
+        super(QMixed2, self).__init__()
+
+        ## input size:[img_stack, 224, 224]
+        print "QMixed2. drop:{}, deep:{}, bn:{}".format(drop, deep, bn)
+
+        ll = []
+        in_f = calc_features(img_stack)
+        if img_dim == 224:
+            d = 4; l = img_dim
+            ll.extend(make_conv(in_f, d,  1, 1, 1, bn=bn, drop=drop)) # flatten colors, 224
+            d2 = 8; l = l / 2
+            ll.extend(make_conv(d, d2, 3, 2, 1, bn=bn, drop=drop)) # 112
+            if deep:
+                ll.extend(make_conv(d2, d2, 3, 1, 1, bn=bn, drop=drop))
+            d = 16; l = l / 2
+            ll.extend(make_conv(d2, d,  3, 2, 1, bn=bn, drop=drop)) # 56
+            if deep:
+                ll.extend(make_conv(d, d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 32; l = l / 2
+            ll.extend(make_conv(d,  d2,  3, 2, 1, bn=bn, drop=drop)) # 28
+            if deep:
+                ll.extend(make_conv(d2, d2,  3, 1, 1, bn=bn, drop=drop))
+            d = 64; l = l / 2
+            ll.extend(make_conv(d2,  d,  3, 2, 1, bn=bn, drop=drop)) # 14
+            if deep:
+                ll.extend(make_conv(d, d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 128; l = l / 2
+            ll.extend(make_conv(d, d2,  3, 2, 1, bn=bn, drop=drop)) # 7
+            if deep:
+                ll.extend(make_conv(d2, d2,  3, 1, 1, bn=bn, drop=drop))
+            d = d2
+            self.latent_dim = l * l * d
+        else:
+            raise ValueError(str(img_dim) + " is not a valid img_dim")
+
+        ll.extend([Flatten()])
+        self.features = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
+        ll.extend(make_linear(400, 100, bn=bn, drop=drop))
+        self.linear1 = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(state_dim, 400, bn=bn, drop=drop))
+        ll.extend(make_linear(400, 100, bn=bn, drop=drop))
+        self.linear2 = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(200, action_dim, bn=False, drop=False, relu=False))
+        self.linear3 = nn.Sequential(*ll)
+
+    def forward(self, x):
+        img, state = x
+        x = self.features(img)
+        x = self.linear1(x)
+        y = self.linear2(state)
+        x = self.linear3(torch.cat((x, y), dim=-1))
+        return x
