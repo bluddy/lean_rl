@@ -1,0 +1,4 @@
+
+# suture task
+python -m rl.main --env sim --procs 5 --lr 5e-5 --hires --stereo --capacity 1e4 --task suture --name try3 --record --mode mixed --learning-start 0 --load-last
+
