@@ -413,9 +413,7 @@ class Environment(common_env.CommonEnv):
                 reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
                     n[0], n[1], n[2], t[0], t[1], t[2])
 
-                if self.render_txt is not None:
-                    reward_s += ' ' + self.render_txt
-                    self.render_txt = None
+                reward_s += ' ' + self.reward_txt
             try:
                 txt_surface = self.font.render(reward_s, False, (255,0,0))
             except:
@@ -602,7 +600,7 @@ class Environment(common_env.CommonEnv):
             self._step_real_sim(action_orig)
 
         cur_state = self._get_env_state()
-        reward, done = self.reward.get_reward_and_done()
+        reward, done, self.reward_txt, success = self.reward.get_reward_data()
         done = done or play_done
 
         self.done = done
@@ -614,7 +612,7 @@ class Environment(common_env.CommonEnv):
         self._step_record()
 
         return (cur_state, reward, done,
-            {"action": action_orig, "save_mode":self.get_save_mode()})
+            {"action": action_orig, "save_mode":self.get_save_mode(), "success":success})
 
     def _reset_real(self):
         self._connect_to_sim()
@@ -673,7 +671,7 @@ class Environment(common_env.CommonEnv):
         # Things required for the reward function
         self.reward.reset()
 
-        return (cur_state, 0, False, {"action": None, "save_mode": self.get_save_mode()})
+        return (cur_state, 0, False, {"action": None, "save_mode": self.get_save_mode(), "success":False})
 
     @staticmethod
     def clean_up_env():

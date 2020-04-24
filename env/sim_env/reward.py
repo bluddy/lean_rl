@@ -37,9 +37,12 @@ class Reward_reach_v0(object):
         dist = calc_dist(s.needle_tip_pos, s.cur_target_pos)
         self.last_dist = dist
         self.reset_dist = dist
+        reward_txt = None
 
-    def get_reward_and_done(self):
+    def get_reward_data(self):
+        success = False
         reward = 0.
+        reward_txt = None
         done = False
         s = self.env.state
         ls = self.env.last_state
@@ -54,7 +57,9 @@ class Reward_reach_v0(object):
 
         # Check for end condition
         if dist <= self.dist_epsilon:
+            reward_txt = "Success!"
             done = True
+            success = True
             reward += 5.
 
         # End if we've touched the skin
@@ -70,6 +75,7 @@ class Reward_reach_v0(object):
             #        y_needle, z_needle, y_tissue, y_target, z_target)
             if not done:
                 reward -= 5.
+                reward_txt = "Bump into tissue!"
                 done = True
 
         d = self.last_dist - dist
@@ -97,15 +103,18 @@ class Reward_reach_v0(object):
         # Check for out of view
         if s.tools_out_of_view > 0:
             reward -= 5.
+            reward_txt = "Tools out of view!"
             done = True
 
         if self.env.t >= self.env.max_steps:
             # Need penalty so don't choose to do nothing
             #reward -= 4.
+            reward_txt = "Out of time!"
             done = True
 
         if not s.needle_grasped:
-            print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
+            reward_txt = "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
+            print reward_txt
             done = True
             reward -= 5.
 
@@ -113,6 +122,7 @@ class Reward_reach_v0(object):
         if s.error:
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
+                reward_txt = "Error!"
                 done = True
 
         return reward, done
@@ -142,12 +152,13 @@ class Reward_suture_simple(object):
         tstatus = ss.target_insert_status
         done = False
         reward = 0.
+        reward_txt = ''
 
         if tstatus == -1 or \
            ss.outside_insert_radius or \
            ss.outside_exit_radius:
             done = True
-            self.env.render_txt = "Outside insert/exit radius!"
+            reward_txt = "Outside insert/exit radius!"
             reward -= 2.
 
         if ls is not None and \
@@ -156,7 +167,7 @@ class Reward_suture_simple(object):
             ss.excessive_exit_needle_pierces > ls.excessive_exit_needle_pierces or \
             ss.incorrect_needle_throws > ls.incorrect_needle_throws):
             done = True
-            self.env.render_txt = "Excessive_needle_throw/pierce!"
+            reward_txt = "Excessive_needle_throw/pierce!"
             reward -= 2.
 
         # Check for collisions
@@ -164,25 +175,25 @@ class Reward_suture_simple(object):
             (ls.instr_collisions < ss.instr_collisions or \
             ls.instr_endo_collisions < ss.instr_endo_collisions):
               reward -= 2.
-              self.env.render_txt = "Instr collision!"
+              reward_txt = "Instr collision!"
               done = True
 
         # check for errors
         if ss.error:
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
-                self.env.render_txt = "Error!"
+                reward_txt = "Error!"
                 done = True
 
         # Check for out of view
         if ss.tools_out_of_view > 0:
-            self.env.render_txt = "Tools out of view!"
+            reward_txt = "Tools out of view!"
             reward -= 2.
             done = True
 
         if not ss.needle_grasped:
             print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
-            self.env.render_txt = "Needle dropped!"
+            reward_txt = "Needle dropped!"
             done = True
             reward -= 2.
 
@@ -192,15 +203,15 @@ class Reward_suture_simple(object):
                     self.env.server_num, nstatus, tstatus,
                     ls.needle_insert_status, ls.target_insert_status)
             print txt
-            self.env.render_txt = txt
+            reward_txt = txt
             done = True
             reward -= 2.
 
         if self.env.t >= self.env.max_steps:
-            self.env.render_txt = "Out of time"
+            reward_txt = "Out of time"
             done = True
 
-        return reward, done
+        return reward, done, reward_txt
 
     def _get_dist(self):
         ss = self.env.state
@@ -217,58 +228,62 @@ class Reward_suture_simple(object):
         return dist
 
 
-    def get_reward_and_done(self):
+    def get_reward_data(self):
         ss = self.env.state
         ls = self.env.last_state
         nstatus = ss.needle_insert_status
         tstatus = ss.target_insert_status
         needle = ss.needle_points_pos
-        done = False
-        reward = 0.
+        reward_txt = ''
+        success = False
 
-        reward2, done2 = self._check_basic_errors()
-        done = done or done2
-        reward += reward2
+        reward, done, reward_txt = self._check_basic_errors()
 
-        if done:
-            return reward, done
-
-        # Get into tstatus 1 quickly
-        if self.env.t >= 20 and tstatus == 0:
-            self.env.render_txt = "status 0, t>20"
-            done = True
-            reward -= 5.
-
-        dist = self._get_dist()
-        if (tstatus == 0 and dist > self.reset_dist * 1.2) or \
-            dist > self.reset_dist * 3.:
-            self.env.render_txt = "too far!"
-            done = True
-            reward -= 5.
-
-        if ls is not None:
-            last_tstatus = ls.target_insert_status
-            if tstatus > last_tstatus:
-                # progress, but don't reward for dist change
-                reward += 10.
-                #print "ts>ls, r={}".format(reward) #debug
-            elif tstatus == last_tstatus:
-                # Check for change of dist
-                d = self.last_dist - dist
-                reward += d
-                #print "ts=ls, r={}, d={}".format(reward, dist) #debug
-            else:
-                # regression. no good
-                self.env.render_txt = "Regression!"
-                reward -= 5.
+        if not done:
+            # Get into tstatus 1 quickly
+            if self.env.t >= 20 and tstatus == 0:
+                reward_txt = "TStatus 0, too long!"
                 done = True
-                #print "ts=ls, r={}".format(reward) #debug
+                reward -= 5.
 
-            self.last_dist = dist
+            dist = self._get_dist()
+            if (tstatus == 0 and dist > self.reset_dist * 1.2) or \
+                dist > self.reset_dist * 8.:
+                reward_txt = "Too far!"
+                done = True
+                reward -= 5.
 
-        reward -= 0.005
+            if ls is not None:
+                last_tstatus = ls.target_insert_status
+                if tstatus > last_tstatus:
+                    # progress, but don't reward for dist change
+                    reward += 5.
+                    reward_txt = "TStatus increase"
 
-        return reward, done
+                    if tstatus >= 3:
+                        done = True
+                        success = True
+                        reward += 5.
+                        reward_txt = "Success!"
+
+                    #print "ts>ls, r={}".format(reward) #debug
+                elif tstatus == last_tstatus:
+                    # Check for change of dist
+                    d = self.last_dist - dist
+                    reward += d
+                    #print "ts=ls, r={}, d={}".format(reward, dist) #debug
+                else:
+                    # regression. no good
+                    reward_txt = "Regression!"
+                    reward -= 5.
+                    done = True
+                    #print "ts=ls, r={}".format(reward) #debug
+
+                self.last_dist = dist
+
+            reward -= 0.005
+
+        return reward, done, reward_txt, success
 
 
 class Reward_suture_v1(Reward_suture_simple):
@@ -406,7 +421,7 @@ class Reward_suture_v1(Reward_suture_simple):
 
         return dist, ok
 
-    def get_reward_and_done(self):
+    def get_reward_data(self):
 
         ss = self.env.state
         ls = self.env.last_state

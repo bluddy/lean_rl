@@ -94,6 +94,7 @@ class EnvWrapper:
         self.done = done
         self.ready = True
         self.save_mode = extra["save_mode"]
+        self.success = extra["success"]
         return (state, reward, done, extra)
 
     def is_ready(self):
