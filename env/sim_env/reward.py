@@ -147,6 +147,7 @@ class Reward_suture_simple(object):
            ss.outside_insert_radius or \
            ss.outside_exit_radius:
             done = True
+            self.env.render_txt = "Outside insert/exit radius!"
             reward -= 2.
 
         if ls is not None and \
@@ -155,6 +156,7 @@ class Reward_suture_simple(object):
             ss.excessive_exit_needle_pierces > ls.excessive_exit_needle_pierces or \
             ss.incorrect_needle_throws > ls.incorrect_needle_throws):
             done = True
+            self.env.render_txt = "Excessive_needle_throw/pierce!"
             reward -= 2.
 
         # Check for collisions
@@ -162,33 +164,40 @@ class Reward_suture_simple(object):
             (ls.instr_collisions < ss.instr_collisions or \
             ls.instr_endo_collisions < ss.instr_endo_collisions):
               reward -= 2.
+              self.env.render_txt = "Instr collision!"
               done = True
 
         # check for errors
         if ss.error:
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
+                self.env.render_txt = "Error!"
                 done = True
 
         # Check for out of view
         if ss.tools_out_of_view > 0:
+            self.env.render_txt = "Tools out of view!"
             reward -= 2.
             done = True
 
         if not ss.needle_grasped:
             print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
+            self.env.render_txt = "Needle dropped!"
             done = True
             reward -= 2.
 
         if not done and nstatus != tstatus:
             # Insert in wrong place
-            print "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
+            txt = "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
                     self.env.server_num, nstatus, tstatus,
                     ls.needle_insert_status, ls.target_insert_status)
+            print txt
+            self.env.render_txt = txt
             done = True
             reward -= 2.
 
         if self.env.t >= self.env.max_steps:
+            self.env.render_txt = "Out of time"
             done = True
 
         return reward, done
@@ -225,13 +234,15 @@ class Reward_suture_simple(object):
             return reward, done
 
         # Get into tstatus 1 quickly
-        if self.env.t >= 20 and tstatus < 1:
+        if self.env.t >= 20 and tstatus == 0:
+            self.env.render_txt = "status 0, t>20"
             done = True
             reward -= 5.
 
         dist = self._get_dist()
         if (tstatus == 0 and dist > self.reset_dist * 1.2) or \
             dist > self.reset_dist * 3.:
+            self.env.render_txt = "too far!"
             done = True
             reward -= 5.
 
@@ -248,6 +259,7 @@ class Reward_suture_simple(object):
                 #print "ts=ls, r={}, d={}".format(reward, dist) #debug
             else:
                 # regression. no good
+                self.env.render_txt = "Regression!"
                 reward -= 5.
                 done = True
                 #print "ts=ls, r={}".format(reward) #debug
