@@ -245,8 +245,8 @@ def run(args):
     action_dim = dummy_env.action_dim
 
     img_depth = args.img_depth
-        if args.stereo_mode or args.depthmap_mode:
-            img_depth *= 2
+    if args.stereo_mode or args.depthmap_mode:
+        img_depth *= 2
 
     if args.policy == 'td3':
         from policy.TD3 import TD3
@@ -867,7 +867,7 @@ if __name__ == "__main__":
             help='Use stereo images')
     parser.add_argument('--depthmap', default=False, action='store_true',
             dest='depthmap_mode',
-            helpt='Use depth map from sim')
+            help='Use depth map from sim')
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')
