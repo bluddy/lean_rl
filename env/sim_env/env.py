@@ -11,7 +11,7 @@ import ast
 
 # For shared memory
 import posix_ipc, mmap
-from ctypes import c_uint8, c_int, POINTER
+from ctypes import c_uint8, c_int, c_float, POINTER
 import numpy as np
 
 import scipy, scipy.misc
@@ -176,7 +176,7 @@ class Environment(common_env.CommonEnv):
         self.shared_mem = None
         self.mmap_shared = None
         self.shared_vars = [0]
-        self.shared_array = None
+        self.shared_rgb = None
         self.ready_flag_old = 0
         self.img_count = 1
         self.last_event = None
@@ -293,10 +293,16 @@ class Environment(common_env.CommonEnv):
         height = self.shared_vars[2]
         self.resolution = (width, height)
         #print "XXX width = ", width, "height = ", height # debug
+
+        #from rl.utils import ForkablePdb
+        #ForkablePdb().set_trace()
+
         rgb = np.ctypeslib.as_array(self.shared_rgb)
-        rgb = np.flipupd(np.reshape(rgb, (height, width, 3)))
+        rgb = np.reshape(rgb, (height, width, 3))
+        rgb = np.flipud(rgb)
         depth = np.ctypeslib.as_array(self.shared_depth)
-        depth = np.flipud(np.reshape(depth, (height, width, 1)))
+        depth = np.reshape(depth, (height, width, 1))
+        depth = np.flipud(depth)
 
         if save_img:
             scipy.misc.imsave('./img{}_{}.png'.format(
@@ -310,11 +316,15 @@ class Environment(common_env.CommonEnv):
         if self.shared_mem is None:
             self.shared_mem = posix_ipc.SharedMemory(self.shared_path)
             self.mmap_shared = mmap.mmap(self.shared_mem.fd, 0)
+
+            #from rl.utils import ForkablePdb
+            #ForkablePdb().set_trace()
+
             self.shared_vars = (c_int * SHARED_VAR_NUM).from_buffer(self.mmap_shared)
-            width, height = self.shared_vars[1], self.shared_vars[2]
-            s_type = c_uint8 * width * height * 3
+            width, height = self.resolution
+            s_type = c_uint8 * (width * height * 3)
             self.shared_rgb = s_type.from_buffer(self.mmap_shared, SHARED_VAR_SIZE) # offset
-            s_type2 = c_float * width * height
+            s_type2 = c_float * (width * height)
             self.shared_depth = s_type2.from_buffer(self.mmap_shared, SHARED_VAR_SIZE + width * height * 3)
 
     def _callback(self, event):
