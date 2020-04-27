@@ -293,27 +293,29 @@ class Environment(common_env.CommonEnv):
         height = self.shared_vars[2]
         self.resolution = (width, height)
         #print "XXX width = ", width, "height = ", height # debug
-        arr = np.ctypeslib.as_array(self.shared_array)
-        arr = np.reshape(arr, (height, width, 3))
-        arr = np.flipud(arr)
+        rgb = np.ctypeslib.as_array(self.shared_rgb)
+        rgb = np.flipupd(np.reshape(rgb, (height, width, 3)))
+        depth = np.ctypeslib.as_array(self.shared_depth)
+        depth = np.flipud(np.reshape(depth, (height, width, 1)))
 
         if save_img:
             scipy.misc.imsave('./img{}_{}.png'.format(
               self.server_num, self.img_count), arr)
             self.img_count += 1
 
-        return arr
+        return rgb, depth
 
     def _init_shared_mem(self):
         # open shared mem
         if self.shared_mem is None:
             self.shared_mem = posix_ipc.SharedMemory(self.shared_path)
             self.mmap_shared = mmap.mmap(self.shared_mem.fd, 0)
-            self.shared_vars = (c_int * SHARED_VAR_NUM).from_buffer(
-                self.mmap_shared)
-            s_type = c_uint8 * (self.mmap_shared.size() - SHARED_VAR_SIZE)
-            self.shared_array = s_type.from_buffer(self.mmap_shared,
-                SHARED_VAR_SIZE)
+            self.shared_vars = (c_int * SHARED_VAR_NUM).from_buffer(self.mmap_shared)
+            width, height = self.shared_vars[1], self.shared_vars[2]
+            s_type = c_uint8 * width * height * 3
+            self.shared_rgb = s_type.from_buffer(self.mmap_shared, SHARED_VAR_SIZE) # offset
+            s_type2 = c_float * width * height
+            self.shared_depth = s_type2.from_buffer(self.mmap_shared, SHARED_VAR_SIZE + width * height * 3)
 
     def _callback(self, event):
         # Save event
@@ -457,7 +459,7 @@ class Environment(common_env.CommonEnv):
 
         self._wait_for_sim()
 
-        image = self._read_shared_data()
+        image, depth = self._read_shared_data()
 
         # Resize/crop image
         if self.stereo_mode:
