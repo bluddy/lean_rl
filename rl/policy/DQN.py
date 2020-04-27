@@ -58,18 +58,22 @@ class DQN(object):
         if self.mode == 'image':
             if self.network == 'simple':
                 n = QImage(action_dim=self.total_steps, img_stack=self.total_stack,
-                        bn=self.bn, img_dim=self.img_dim, deep=self.deep,
-                        drop=self.dropout).to(device)
+                    bn=self.bn, img_dim=self.img_dim, deep=self.deep,
+                    drop=self.dropout).to(device)
             elif self.network == 'densenet':
                 n = QImageDenseNet(action_dim=self.total_steps,
-                        img_stack=self.total_stack, img_dim=self.img_dim).to(device)
+                    img_stack=self.total_stack).to(device)
         elif self.mode == 'state':
             n = QState(state_dim=self.state_dim, action_dim=self.total_steps,
                     bn=self.bn, deep=self.deep, drop=self.dropout).to(device)
         elif self.mode == 'mixed':
-            n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
+            if self.network == 'simple':
+                n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
                     img_stack=self.total_stack, bn=self.bn,
                     img_dim=self.img_dim, deep=self.deep, drop=self.dropout).to(device)
+            elif self.network == 'densenet':
+                n = QMixedDenseNet(action_dim=self.total_steps,
+                    img_stack=self.total_stack, state_dim=self.state_dim).to(device)
         else:
             raise ValueError('Unrecognized mode ' + mode)
         return n

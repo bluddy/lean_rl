@@ -153,33 +153,54 @@ class QImage(BaseImage):
         return x
 
 class QImageDenseNet(nn.Module):
-    def __init__(self, action_dim, img_stack, img_dim=224):
-        assert (img_stack==1)
+    def __init__(self, action_dim, img_stack):
         super(QImageDenseNet, self).__init__()
-        self.model = tmodels.densenet121(pretrained=True)
-        c = self.model.classifier
-        in_features = c.in_features
-        self.model.classifier = nn.Linear(c.in_features, action_dim)
+
+        print "QImageDenseNet. action_dim:{}, img_stack:{}".format(action_dim, img_stack)
+
+        model = tmodels.densenet121(pretrained=True)
+        if img_stack != 3:
+            model.conv0 = nn.Conv2d(img_stack, 64, 7, stride=2, padding=3, bias=False)
+
+        c = model.classifier
+        model.classifier = nn.Linear(c.in_features, action_dim)
+        self.model = model
 
     def forward(self, x):
         x = self.model(x)
         return x
 
-class QImageSoftMax(BaseImage):
-    ''' Image network with softmax '''
-    def __init__(self, action_dim, bn=True, drop=False, **kwargs):
-        super(QImageSoftMax, self).__init__(bn=bn, drop=drop, **kwargs)
+class QMixedDenseNet(QImageDenseNet):
+    def __init__(self, action_dim, state_dim, img_stack):
+        self.latent_dim = 100
+        super(QImageDenseNet, self).__init__(action_dim=self.latent_dim, img_stack)
+
+        print "QMixedDenseNet. action_dim:{}, img_stack:{}, state_dim:{}".format(action_dim, img_stack, state_dim)
+
+        bn = True
+        drop = False
 
         ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, action_dim, bn=False, drop=False, relu=False))
-        ll.extend([nn.LogSoftmax(dim=-1)])
-        self.linear = nn.Sequential(*ll)
+        ll.extend(make_linear(self.latent_dim, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 100, bn=bn, drop=drop))
+        self.linear1 = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(state_dim, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 100, bn=bn, drop=drop))
+        self.linear2 = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(200, action_dim, bn=False, drop=False, relu=False))
+        self.linear3 = nn.Sequential(*ll)
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        return x
+        img, state = x
+        x = self.model(img)
+        x = self.linear1(x)
+        y = self.linear2(state)
+        z = self.linear3(torch.cat((x, y), dim=-1))
+        return z
 
 class ActorState(nn.Module):
     def __init__(self, state_dim, action_dim, bn=False):
