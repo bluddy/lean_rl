@@ -69,7 +69,7 @@ def run(args):
             '_rt' if args.random_env else '')
 
         suffix = ''
-        if args.random_env or args.hi_res_mode or args.stereo_mode:
+        if args.random_env or args.hi_res_mode or args.stereo_mode or args.depthmap_mode:
             suffix += '_'
         if args.random_env:
             suffix += 'r'
@@ -77,6 +77,8 @@ def run(args):
             suffix += 'h'
         if args.stereo_mode:
             suffix += 's'
+        if args.depthmap_mode:
+            suffix += 'd'
 
         save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
                 args.env, args.task, suffix))
@@ -187,6 +189,7 @@ def run(args):
                 task=args.task,
                 hi_res_mode=args.hi_res_mode,
                 stereo_mode=args.stereo_mode,
+                depthmap_mode=args.depthmap_mode,
                 full_init=not dummy_env,
                 server_num=server_num,
                 save_mode_path=save_mode_path,
@@ -241,7 +244,9 @@ def run(args):
     action_steps = dummy_env.action_steps
     action_dim = dummy_env.action_dim
 
-    img_depth = args.img_depth * 2 if args.stereo_mode else args.img_depth
+    img_depth = args.img_depth
+        if args.stereo_mode or args.depthmap_mode:
+            img_depth *= 2
 
     if args.policy == 'td3':
         from policy.TD3 import TD3
@@ -860,6 +865,9 @@ if __name__ == "__main__":
     parser.add_argument('--stereo', default=False, action='store_true',
             dest='stereo_mode',
             help='Use stereo images')
+    parser.add_argument('--depthmap', default=False, action='store_true',
+            dest='depthmap_mode',
+            helpt='Use depth map from sim')
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')

@@ -154,7 +154,7 @@ class Environment(common_env.CommonEnv):
         start_env_port=50002,
         stack_size=1, img_dim=224, program='runner', max_steps=100,
         random_target=False, task='reach',
-        hi_res_mode=False, stereo_mode=False, full_init=True,
+        hi_res_mode=False, stereo_mode=False, depthmap_mode=False, full_init=True,
         reward='simple', *args, **kwargs):
         '''
         @server_num: which number environment this is
