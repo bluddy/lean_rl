@@ -125,7 +125,7 @@ class Reward_reach_v0(object):
                 reward_txt = "Error!"
                 done = True
 
-        return reward, done
+        return reward, done, reward_txt, success
 
 class Reward_suture_simple(object):
     ''' A sparse reward '''
