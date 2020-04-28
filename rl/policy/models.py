@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 import torchvision
 import torchvision.models as tmodels
+import torch.nn.functional as F
 
 feat_size = 7
 
@@ -153,27 +154,33 @@ class QImage(BaseImage):
         return x
 
 class QImageDenseNet(nn.Module):
-    def __init__(self, action_dim, img_stack):
+    def __init__(self, action_dim, img_stack, pretrained=False):
         super(QImageDenseNet, self).__init__()
 
         print "QImageDenseNet. action_dim:{}, img_stack:{}".format(action_dim, img_stack)
 
-        model = tmodels.densenet121(pretrained=True)
+        model = tmodels.densenet121(pretrained=False)
+        layers = list(model.features.children())
         if img_stack != 3:
-            model.conv0 = nn.Conv2d(img_stack, 64, 7, stride=2, padding=3, bias=False)
+            layers[0] = nn.Conv2d(img_stack, 64, 7, stride=2, padding=3, bias=False)
 
-        c = model.classifier
-        model.classifier = nn.Linear(c.in_features, action_dim)
-        self.model = model
+        self.features = nn.Sequential(*layers)
+        self.classifier = nn.Linear(1024, action_dim)
 
     def forward(self, x):
-        x = self.model(x)
+        #import pdb
+        #pdb.set_trace()
+
+        x = F.relu(self.features(x), inplace=True)
+        x = F.adaptive_avg_pool2d(x, (1,1))
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
         return x
 
 class QMixedDenseNet(QImageDenseNet):
     def __init__(self, action_dim, state_dim, img_stack):
         self.latent_dim = 100
-        super(QImageDenseNet, self).__init__(action_dim=self.latent_dim, img_stack)
+        super(QMixedDenseNet, self).__init__(action_dim=self.latent_dim, img_stack=img_stack)
 
         print "QMixedDenseNet. action_dim:{}, img_stack:{}, state_dim:{}".format(action_dim, img_stack, state_dim)
 
@@ -347,4 +354,20 @@ class QMixed2(nn.Module):
         x = self.linear1(x)
         y = self.linear2(state)
         x = self.linear3(torch.cat((x, y), dim=-1))
+        return x
+
+class QImageSoftMax(BaseImage):
+    ''' Image network with softmax '''
+    def __init__(self, action_dim, bn=True, drop=False, **kwargs):
+        super(QImageSoftMax, self).__init__(bn=bn, drop=drop, **kwargs)
+
+        ll = []
+        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
+        ll.extend(make_linear(400, action_dim, bn=False, drop=False, relu=False))
+        ll.extend([nn.LogSoftmax(dim=-1)])
+        self.linear = nn.Sequential(*ll)
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.linear(x)
         return x

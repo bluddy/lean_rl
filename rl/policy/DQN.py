@@ -4,7 +4,7 @@ import torch.nn as nn
 import os, sys, math
 import torch.nn.functional as F
 from os.path import join as pjoin
-from models import QState, QImage, QMixed, QImageSoftMax
+from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
