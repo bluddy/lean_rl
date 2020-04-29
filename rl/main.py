@@ -68,15 +68,11 @@ def run(args):
             args.env, args.policy[0:3], args.mode[0:2], args.task[:3],
             '_rt' if args.random_env else '')
 
-        suffix = ''
-        if args.random_env or args.hi_res_mode or args.stereo_mode or args.depthmap_mode:
-            suffix += '_'
+        suffix = '_'
         if args.random_env:
             suffix += 'r'
-        if args.hi_res_mode:
-            suffix += 'h'
-        if args.stereo_mode:
-            suffix += 's'
+        # We always save with _hs, but don't always train/test with it
+        suffix += 'hs'
         if args.depthmap_mode:
             suffix += 'd'
 

@@ -184,8 +184,11 @@ class Environment(common_env.CommonEnv):
         self.reward_type = reward
         self.random_target = random_target
 
+        # We always read/save hi-res and stereo, but we feed the rl algo
+        # low-res and mono/stereo
         self.hi_res_mode = hi_res_mode
         self.stereo_mode = stereo_mode
+        self.depthmap_mode = depthmap_mode
 
         # How often to reset the environment
         # Due to memory leaks or just errors
@@ -471,16 +474,14 @@ class Environment(common_env.CommonEnv):
 
         image, depth = self._read_shared_data()
 
-        # Resize/crop image
-        if self.stereo_mode:
-            x = [0., 1.]
-        else:
-            x = [0., 0.5] # Get half the image (left one)
+        # Resize/crop image (always stereo)
+        x = [0., 1.]
         y = [0.40, 0.82] # Get relevant part of image
         cropx = [int(self.resolution[0] * x[0]), int(self.resolution[0] * x[1]) + 1]
         cropy = [int(self.resolution[1] * y[0]), int(self.resolution[1] * y[1]) + 1]
         image = image[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
+        # Always save hires, stereo
         w, h = self._get_width_height(hires=True, stereo=True)
         self.image = scipy.misc.imresize(image, (h, w))
 
@@ -495,17 +496,24 @@ class Environment(common_env.CommonEnv):
         self.state.action = action
         #print "_update_sim_state: action = ", self.state.action # debug
 
+    def _save_img(img):
+        scipy.misc.imsave('./img{}_{}.png'.format(
+          self.server_num, self.img_count), arr)
+        self.img_count += 1
+
     def _get_env_state(self):
         image = self.image
         # Resize to non-hires, but possibly stereo
         w, h = self._get_width_height(hires=False, stereo=True)
-        if self.hi_res_mode:
-            image = scipy.misc.imresize(self.image, (h, w))
+        image = scipy.misc.imresize(self.image, (h, w))
         if self.stereo_mode:
+            # Process stereo into 6 layers
             # h = w / 2
             image_l = image[:, :h, :]
             image_r = image[:, h:, :]
             image = np.concatenate([image_l, image_r], axis=2)
+        else:
+            image = image[:, :h, :]
 
         image = image.transpose((2,0,1)) # prepare for pytorch
 
@@ -655,8 +663,8 @@ class Environment(common_env.CommonEnv):
             self.error_ctr += 1
 
     def _get_width_height(self, hires=False, stereo=False):
-        img_dim = self.img_dim * 2 if self.hi_res_mode and hires else self.img_dim
-        w = img_dim * 2 if self.stereo_mode and stereo else img_dim
+        img_dim = self.img_dim * 2 if hires else self.img_dim
+        w = img_dim * 2 if stereo else img_dim
         h = img_dim
         return w, h
 
