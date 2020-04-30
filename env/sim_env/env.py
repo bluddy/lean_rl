@@ -496,9 +496,9 @@ class Environment(common_env.CommonEnv):
         self.state.action = action
         #print "_update_sim_state: action = ", self.state.action # debug
 
-    def _save_img(img):
-        scipy.misc.imsave('./img{}_{}.png'.format(
-          self.server_num, self.img_count), arr)
+    def _save_img(self, img):
+        scipy.misc.imsave('./out/img{}_{}.png'.format(
+          self.server_num, self.img_count), img)
         self.img_count += 1
 
     def _get_env_state(self):
@@ -514,6 +514,9 @@ class Environment(common_env.CommonEnv):
             image = np.concatenate([image_l, image_r], axis=2)
         else:
             image = image[:, :h, :]
+
+        #debug
+        #self._save_img(image)
 
         image = image.transpose((2,0,1)) # prepare for pytorch
 
