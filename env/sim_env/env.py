@@ -155,7 +155,7 @@ class Environment(common_env.CommonEnv):
         stack_size=1, img_dim=224, program='runner', max_steps=100,
         random_target=False, task='reach',
         hi_res_mode=False, stereo_mode=False, depthmap_mode=False, full_init=True,
-        reward='simple', *args, **kwargs):
+        reward='simple', cnn_test_mode=False, *args, **kwargs):
         '''
         @server_num: which number environment this is
         '''
@@ -189,6 +189,9 @@ class Environment(common_env.CommonEnv):
         self.hi_res_mode = hi_res_mode
         self.stereo_mode = stereo_mode
         self.depthmap_mode = depthmap_mode
+
+        # CNN Testing mode
+        self.cnn_test_mode = cnn_test_mode
 
         # How often to reset the environment
         # Due to memory leaks or just errors
@@ -496,10 +499,25 @@ class Environment(common_env.CommonEnv):
         self.state.action = action
         #print "_update_sim_state: action = ", self.state.action # debug
 
-    def _save_img(img):
+    def _save_img(self, img):
         scipy.misc.imsave('./img{}_{}.png'.format(
           self.server_num, self.img_count), arr)
         self.img_count += 1
+
+    def _cnn_test_get_best_action(self):
+        # Simple movement for best action
+        # Get largest distance component among x/z
+        diff = self.state.needle_tip_pos - self.state.cur_target_pos
+        abs_diff = np.abs(diff)
+        motion = np.zeros((3,), dtype=np.float32)
+
+        idx = np.argmax[abs_diff]
+        if diff[idx] > 0.:
+            motion[idx] = -1.
+        else:
+            motion[idx] = 1.
+                    
+        return motion
 
     def _get_env_state(self):
         image = self.image
@@ -631,8 +649,12 @@ class Environment(common_env.CommonEnv):
         # Upon reset, we'll dump the states file
         self._step_record()
 
-        return (cur_state, reward, done,
-            {"action": action_orig, "save_mode":self.get_save_mode(), "success":success})
+        extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
+
+        if self.cnn_test_mode:
+            extra["best_action": self._cnn_test_get_best_action()]
+
+        return (cur_state, reward, done, extra)
 
     def _reset_real(self):
         self._connect_to_sim()
