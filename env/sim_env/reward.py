@@ -270,7 +270,11 @@ class Reward_suture_simple(object):
                 elif tstatus == last_tstatus:
                     # Check for change of dist
                     d = self.last_dist - dist
-                    reward += d
+                    if tstatus == 0:
+                        reward += d
+                    else:
+                        reward += d * 10
+                    reward_txt += "delta: {:.3f}".format(d)
                     #print "ts=ls, r={}, d={}".format(reward, dist) #debug
                 else:
                     # regression. no good
