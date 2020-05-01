@@ -41,8 +41,7 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
     l = []
     l.append(nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding))
     l.append(nn.ReLU(inplace=True))
-    if bn:
-        l.append(nn.BatchNorm2d(out_channels))
+    l.append(nn.BatchNorm2d(out_channels))
     if drop:
         l.append(nn.Dropout2d(0.2))
     return l
@@ -57,30 +56,51 @@ class BaseImage(nn.Module):
         ll = []
         in_f = calc_features(img_stack)
         if img_dim == 224:
-            ll.extend(make_conv(in_f, 16,  3, 1, 1, bn=bn, drop=drop))
-            if deep:
-                ll.extend(make_conv(16, 16,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(16,   32,  3, 2, 1, bn=bn, drop=drop)) # 112
-            if deep:
-                ll.extend(make_conv(32, 32,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(32,   64,  3, 2, 1, bn=bn, drop=drop)) # 56
-            if deep:
-                ll.extend(make_conv(64, 64,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(64,  128,  3, 2, 1, bn=bn, drop=drop)) # 28
-            if deep:
-                ll.extend(make_conv(128, 128,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(128, 256,  3, 2, 1, bn=bn, drop=drop)) # 14
-            if deep:
-                ll.extend(make_conv(256, 256,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(256, 512,  3, 2, 1, bn=bn, drop=drop)) # 7
-            self.latent_dim = 7 * 7 * 512
-        elif img_dim == 64:
-            ll.extend(make_conv(in_f, 16,  3, 1, 1, bn=bn, drop=drop)),
-            ll.extend(make_conv(16,   32,  3, 2, 1, bn=bn, drop=drop)), # 32
-            ll.extend(make_conv(32,   64,  3, 2, 1, bn=bn, drop=drop)), # 16
-            ll.extend(make_conv(64,  128,  3, 2, 1, bn=bn, drop=drop)), # 8
-            ll.extend(make_conv(128, 256,  3, 2, 1, bn=bn, drop=drop)), # 4
-            self.latent_dim = 4 * 4 * 256
+            d = 16
+            ll.extend(make_conv(in_f, d,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 32
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 112
+            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
+            d = 64
+            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 56
+            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 128
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 28
+            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
+            d = 256
+            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 14
+            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 512
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 7
+            d = 1024
+            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 4
+            d2 = 2048
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 2
+
+            self.latent_dim = 2 * 2 * 2048
+        elif img_dim = 64:
+            d = 16
+            ll.extend(make_conv(in_f, d,  3, 1, 1, bn=bn, drop=drop))
+            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 32
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 64
+            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
+            d = 64
+            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 32
+            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 128
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 16
+            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
+            d = 256
+            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 8
+            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
+            d2 = 512
+            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 4
+            d = 1024
+            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 2
+
+            self.latent_dim = 2 * 2 * 1024
         else:
             raise ValueError(str(img_dim) + " is not a valid img-dim")
 
@@ -144,8 +164,8 @@ class QImage(BaseImage):
         super(QImage, self).__init__(bn=bn, drop=drop, **kwargs)
 
         ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, action_dim, bn=False, drop=False, relu=False))
+        #ll.extend(make_linear(self.latent_dim, action_dim, bn=bn, drop=drop))
+        ll.extend(make_linear(self.latent_dim, action_dim, bn=False, drop=False, relu=False))
         self.linear = nn.Sequential(*ll)
 
     def forward(self, x):
