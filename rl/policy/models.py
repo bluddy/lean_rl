@@ -79,7 +79,7 @@ class BaseImage(nn.Module):
             ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 2
 
             self.latent_dim = 2 * 2 * 2048
-        elif img_dim = 64:
+        elif img_dim == 64:
             d = 16
             ll.extend(make_conv(in_f, d,  3, 1, 1, bn=bn, drop=drop))
             ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
