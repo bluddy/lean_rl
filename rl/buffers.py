@@ -489,3 +489,17 @@ class MultiBuffer(ReplayBuffer):
     def __len__(self):
         return sum((len(b) for b in self.buffers))
 
+
+class CNNBuffer(ReplayBuffer):
+    ''' Buffer used only for CNN testing '''
+    def __init__(self, *args, **kwargs):
+        super(CNNBuffer, self).__init__(*args, **kwargs)
+
+    def _process_samples(self, data):
+        ''' Samples are very simple here: state and ideal action '''
+        batch = zip(*data)
+
+        s = np.concatenate(batch[0])
+        a = np.concatenate(batch[1])
+
+        return [s, a]

@@ -21,15 +21,15 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import datetime
 import utils
-from buffers import *
+from buffers import CNNBuffer
 import scipy.misc
 from multiprocessing import Process, Pipe
 from env_wrapper import EnvWrapper
 
+# Total counts
+total_times, total_loss, total_acc = [],[],[]
+
 def run(args):
-    # Total counts
-    total_times, total_rewards, total_q_avg, total_q_max, total_loss = \
-            [],[],[],[],[]
 
     last_learn_t, last_eval_t = 0, 0
     best_avg_reward = -1e5
@@ -50,8 +50,8 @@ def run(args):
         if args.random_needle:
             env_suffix += 'r'
 
-        basename = '{}_{}_{}_{}{}'.format(
-            args.env, env_name, args.policy, args.mode[0:2], env_suffix)
+        basename = 'test_{}_{}_{}{}'.format(
+            args.env, env_name, args.mode[0:2], env_suffix)
 
         suffix = ''
         if args.random_env or args.random_needle:
@@ -66,8 +66,8 @@ def run(args):
 
     elif args.env == 'sim':
         from env.sim_env.env import Environment
-        basename = '{}_{}_{}_{}{}'.format(
-            args.env, args.policy[0:3], args.mode[0:2], args.task[:3],
+        basename = 'test_{}_{}_{}{}'.format(
+            args.env, args.mode[0:2], args.task[:3],
             '_rt' if args.random_env else '')
 
         suffix = '_'
@@ -89,12 +89,7 @@ def run(args):
         raise ValueError("Unrecognized environment " + args.env)
 
     # Save mode arguments
-    save_mode = ''
-    save_mode_post_play = ''
-    if args.playback:
-        save_mode = 'play'
-    elif args.record:
-        save_mode = 'record'
+    save_mode = 'play'
 
     now = datetime.datetime.now()
     time_s = now.strftime('%y%m%d_%H%M')
@@ -141,9 +136,7 @@ def run(args):
     if torch.cuda.is_available() and not args.disable_cuda:
         args.device = torch.device('cuda')
         torch.cuda.manual_seed(random.randint(1, 10000))
-        # Disable nondeterministic ops (not sure if critical but better
-        # safe than sorry)
-        torch.backends.cudnn.enabled = False
+        #torch.backends.cudnn.enabled = False
     else:
         args.device = torch.device('cpu')
 
@@ -220,27 +213,6 @@ def run(args):
     # Delays for resets, which are slow
     sleep_time = 0.2
 
-    """ parameters for epsilon decay """
-    greedy_decay_rate = 10000000
-    std_decay_rate = 10000000
-    epsilon_final = 0.001
-    ep_decay = []
-
-    """ beta Prioritized Experience Replay"""
-    beta_start = 0.4
-    beta_frames = 25000
-
-    # Initialize policy
-    state_dim = 0 # not necessary for image
-
-    # Get state dim dynamically from actual state
-    if args.mode == 'state':
-        state = envs[0].reset_block()[0]
-        state_dim = state.shape[-1]
-    elif args.mode == 'mixed':
-        state = envs[0].reset_block()[0][1]
-        state_dim = state.shape[-1]
-
     action_steps = dummy_env.action_steps
     action_dim = dummy_env.action_dim
 
@@ -248,46 +220,7 @@ def run(args):
     if args.stereo_mode or args.depthmap_mode:
         img_depth *= 2
 
-    if args.policy == 'td3':
-        from policy.TD3 import TD3
-        policy = TD3(state_dim, action_dim, args.stack_size,
-            args.mode, lr=args.lr, img_depth=img_depth,
-            bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
-    elif args.policy == 'ddpg':
-        from policy.DDPG import DDPG
-        policy = DDPG(state_dim, action_dim, args.stack_size,
-            args.mode, lr=args.lr, img_depth=img_depth,
-            bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
-    elif args.policy == 'dqn':
-        from policy.DQN import DQN
-        policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
-            args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
-    elif args.policy == 'ddqn':
-        from policy.DQN import DDQN
-        policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
-            args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
-    elif args.policy == 'bdqn':
-        from policy.DQN import BatchDQN
-        policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
-            action_steps=action_steps, stack_size=args.stack_size,
-            mode=args.mode,
-            n_samples=args.n_samples,
-            network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q)
-    elif args.policy == 'dummy':
-        from policy.dummy import Dummy
-        policy = Dummy()
-    else:
-        raise ValueError(
-            args.policy + ' is not recognized as a valid policy')
+    model = QImage(action_dim, bn=True, drop=args.dropout)
 
     # Load from files if requested
     if args.load_last and last_dir is not None:
@@ -300,7 +233,7 @@ def run(args):
             with open(timestep_file, 'r') as f:
                 timestep = int(f.read()) + 1
                 warmup_t = args.learning_start
-        policy.load(last_model_dir)
+        model.load_state_dict(torch.load(pjoin(last_model_dir, 'model.pth')))
         last_csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
@@ -314,9 +247,6 @@ def run(args):
                     lambda x: float(x), line[1:6])
                 last_learn_t, last_eval_t = int(line[6]), int(line[7])
                 total_times.append(t)
-                total_rewards.append(r)
-                total_q_avg.append(q_avg)
-                total_q_max.append(q_max)
                 total_loss.append(loss)
                 csv_wr.writerow(line)
             csv_f.flush()
@@ -325,33 +255,7 @@ def run(args):
                 warmup_t = args.learning_start
         print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
 
-    ## load pre-trained policy
-    #try:
-    #    policy.load(result_path)
-    #except:
-    #    pass
-
-    if args.buffer == 'replay':
-        replay_buffer = ReplayBuffer(args.mode, args.capacity,
-                compressed=args.compressed)
-    elif args.buffer == 'priority':
-        replay_buffer = NaivePrioritizedBuffer(args.mode, args.capacity,
-                compressed=args.compressed, vacate=args.vacate_buffer)
-    elif args.buffer == 'multi':
-        replay_buffer = MultiBuffer(args.mode, args.capacity,
-                compressed=args.compressed, sub_buffer='priority')
-    elif args.buffer == 'disk':
-        replay_buffer = DiskReplayBuffer(args.mode, args.capacity, logdir)
-    elif args.buffer == 'tier':
-        replay_buffer = TieredBuffer(args.mode, args.capacity,
-                compressed=args.compressed, procs=args.procs,
-                clip=args.buffer_clip, sub_buffer='replay')
-    elif args.buffer == 'tierpr':
-        replay_buffer = TieredBuffer(args.mode, args.capacity,
-                compressed=args.compressed, procs=args.procs,
-                clip=args.buffer_clip, sub_buffer='priority')
-    else:
-        raise ValueError(args.buffer + ' is not a buffer name')
+    replay_buffer = CNNBuffer(args.mode, args.capacity, compressed=args.compressed)
 
     # Reset all envs and get first state
     for env in envs:
@@ -360,122 +264,61 @@ def run(args):
     states_nd = dummy_env.combine_states(states)
 
     done = False
-    zero_noises = np.zeros((args.procs, action_dim))
-    ou_noises = [utils.OUNoise(action_dim) for _ in range(args.procs)]
-
-    policy.set_eval()
 
     elapsed_time = 0.
 
     proc_std = []
     terminate = False
 
-    w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
+    w_s, w_a, w_d, w_procs = [],[],[],[],[],[]
+
+    dummy_action = np.zeros((action_dim,))
+
+    # TOD:Place all envs in playback mode
 
     while timestep < args.max_timesteps and not terminate:
-
-        # Interact with the environments
-
-        # Check if we should add noise
-        if args.ou_noise:
-            noises = np.array([ou_noise.sample() for ou_noise in ou_noises])
-
-        elif args.ep_greedy:
-            # Epsilon-greedy
-            percent_greedy = (1. - min(1., float(timestep) /
-                greedy_decay_rate))
-            epsilon_greedy = args.ep_greedy_pct * percent_greedy
-            if random.random() < epsilon_greedy:
-                noise_std = ((args.expl_noise - epsilon_final) *
-                    math.exp(-1. * float(timestep) / std_decay_rate))
-                ep_decay.append(noise_std)
-                # log_f.write('epsilon decay:{}\n'.format(noise_std)) # debug
-                noise = np.random.normal(0, noise_std, size=action_dim)
-            else:
-                noises = zero_noises
-        else:
-            noises = zero_noises
-
-        """ action selected based on pure policy """
-        actions2 = policy.select_action(states_nd)
-
-        # Track stdev of chosen actions between procs
-        proc_std.append(np.mean(np.std(actions2, axis=0)))
-
-        actions = np.clip(actions2 + noises, -1., 1.)
-
-        # Debug stuff
-        #print "action2 proc std: ", np.std(actions2, axis=0)
-        #print "actions2.shape: ", actions2.shape
-        #print "actions: ", actions, " actions2: ", actions2 # debug
-
-        # TODO: for dqn, we need to quantize the actions
-        if args.policy == 'dqn':
-            actions2 = policy.quantize_continuous(actions)
-            #print "actions: ", actions, " actions2: ", actions2 # debug
-            actions = actions2
 
         acted = False
         start_t = time.time()
         new_states = []
 
         # Send non-blocking actions on ready envs
-        for env, action in zip(envs, actions):
+        for env in zip(envs):
             if env.is_ready():
-                #print "XXX train action: ", action # debug
-                env.step(action)
-
-        #time.sleep(0.1)
+                env.step(dummy_action)
 
         # Save our data so we can loop and insert it into the replay buffer
-        for env, state, ou_noise in zip(envs, states, ou_noises):
+        for env, state in zip(envs, states):
             if env.is_ready() or env.poll():
                 # Get the state and saved action from the env
-                new_state, reward, done, d = env.get() # blocking
-                action = d["action"]
+                new_state, _, done, dict = env.get() # blocking
+                action = dict["action"]
+                best_action = dict["best_action"]
                 new_states.append(new_state)
 
                 if action is not None:
-                    w_s1.append(state)
-                    w_s2.append(new_state)
-                    w_r.append(reward)
-                    w_d.append(done)
-                    w_a.append(action)
-                    w_procs.append(env.server_num)
+                    w_s.append(state)
+                    w_a.append(best_action)
 
                 if done:
-                    render_ep_path=None
-                    if (env.episode + 1) % args.render_freq == 0:
-                        render_ep_path=out_path
-
-                    env.reset(render_ep_path=render_ep_path) # Send async action
-                    ou_noise.reset() # Reset to mean
+                    env.reset(render_ep_path=None) # Send async action
 
                 acted = True
-                if warmup_t <= 0:
-                    timestep += 1
-                else:
-                    warmup_t -= 1
+                timestep += 1
             else:
                 # Nothing to do with the env yet
                 new_states.append(state)
 
-        if len(w_s1) > 10:
+        if len(w_s) > 10:
             # Do compression in parallel
             if args.compressed:
-                w_s1 = Parallel(n_jobs=-1)(delayed(state_compress)
-                        (args.mode, s) for s in w_s1)
-                w_s2 = Parallel(n_jobs=-1)(delayed(state_compress)
-                        (args.mode, s) for s in w_s2)
-                '''
-                w_s1 = [state_compress(args.mode, s) for s in w_s1]
-                w_s2 = [state_compress(args.mode, s) for s in w_s2]
-                '''
+                w_s = Parallel(n_jobs=-1)(delayed(state_compress)
+                        (args.mode, s) for s in w_s)
 
             # Feed into the replay buffer
-            for s1, s2, a, r, d, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_procs):
-                replay_buffer.add([s1, s2, a, r, d], num=p)
-            w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
+            for s, a in zip(w_s, w_a):
+                replay_buffer.add([s, a])
+            w_s, w_a = [],[]
 
         elapsed_time += time.time() - start_t
         if acted:
@@ -485,23 +328,21 @@ def run(args):
             elapsed_time = 0.
 
         # Evaluate episode
-        if warmup_t <= 0 and timestep - last_eval_t > args.eval_freq:
+        if timestep - last_eval_t > args.eval_freq:
 
             last_eval_t = timestep
 
             print('\n---------------------------------------')
-            print 'Evaluating policy for ', logdir
+            print 'Evaluating CNN for ', logdir
             replay_buffer.display() # debug
-            if args.ep_greedy:
-                print("Greedy={}, std={}".format(epsilon_greedy, noise_std))
 
             # Block and flush result if needed
-            best_reward = evaluate_policy(
+            best_reward = evaluate_model(
                 csv_wr, csv_f, log_f,
                 tb_writer, logdir, total_times, total_rewards, total_loss,
                 total_q_avg, total_q_max,
                 temp_loss, temp_q_avg, temp_q_max,
-                envs, args, policy, timestep, test_path,
+                envs, args, model, timestep, test_path,
                 last_learn_t, last_eval_t, best_avg_reward)
 
             # Restore envs
@@ -511,12 +352,12 @@ def run(args):
                 env.reset()
             new_states = [env.get()[0] for env in envs]
 
-            temp_loss, temp_q_avg, temp_q_max = [], [], []
+            temp_loss = []
 
-            def save_policy(path):
+            def save_model(path):
                 if not os.path.exists(path):
                     os.makedirs(path)
-                policy.save(path)
+                torch.save(model.state_dict(), pjoin(path, 'model.pth'))
                 with open(pjoin(path, 'timestep.txt'), 'w') as f:
                     f.write(str(timestep))
 
@@ -524,8 +365,8 @@ def run(args):
             if best_reward > best_avg_reward or not os.path.exists(best_path):
                 best_avg_reward = best_reward
                 print "Saving best avg reward: {}".format(best_avg_reward)
-                save_policy(best_path)
-            save_policy(model_path)
+                save_model(best_path)
+            save_model(model_path)
 
         ## Train
         if warmup_t <= 0 and \
@@ -534,7 +375,7 @@ def run(args):
 
             last_learn_t = timestep
 
-            policy.set_train()
+            model.train()
 
             # Train a few times
             for _ in range(1):
@@ -573,7 +414,7 @@ def run(args):
 
                 log_f.write(s + s2 + '\n')
 
-            policy.set_eval()
+            model.eval()
 
         # print "Training done" # debug
         states = new_states
@@ -583,17 +424,15 @@ def run(args):
     csv_f.close()
     log_f.close()
 
-def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
-        total_times, total_rewards, total_loss, total_q_avg, total_q_max,
+def evaluate_model(csv_wr, csv_f, log_f, tb_writer, logdir,
         temp_loss, temp_q_avg, temp_q_max,
-        envs, args, policy, timestep, test_path,
+        envs, args, model, timestep, test_path,
         last_learn_t, last_eval_t, best_avg_reward):
-    ''' Runs deterministic policy for X episodes and
+    ''' Evaluates model
         @param tb_writer: tensorboard writer
         @returns average_reward
     '''
 
-    #policy.actor.eval() # set for batchnorm
     rewards = np.zeros((args.procs,), dtype=np.float32)
     actions = []
     num_done = 0
@@ -636,8 +475,6 @@ def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
     min_action = actions.min()
     max_action = actions.max()
 
-    total_rewards.append(avg_reward)
-    total_rewards_nd = np.array(total_rewards)
     total_times.append(timestep)
     total_times_nd = np.array(total_times)
 
@@ -647,8 +484,6 @@ def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
     loss_avg = np.mean(temp_loss) if len(temp_loss) > 0 else 0.
     r_avg, r_var, r_low, r_up = utils.get_stats(total_rewards_nd)
 
-    total_q_avg.append(q_avg)
-    total_q_max.append(q_max)
     total_loss.append(loss_avg)
 
     fig = plt.figure()
@@ -734,27 +569,11 @@ if __name__ == "__main__":
     parser.add_argument("--save_models", action= "store",
         help='Whether or not models are saved')
 
-    #--- Exploration Noise
-    parser.add_argument("--no-ou-noise", default=True,
-        action='store_false', dest='ou_noise',
-        help='Use OU Noise process for noise instead of epsilon greedy')
-    parser.add_argument("--ep-greedy", default=False,
-        action='store_true',
-        help='Use epsilon greedy')
-    parser.add_argument("--expl-noise", default=1., type=float,
-        help='Starting std of Gaussian exploration noise')
-    parser.add_argument("--ep-greedy-pct", default=0.3, type=float,
-        help='Starting percentage of choosing random noise')
-    #---
 
     #--- Batch size is VERY important: 1024 is a winner ---
     parser.add_argument("--batch-size", default=32, type=int,
         help='Batch size for both actor and critic')
     #---
-    parser.add_argument("--policy-noise", default=0.04, type=float, # was 0.2
-        help='TD3 Smoothing noise added to target policy during critic update')
-    parser.add_argument("--noise_clip", default=0.1, type=float,
-        help='TD3 Range to clip target policy noise') # was 0.5
 
     parser.add_argument("--buffer", default = 'replay', # 'priority'
         help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
@@ -787,7 +606,7 @@ if __name__ == "__main__":
     parser.add_argument("--deep", default = False,
         action='store_true', help="Use a deeper NN")
     parser.add_argument("--img-dim", default = 224, type=int,
-        help="Size of img [224|128|64]")
+        help="Size of img [224|64]")
     parser.add_argument("--img-depth", default = 3, type=int,
         help="Depth of image (1 for grey, 3 for RGB)")
     parser.add_argument("--orig-q", default=False, action='store_true',
@@ -829,8 +648,6 @@ if __name__ == "__main__":
     parser.add_argument("--load-best", default=False, action='store_true',
         help="If load-last is selected, continue from last best saved model")
 
-    parser.add_argument("--policy", default="dqn", type=str,
-            help="Policy type. dummy|ddpg|td3|dqn|ddqn|bdqn")
     parser.add_argument("--n-samples", default=100, type=int,
             help="Number of samples for Batch DQN")
 
@@ -861,7 +678,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    args.policy = args.policy.lower()
     args.env = args.env.lower()
     # Image mode requires batchnorm
     args.batchnorm = True if args.mode in ['image', 'mixed'] else args.batchnorm
