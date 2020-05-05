@@ -141,7 +141,7 @@ def run(args):
         torch.cuda.manual_seed(random.randint(1, 10000))
         # Disable nondeterministic ops (not sure if critical but better
         # safe than sorry)
-        torch.backends.cudnn.enabled = False
+        #torch.backends.cudnn.enabled = False
     else:
         args.device = torch.device('cpu')
 
