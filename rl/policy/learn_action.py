@@ -1,0 +1,238 @@
+import numpy as np
+import torch
+import torch.nn as nn
+import os, sys, math
+import torch.nn.functional as F
+from os.path import join as pjoin
+from models import QState, QImage, QMixed
+
+''' A 'policy' that learns a correspondence between state and action '''
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# learn-action
+
+# We have greyscale, and then one RGB
+
+class LearnAction(object):
+    def __init__(self, state_dim, action_dim, action_steps, stack_size,
+            mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
+            load_encoder='', amp=False, use_orig_q=False,
+            deep=False, dropout=False):
+
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.action_steps = action_steps
+        self.deep = deep
+        self.dropout = dropout
+
+        # odd dims should be centered at 0
+        odd_dims = action_steps % 2 == 1
+        # full range is 2: -1 to 1
+        self.step_sizes = 2. / action_steps
+        self.step_sizes[odd_dims] = 2. / (action_steps[odd_dims] - 1)
+        self.total_steps = np.prod(action_steps)
+
+        self.total_stack = stack_size * img_depth
+        self.mode = mode
+        self.network = network
+        self.lr = lr
+        self.bn = bn
+        self.img_dim = img_dim
+        self.load_encoder = load_encoder
+        self.amp = amp
+        self.use_orig_q = use_orig_q
+
+        self.loss = nn.CrossEntropyLoss()
+
+        self._create_models()
+
+        if self.amp:
+            import amp
+
+        print "LR=", lr
+
+    def set_eval(self):
+        self.q.eval()
+
+    def set_train(self):
+        self.q.train()
+
+    def _create_model(self):
+        if self.mode == 'image':
+            if self.network == 'simple':
+                n = QImage(action_dim=self.total_steps, img_stack=self.total_stack,
+                    bn=self.bn, img_dim=self.img_dim, deep=self.deep,
+                    drop=self.dropout).to(device)
+            elif self.network == 'densenet':
+                n = QImageDenseNet(action_dim=self.total_steps,
+                    img_stack=self.total_stack).to(device)
+        elif self.mode == 'state':
+            n = QState(state_dim=self.state_dim, action_dim=self.total_steps,
+                    bn=self.bn, deep=self.deep, drop=self.dropout).to(device)
+        elif self.mode == 'mixed':
+            if self.network == 'simple':
+                n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
+                    img_stack=self.total_stack, bn=self.bn,
+                    img_dim=self.img_dim, deep=self.deep, drop=self.dropout).to(device)
+            elif self.network == 'densenet':
+                n = QMixedDenseNet(action_dim=self.total_steps,
+                    img_stack=self.total_stack, state_dim=self.state_dim).to(device)
+        else:
+            raise ValueError('Unrecognized mode ' + mode)
+        return n
+
+    def _create_models(self):
+        self.model = self._create_model()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+
+        if self.amp:
+            self.model, self.optimizer = amp.initialize(
+                    self.model, self.optimizer, opt_level='O1')
+
+    def _discrete_to_cont(self, discrete):
+        ''' @discrete: (procs, 1) '''
+        # If we have only the proc dimension, add a 1 to last dim
+        if discrete.ndim < 2:
+            discrete = np.expand_dims(discrete, -1)
+        assert(discrete.ndim == 2)
+        cont = []
+        for dim_size, step_size in reversed(zip(
+                self.action_steps, self.step_sizes)):
+            num = (discrete % dim_size).astype(np.float32)
+            num *= step_size
+            num -= 1.
+            cont = [np.transpose(num)] + cont
+            discrete /= dim_size
+
+        cont = np.concatenate(cont)
+        cont = np.transpose(cont)
+        #print "XXX cont_after.shape", cont.shape
+        return cont
+
+    def _cont_to_discrete(self, cont):
+        '''
+        We turn an batch of ndarrays of continuous values to a batch of
+        discrete values representing those continuous values.
+        We leave them as floats here -- they'll be turned into longs later'''
+
+        #print "cont =", cont # debug
+        #print "shape =", cont.shape, "step_size =", self.step_sizes, "action_steps", self.action_steps # debug
+
+        # Continuous dimensions: (batch, action_dim)
+        assert(cont.ndim == 2)
+        total = np.zeros((cont.shape[0],), dtype=np.int64)
+        cont = np.transpose(cont)
+
+        for v, dim_size, step_size in zip(
+                cont, self.action_steps, self.step_sizes):
+            v += 1.             # Start range at 0
+            v /= step_size      # Quantize
+            v[v < 0] = 0        # Bound 0 < v < dim_size - 1
+            v[v >= dim_size] = dim_size - 1
+            v = v.astype(np.int64)
+            total *= dim_size   # Shift total by 1
+            total += v # Add to total
+
+        return np.expand_dims(total, -1) # Add dim for action
+
+    def quantize_continuous(self, cont):
+        ''' We need to quantize the actions to the allowable values
+            so we don't have the noise process produce something we can't
+            reproduce
+        '''
+        cont2 = np.array(cont)
+        discrete = self._cont_to_discrete(cont2)
+        cont3 = self._discrete_to_cont(discrete)
+        return cont3
+
+    def _process_state(self, state):
+        # Copy as uint8
+        if self.mode == 'image':
+            if state.ndim < 4:
+                state = np.expand_dims(state, 0)
+            state = torch.from_numpy(state).to(device).float() # possibly missing squeeze(1)
+            state /= 255.0
+        elif self.mode == 'state':
+            state = torch.from_numpy(state).to(device).float()
+        elif self.mode == 'mixed':
+            img = state[0]
+            if img.ndim < 4:
+                img = np.expand_dims(img, 0)
+            img = torch.from_numpy(img).to(device).float()
+            img /= 255.0
+            state2 = torch.from_numpy(state[1]).to(device).float()
+            state = (img, state2)
+        else:
+            raise ValueError('Unrecognized mode ' + mode)
+
+        return state
+
+    def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
+        x = self._process_state(x)
+        y = self._process_state(y)
+        # u is the actions: still as ndarrays
+        u = u.reshape((batch_size, self.action_dim))
+        # Convert continuous action to discrete
+        u = self._cont_to_discrete(u).reshape((batch_size, -1))
+        u = torch.LongTensor(u).to(device)
+        r = torch.FloatTensor(r).to(device)
+        d = torch.FloatTensor(1 - d).to(device)
+        if qorig is not None:
+            qorig = qorig.reshape((batch_size, -1))
+            qorig = torch.FloatTensor(qorig).to(device)
+        if w is not None:
+            w = w.reshape((batch_size, -1))
+            w = torch.FloatTensor(w).to(device)
+        return x, y, u, r, d, qorig, w
+
+    def train(self, replay_buffer, timesteps, args):
+
+        # Sample replay buffer
+        [x, a] = replay_buffer.sample(args.batch_size)
+
+        length = len(a)
+
+        state, action = self._copy_sample_to_dev(x, a, length)
+
+        predicted_action = self.model(state)
+
+        loss = self.loss(predicted_action, action)
+
+        # debug graph
+        '''
+        import torchviz
+        dot = torchviz.make_dot(q_loss, params=dict(self.q.named_parameters()))
+        dot.format = 'png'
+        dot.render('graph')
+        sys.exit(1)
+        '''
+
+        # Optimize the model
+        self.optimizer.zero_grad()
+
+        if self.amp:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            loss.backward()
+
+        self.optimizer.step()
+
+        return loss.item()
+
+    def test(self, replay_buffer):
+        [x, a] = replay_buffer.sample(args.batch_size)
+        length = len(a)
+        state, action = self._copy_sample_to_dev(x, a, length)
+
+        predicted_action = self.model(state)
+
+        return state, action, predicted_action
+
+    def save(self, path):
+        torch.save(self.model.state_dict(), os.path.join(path, 'model.pth'))
+
+    def load(self, path):
+        self.model.load_state_dict(torch.load(os.path.join(path, 'model.pth')))
+

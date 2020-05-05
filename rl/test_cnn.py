@@ -25,9 +25,37 @@ from buffers import CNNBuffer
 import scipy.misc
 from multiprocessing import Process, Pipe
 from env_wrapper import EnvWrapper
+from policy.learn_action import LearnAction
 
 # Total counts
 total_times, total_loss, total_acc = [],[],[]
+
+def process_state(mode, s):
+    # Copy as uint8
+    if mode == 'image':
+        if s.ndim < 4:
+            s = np.expand_dims(s, 0)
+        s = torch.from_numpy(s).to(device).float() # possibly missing squeeze(1)
+        s /= 255.0
+    elif mode == 'state':
+        s = torch.from_numpy(s).to(device).float()
+    elif mode == 'mixed':
+        img = s[0]
+        if img.ndim < 4:
+            img = np.expand_dims(img, 0)
+        img = torch.from_numpy(img).to(device).float()
+        img /= 255.0
+        s2 = torch.from_numpy(s[1]).to(device).float()
+        s = (img, s2)
+    else:
+        raise ValueError('Unrecognized mode ' + mode)
+    return s
+
+def copy_to_dev(action_dim, batch_size, mode, s, a):
+    s = process_state(mode, s)
+    a = a.reshape((batch_size, action_dim))
+    a = torch.LongTensor(u).to(device)
+    return s, a
 
 def run(args):
 
@@ -36,7 +64,6 @@ def run(args):
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     timestep = 0
-    warmup_t = args.learning_start
 
     program_start_t = time.time()
 
@@ -167,7 +194,6 @@ def run(args):
                 server_num=server_num,
                 save_mode_path=save_mode_path,
                 save_mode=save_mode,
-                save_mode_play_ratio=args.play_ratio,
                 cnn_test_mode=True,
                 )
 
@@ -186,7 +212,6 @@ def run(args):
                 server_num=server_num,
                 save_mode_path=save_mode_path,
                 save_mode=save_mode,
-                save_mode_play_ratio=args.play_ratio,
                 cnn_test_mode=True,
                 )
 
@@ -213,6 +238,16 @@ def run(args):
     # Delays for resets, which are slow
     sleep_time = 0.2
 
+    state_dim = 0 # not necessary for image
+
+    # Get state dim dynamically from actual state
+    if args.mode == 'state':
+        state = envs[0].reset_block()[0]
+        state_dim = state.shape[-1]
+    elif args.mode == 'mixed':
+        state = envs[0].reset_block()[0][1]
+        state_dim = state.shape[-1]
+
     action_steps = dummy_env.action_steps
     action_dim = dummy_env.action_dim
 
@@ -220,7 +255,11 @@ def run(args):
     if args.stereo_mode or args.depthmap_mode:
         img_depth *= 2
 
-    model = QImage(action_dim, bn=True, drop=args.dropout)
+    model = LearnAction(state_dim, action_dim, action_steps, args.stack_size,
+            args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
+            img_dim=args.img_dim, img_depth=img_depth,
+            load_encoder=args.load_encoder, amp=args.amp,
+            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
 
     # Load from files if requested
     if args.load_last and last_dir is not None:
@@ -232,7 +271,6 @@ def run(args):
         if os.path.exists(timestep_file):
             with open(timestep_file, 'r') as f:
                 timestep = int(f.read()) + 1
-                warmup_t = args.learning_start
         model.load_state_dict(torch.load(pjoin(last_model_dir, 'model.pth')))
         last_csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
@@ -252,7 +290,6 @@ def run(args):
             csv_f.flush()
             if timestep is None:
                 timestep = t + 1
-                warmup_t = args.learning_start
         print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
 
     replay_buffer = CNNBuffer(args.mode, args.capacity, compressed=args.compressed)
@@ -268,272 +305,159 @@ def run(args):
     elapsed_time = 0.
 
     proc_std = []
-    terminate = False
 
-    w_s, w_a, w_d, w_procs = [],[],[],[],[],[]
+    w_s, w_a, w_d, w_procs = [],[],[],[]
 
     dummy_action = np.zeros((action_dim,))
 
-    # TOD:Place all envs in playback mode
+    for _ in xrange(args.epochs):
 
-    while timestep < args.max_timesteps and not terminate:
+        def fill_buffer():
+            # Fill the replay buffer
+            start_timestep = timestep
+            while timestep - start_timestep < args.capacity:
 
-        acted = False
-        start_t = time.time()
-        new_states = []
+                acted = False
+                start_t = time.time()
+                new_states = []
 
-        # Send non-blocking actions on ready envs
-        for env in zip(envs):
-            if env.is_ready():
-                env.step(dummy_action)
+                # Send non-blocking dummy action on ready envs
+                for env in zip(envs):
+                    if env.is_ready():
+                        env.step(dummy_action)
 
-        # Save our data so we can loop and insert it into the replay buffer
-        for env, state in zip(envs, states):
-            if env.is_ready() or env.poll():
-                # Get the state and saved action from the env
-                new_state, _, done, dict = env.get() # blocking
-                action = dict["action"]
-                best_action = dict["best_action"]
-                new_states.append(new_state)
+                # Save our data so we can loop and insert it into the replay buffer
+                for env, state in zip(envs, states):
+                    if env.is_ready() or env.poll():
+                        # Get the state and saved action from the env
+                        new_state, _, done, dict = env.get() # blocking
+                        action = dict["action"]
+                        best_action = dict["best_action"]
+                        new_states.append(new_state)
 
-                if action is not None:
-                    w_s.append(state)
-                    w_a.append(best_action)
+                        if action is not None: # reset
+                            w_s.append(state)
+                            w_a.append(best_action)
 
-                if done:
-                    env.reset(render_ep_path=None) # Send async action
+                        if done:
+                            env.reset(render_ep_path=None) # Send async action
 
-                acted = True
-                timestep += 1
-            else:
-                # Nothing to do with the env yet
-                new_states.append(state)
+                        acted = True
+                        timestep += 1
+                    else:
+                        # Nothing to do with the env yet
+                        new_states.append(state)
 
-        if len(w_s) > 10:
-            # Do compression in parallel
-            if args.compressed:
-                w_s = Parallel(n_jobs=-1)(delayed(state_compress)
-                        (args.mode, s) for s in w_s)
+                if len(w_s) > 10:
+                    # Do compression in parallel
+                    if args.compressed:
+                        w_s = Parallel(n_jobs=-1)(delayed(state_compress)
+                                (args.mode, s) for s in w_s)
 
-            # Feed into the replay buffer
-            for s, a in zip(w_s, w_a):
-                replay_buffer.add([s, a])
-            w_s, w_a = [],[]
+                    # Feed into the replay buffer
+                    for s, a in zip(w_s, w_a):
+                        replay_buffer.add([s, a])
+                    w_s, w_a = [],[]
 
-        elapsed_time += time.time() - start_t
-        if acted:
-            #print "Time: ", elapsed_time # debug
-            sys.stdout.write('.')
-            sys.stdout.flush()
-            elapsed_time = 0.
+                elapsed_time += time.time() - start_t
+                if acted:
+                    #print "Time: ", elapsed_time # debug
+                    sys.stdout.write('.')
+                    sys.stdout.flush()
+                    elapsed_time = 0.
 
-        # Evaluate episode
-        if timestep - last_eval_t > args.eval_freq:
+                states = new_states
+                states_nd = dummy_env.combine_states(states)
 
-            last_eval_t = timestep
+        fill_buffer()
 
-            print('\n---------------------------------------')
-            print 'Evaluating CNN for ', logdir
-            replay_buffer.display() # debug
+        save_mode_playing_cnt = 0
+        save_mode_recording_cnt = 0
+        for env in envs:
+            if env.get_save_mode() == 'play':
+                save_mode_playing_cnt += 1
+            if env.get_save_mode() == 'record':
+                save_mode_recording_cnt += 1
 
-            # Block and flush result if needed
-            best_reward = evaluate_model(
-                csv_wr, csv_f, log_f,
-                tb_writer, logdir, total_times, total_rewards, total_loss,
-                total_q_avg, total_q_max,
-                temp_loss, temp_q_avg, temp_q_max,
-                envs, args, model, timestep, test_path,
-                last_learn_t, last_eval_t, best_avg_reward)
+        # Train over collected data
 
-            # Restore envs
-            for env in envs:
-                if not env.is_ready(): # Flush old messages
-                    env.get()
-                env.reset()
-            new_states = [env.get()[0] for env in envs]
+        model.set_train()
 
-            temp_loss = []
+        # Train
+        temp_loss = []
+        for _ in xrange(args.train_loops):
+            # Get data from replay buffer
+            loss = policy.train(replay_buffer, args)
 
-            def save_model(path):
-                if not os.path.exists(path):
-                    os.makedirs(path)
-                torch.save(model.state_dict(), pjoin(path, 'model.pth'))
-                with open(pjoin(path, 'timestep.txt'), 'w') as f:
-                    f.write(str(timestep))
+            temp_loss.append(loss)
 
-            best_path = pjoin(model_path, 'best')
-            if best_reward > best_avg_reward or not os.path.exists(best_path):
-                best_avg_reward = best_reward
-                print "Saving best avg reward: {}".format(best_avg_reward)
-                save_model(best_path)
-            save_model(model_path)
+            s = '\nTraining T:{} TS:{:04d} L:{:.5f} Exp_std:{:.2f} p:{} r:{}'.format(
+                str(datetime.timedelta(seconds=time.time() - program_start_t)),
+                timestep,
+                loss,
+                0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
+                save_mode_playing_cnt,
+                save_mode_recording_cnt
+                )
+            print s
+            proc_std = []
 
-        ## Train
-        if warmup_t <= 0 and \
-            timestep - last_learn_t > args.learn_freq and \
-            len(replay_buffer) > args.batch_size:
+            log_f.write(s + '\n')
 
-            last_learn_t = timestep
+        model.set_eval()
 
-            model.train()
+        total_loss.append(average(temp_loss))
 
-            # Train a few times
-            for _ in range(1):
-                beta = min(1.0, beta_start + timestep *
-                    (1.0 - beta_start) / beta_frames)
+        fig = plt.figure()
+        plt.plot(total_loss, label='Loss')
+        plt.savefig(pjoin(logdir, 'loss.png'))
+        tb_writer.add_figure('loss', fig, global_step=timestep)
 
-                critic_loss, actor_loss, q_avg, q_max = policy.train(
-                    replay_buffer, timestep, beta, args)
+        fill_buffer()
 
-                temp_q_avg.append(q_avg)
-                temp_q_max.append(q_max)
-                temp_loss.append(critic_loss)
+        # Evaluate
+        print('\n---------------------------------------')
+        print 'Evaluating CNN for ', logdir
+        correct, total = 0, 0
+        for _ in xrange(args.eval_loops):
 
-                save_mode_playing_cnt = 0
-                save_mode_recording_cnt = 0
-                for env in envs:
-                    if env.get_save_mode() == 'play':
-                        save_mode_playing_cnt += 1
-                    if env.get_save_mode() == 'record':
-                        save_mode_recording_cnt += 1
+            state, action, predicted_action = model.test(replay_buffer)
+            correct += action == predicted_action
+            total += len(action)
 
-                if args.stop_after_playback and save_mode_playing_cnt == 0:
-                    terminate = True
+        acc = float(correct) / float(total)
 
-                s = '\nTraining T:{} TS:{:04d} CL:{:.5f} Exp_std:{:.2f} p:{} r:{}'.format(
-                    str(datetime.timedelta(seconds=time.time() - program_start_t)),
-                    timestep,
-                    critic_loss,
-                    0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
-                    save_mode_playing_cnt,
-                    save_mode_recording_cnt
-                    )
-                s2 = ' AL:{:.5f}'.format(actor_loss) if actor_loss else ''
-                print s + s2,
-                proc_std = []
+        s = "Eval Accuracy: {:.3f}".format(acc)
+        print s
+        log_f.write(s + '\n')
 
-                log_f.write(s + s2 + '\n')
+        total_acc.append(acc)
 
-            model.eval()
+        fig = plt.figure()
+        plt.plot(total_acc, label='Accuracy')
+        plt.savefig(pjoin(logdir, 'acc.png'))
+        tb_writer.add_figure('acc', fig, global_step=timestep)
 
-        # print "Training done" # debug
-        states = new_states
-        states_nd = dummy_env.combine_states(states)
+        def save_model(path):
+            if not os.path.exists(path):
+                os.makedirs(path)
+            torch.save(model.state_dict(), pjoin(path, 'model.pth'))
+            with open(pjoin(path, 'timestep.txt'), 'w') as f:
+                f.write(str(timestep))
 
-    print("Best Reward: ", best_reward)
+        save_model(model_path)
+
     csv_f.close()
     log_f.close()
 
-def evaluate_model(csv_wr, csv_f, log_f, tb_writer, logdir,
-        temp_loss, temp_q_avg, temp_q_max,
-        envs, args, model, timestep, test_path,
-        last_learn_t, last_eval_t, best_avg_reward):
-    ''' Evaluates model
-        @param tb_writer: tensorboard writer
-        @returns average_reward
-    '''
-
-    rewards = np.zeros((args.procs,), dtype=np.float32)
-    actions = []
-    num_done = 0
-    for env in envs:
-        env.set_save_mode('eval') # Stop recording
-        if not env.is_ready(): # Flush old messages
-            env.get()
-        env.reset()
-    states = [env.get()[0] for env in envs]
-    while num_done < args.procs:
-        acted = False
-        # Send action
-        for i, env in enumerate(envs):
-            if not env.done:
-                if env.is_ready():
-                    action = policy.select_action(states[i]).squeeze(0)
-                    actions.append(action)
-                    env.step(action)
-                    acted = True
-                elif env.poll():
-                    state, reward, done, _ = env.get()
-                    if done:
-                        num_done += 1
-                    states[i] = state
-                    rewards[i] += reward
-                    env.render(save_path=test_path)
-        if acted:
-            sys.stdout.write('.')
-            sys.stdout.flush()
-
-    # Restore envs
-    for env in envs:
-        env.convert_to_video(save_path=test_path)
-        env.restore_last_save_mode() # Resume recording
-
-    avg_reward = rewards.mean()
-    actions = np.array(actions, dtype=np.float32)
-    avg_action = actions.mean()
-    std_action = actions.std()
-    min_action = actions.min()
-    max_action = actions.max()
-
-    total_times.append(timestep)
-    total_times_nd = np.array(total_times)
-
-    # Average over all the training we did since last timestep
-    q_avg = np.mean(temp_q_avg) if len(temp_q_avg) > 0 else 0.
-    q_max = np.max(temp_q_max) if len(temp_q_max) > 0 else 0.
-    loss_avg = np.mean(temp_loss) if len(temp_loss) > 0 else 0.
-    r_avg, r_var, r_low, r_up = utils.get_stats(total_rewards_nd)
-
-    total_loss.append(loss_avg)
-
-    fig = plt.figure()
-    plt.plot(total_times_nd, total_q_avg, label='Average Q')
-    plt.plot(total_times_nd, total_q_max, label='Max Q')
-    plt.savefig(pjoin(logdir, 'q_avg_max.png'))
-    tb_writer.add_figure('q_avg_max', fig, global_step=timestep)
-
-    fig = plt.figure()
-    plt.plot(total_times_nd, total_loss, label='Loss')
-    plt.savefig(pjoin(logdir, 'loss_avg.png'))
-    tb_writer.add_figure('loss_avg', fig, global_step=timestep)
-
-    '''
-    fig = plt.figure()
-    plt.plot(total_times_nd, total_rewards_nd, label='Rewards')
-    if len(total_rewards) > 100:
-        # Plot average line
-        plt.plot(total_times_nd[:len(avg_rewards)], avg_rewards)
-    plt.savefig(pjoin(logdir, 'rewards.png'))
-    tb_writer.add_figure('rewards', fig, global_step=timestep)
-    '''
-
-    fig = plt.figure()
-    length = len(r_avg)
-    plt.plot(total_times_nd[:length], r_avg, label='Rewards')
-    #plt.fill_between(np.arange(len(r_avg)), r_low, r_up, alpha=0.4)
-    plt.fill_between(total_times_nd[:length], r_low, r_up, alpha=0.4)
-    plt.legend()
-    plt.savefig(pjoin(logdir, 'rewards.png'))
-    tb_writer.add_figure('rewards', fig, global_step=timestep)
-
-    s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
-        "min:{:.2f} max:{:.2f} " \
-        "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward, r_avg[-1], best_avg_reward, avg_action, std_action,
-      min_action, max_action,
-      q_avg, q_max, loss_avg)
-    print s
-    log_f.write(s + '\n')
-    csv_wr.writerow([
-        timestep, avg_reward, q_avg, q_max, loss_avg,
-        best_avg_reward, last_learn_t, last_eval_t
-    ])
-    csv_f.flush()
-
-    return r_avg[-1]
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--epochs', default=1000, type=int,
+        help='Number of epochs to train')
+    parser.add_argument('--train-loops', default=100, type=int,
+        help='How many times to train over data in replay buffer')
+    parser.add_argument('--eval-loops', default=100, type=int,
+        help='How many times to test over data in replay buffer')
     parser.add_argument('--disable-cuda', default=False, action='store_true',
         help='Disable CUDA')
     parser.add_argument("--env", default="needle",
@@ -549,23 +473,9 @@ if __name__ == "__main__":
         help="How many action steps to use for needle")
     parser.add_argument("--random-env", default=False, action='store_true',
         dest='random_env', help='Whether to generate a random environment')
-    parser.add_argument("--scale-rewards", default=False, action='store_true',
-        help='Whether to scale rewards to be > 0')
 
     parser.add_argument("--seed", default=1e6, type=int,
         help='Sets Gym, PyTorch and Numpy seeds')
-    parser.add_argument("--eval-freq", default=3000, type=int, # 200
-        help='How often (time steps) we evaluate')
-    parser.add_argument("--learn-freq", default=100, type=int,
-        help='Timesteps to explore before applying learning')
-    parser.add_argument("--render-freq", default=100, type=int,
-        help='How often (episodes) we save the images')
-    parser.add_argument("--render-t-freq", default=5, type=int,
-        help='How often (timesteps) we save the images in a saved episode')
-    parser.add_argument("--max-timesteps", default=2e7, type=float,
-        help='Max time steps to run environment for')
-    parser.add_argument("--learning-start", default=None,
-        help='Timesteps before learning')
     parser.add_argument("--save_models", action= "store",
         help='Whether or not models are saved')
 
@@ -575,19 +485,11 @@ if __name__ == "__main__":
         help='Batch size for both actor and critic')
     #---
 
-    parser.add_argument("--buffer", default = 'replay', # 'priority'
-        help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
     parser.add_argument("--capacity", default=1e5, type=float,
         help='Size of replay buffer (bigger is better)')
     parser.add_argument("--compressed", default=False,
         action='store_true', dest='compressed',
         help='Use a compressed replay buffer for efficiency')
-    parser.add_argument("--vacate-buffer", default=False, action='store_true',
-        help='Vacate low priority items in the buffer first')
-    parser.add_argument("--buffer-clip", default=100.,
-        help='Clip Q in buffer')
-    parser.add_argument('--sub-buffer', default='replay',
-        help="Choose type of sub-buffer, options are [replay, priority]")
 
     parser.add_argument("--stack-size", default=1, type=int,
         help='How much history to use')
@@ -609,38 +511,19 @@ if __name__ == "__main__":
         help="Size of img [224|64]")
     parser.add_argument("--img-depth", default = 3, type=int,
         help="Depth of image (1 for grey, 3 for RGB)")
-    parser.add_argument("--orig-q", default=False, action='store_true',
-        help="Use original Q mechanism (from saved Q values)")
 
-    parser.add_argument("--policy-freq", default=2, type=int,
-        help='Frequency of TD3 delayed actor policy updates')
     parser.add_argument("--name", default=None, type=str,
         help='Name to append to save directory')
 
     parser.add_argument("--discount", default=0.99, type=float,
         help='Discount factor (0.99 is good)')
 
-    #--- Tau: percent copied to target
-    parser.add_argument("--tau", default=0.001, type=float,
-        help='Target critic network update rate')
-    parser.add_argument("--actor-tau", default=0.001, type=float,
-        help='Target actor network update rate')
-    #---
-
     #--- Learning rates
     parser.add_argument("--lr", default=5e-5, type=float,
         help="Learning rate for critic optimizer")
-    parser.add_argument("--lr2", default=1e-3, type=float,
-        help="Learning rate for second critic optimizer")
-    parser.add_argument("--actor-lr", default=1e-5, type=float,
-        help="Learning rate for actor optimizer")
-    parser.add_argument("--clip-grad", default=None, type=float,
-        help="Clip the gradient to slow down learning")
     #---
 
     #--- Model save/load
-    parser.add_argument("--load-encoder", default='', type=str,
-        help="File from which to load the encoder model")
     parser.add_argument("--load", default=None, type=str,
         help="Continue training from a subdir of ./logs/specific_model")
     parser.add_argument("--load-last", default=False, action='store_true',
@@ -659,9 +542,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--task', default=None, type=str,
             help="Task to carry out for env (reach|suture)")
-    parser.add_argument('--reward', default='simple', type=str,
-            help="Reward to use for the task (simple|v1)")
-
 
     parser.add_argument('--hires', default=False, action='store_true',
             dest='hi_res_mode',
@@ -684,11 +564,6 @@ if __name__ == "__main__":
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
     args.playback = True # playback is always true for test_cnn
-
-    if args.learning_start is None:
-        args.learning_start = args.capacity
-    else:
-        args.learning_start = int(args.learning_start)
 
     # Set default task
     if args.task is None:
