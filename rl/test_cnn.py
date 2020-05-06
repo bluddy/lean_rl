@@ -29,6 +29,9 @@ from policy.learn_action import LearnAction
 
 # Total counts
 total_times, total_loss, total_acc = [],[],[]
+timestep = 0
+states = []
+w_s, w_a, w_d, w_procs = [],[],[],[]
 
 def process_state(mode, s):
     # Copy as uint8
@@ -58,12 +61,6 @@ def copy_to_dev(action_dim, batch_size, mode, s, a):
     return s, a
 
 def run(args):
-
-    last_learn_t, last_eval_t = 0, 0
-    best_avg_reward = -1e5
-
-    temp_q_avg, temp_q_max, temp_loss = [],[],[]
-    timestep = 0
 
     program_start_t = time.time()
 
@@ -258,8 +255,8 @@ def run(args):
     model = LearnAction(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
             img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
+            amp=args.amp,
+            deep=args.deep, dropout=args.dropout)
 
     # Load from files if requested
     if args.load_last and last_dir is not None:
@@ -297,22 +294,19 @@ def run(args):
     # Reset all envs and get first state
     for env in envs:
         env.reset()
+
+    global states
     states = [env.get()[0] for env in envs] # block
-    states_nd = dummy_env.combine_states(states)
-
-    done = False
-
-    elapsed_time = 0.
 
     proc_std = []
 
-    w_s, w_a, w_d, w_procs = [],[],[],[]
-
-    dummy_action = np.zeros((action_dim,))
-
     for _ in xrange(args.epochs):
 
-        def fill_buffer():
+        def fill_buffer(envs):
+            global timestep, states, w_s, w_a
+
+            elapsed_time = 0.
+
             # Fill the replay buffer
             start_timestep = timestep
             while timestep - start_timestep < args.capacity:
@@ -321,8 +315,10 @@ def run(args):
                 start_t = time.time()
                 new_states = []
 
+                dummy_action = np.zeros((action_dim,))
+
                 # Send non-blocking dummy action on ready envs
-                for env in zip(envs):
+                for env in envs:
                     if env.is_ready():
                         env.step(dummy_action)
 
@@ -332,12 +328,11 @@ def run(args):
                         # Get the state and saved action from the env
                         new_state, _, done, dict = env.get() # blocking
                         action = dict["action"]
-                        best_action = dict["best_action"]
                         new_states.append(new_state)
 
                         if action is not None: # reset
                             w_s.append(state)
-                            w_a.append(best_action)
+                            w_a.append(dict["best_action"])
 
                         if done:
                             env.reset(render_ep_path=None) # Send async action
@@ -367,9 +362,8 @@ def run(args):
                     elapsed_time = 0.
 
                 states = new_states
-                states_nd = dummy_env.combine_states(states)
 
-        fill_buffer()
+        fill_buffer(envs)
 
         save_mode_playing_cnt = 0
         save_mode_recording_cnt = 0
@@ -387,7 +381,7 @@ def run(args):
         temp_loss = []
         for _ in xrange(args.train_loops):
             # Get data from replay buffer
-            loss = policy.train(replay_buffer, args)
+            loss = model.train(replay_buffer, args)
 
             temp_loss.append(loss)
 
@@ -413,7 +407,7 @@ def run(args):
         plt.savefig(pjoin(logdir, 'loss.png'))
         tb_writer.add_figure('loss', fig, global_step=timestep)
 
-        fill_buffer()
+        fill_buffer(envs)
 
         # Evaluate
         print('\n---------------------------------------')

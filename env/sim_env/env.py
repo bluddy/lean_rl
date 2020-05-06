@@ -506,18 +506,16 @@ class Environment(common_env.CommonEnv):
 
     def _cnn_test_get_best_action(self):
         # Simple movement for best action
-        # Get largest distance component among x/z
-        diff = self.state.needle_tip_pos - self.state.cur_target_pos
-        abs_diff = np.abs(diff)
-        motion = np.zeros((3,), dtype=np.float32)
+        # Get motion needed
+        diff = -(self.state.needle_tip_pos - self.state.cur_target_pos)
+        epsilon = 0.03
+        for i in range(3):
+          if diff[i] < -epsilon:
+            diff[i] = -1.
+          elif diff[i] > epsilon:
+            diff[i] = 1.
 
-        idx = np.argmax[abs_diff]
-        if diff[idx] > 0.:
-            motion[idx] = -1.
-        else:
-            motion[idx] = 1.
-                    
-        return motion
+        return diff
 
     def _get_env_state(self):
         image = self.image
@@ -655,7 +653,7 @@ class Environment(common_env.CommonEnv):
         extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
 
         if self.cnn_test_mode:
-            extra["best_action": self._cnn_test_get_best_action()]
+            extra["best_action"] = self._cnn_test_get_best_action()
 
         return (cur_state, reward, done, extra)
 

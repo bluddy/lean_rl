@@ -17,7 +17,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class LearnAction(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
-            load_encoder='', amp=False, use_orig_q=False,
+            amp=False, 
             deep=False, dropout=False):
 
         self.state_dim = state_dim
@@ -39,9 +39,7 @@ class LearnAction(object):
         self.lr = lr
         self.bn = bn
         self.img_dim = img_dim
-        self.load_encoder = load_encoder
         self.amp = amp
-        self.use_orig_q = use_orig_q
 
         self.loss = nn.CrossEntropyLoss()
 
@@ -53,10 +51,10 @@ class LearnAction(object):
         print "LR=", lr
 
     def set_eval(self):
-        self.q.eval()
+        self.model.eval()
 
     def set_train(self):
-        self.q.train()
+        self.model.train()
 
     def _create_model(self):
         if self.mode == 'image':
@@ -202,7 +200,7 @@ class LearnAction(object):
         # debug graph
         '''
         import torchviz
-        dot = torchviz.make_dot(q_loss, params=dict(self.q.named_parameters()))
+        dot = torchviz.make_dot(q_loss, params=dict(self.model.named_parameters()))
         dot.format = 'png'
         dot.render('graph')
         sys.exit(1)

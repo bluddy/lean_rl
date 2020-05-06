@@ -355,7 +355,6 @@ def run(args):
     states = [env.get()[0] for env in envs] # block
     states_nd = dummy_env.combine_states(states)
 
-    done = False
     zero_noises = np.zeros((args.procs, action_dim))
     ou_noises = [utils.OUNoise(action_dim) for _ in range(args.procs)]
 
