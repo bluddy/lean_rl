@@ -515,7 +515,7 @@ class Environment(common_env.CommonEnv):
           elif diff[i] > epsilon:
             diff[i] = 1.
 
-        return diff
+        return np.reshape(diff, (1, 3))
 
     def _get_env_state(self):
         image = self.image

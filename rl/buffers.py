@@ -503,3 +503,19 @@ class CNNBuffer(ReplayBuffer):
         a = np.concatenate(batch[1])
 
         return [s, a]
+
+    def sample(self, batch_size):
+        assert(len(self) > 0)
+
+        pick_size = len(self) if len(self) < batch_size else batch_size
+
+        indices = np.random.choice(len(self), pick_size)
+
+        samples = [self.buffer[idx] for idx in indices]
+
+        if self.compressed:
+            samples = [self.decompress(s) for s in samples]
+
+        data = self._process_samples(samples)
+
+        return data

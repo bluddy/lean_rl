@@ -17,8 +17,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class LearnAction(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
-            amp=False, 
-            deep=False, dropout=False):
+            amp=False, deep=False, dropout=False):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -166,27 +165,19 @@ class LearnAction(object):
 
         return state
 
-    def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
+    def _copy_sample_to_dev(self, x, a, batch_size):
         x = self._process_state(x)
-        y = self._process_state(y)
-        # u is the actions: still as ndarrays
-        u = u.reshape((batch_size, self.action_dim))
+        a = a.reshape((batch_size, self.action_dim))
         # Convert continuous action to discrete
-        u = self._cont_to_discrete(u).reshape((batch_size, -1))
-        u = torch.LongTensor(u).to(device)
-        r = torch.FloatTensor(r).to(device)
-        d = torch.FloatTensor(1 - d).to(device)
-        if qorig is not None:
-            qorig = qorig.reshape((batch_size, -1))
-            qorig = torch.FloatTensor(qorig).to(device)
-        if w is not None:
-            w = w.reshape((batch_size, -1))
-            w = torch.FloatTensor(w).to(device)
-        return x, y, u, r, d, qorig, w
+        a = self._cont_to_discrete(a).reshape((batch_size, -1))
+        a = torch.LongTensor(a).to(device)
+        return x, a
 
-    def train(self, replay_buffer, timesteps, args):
+    def train(self, replay_buffer, args):
 
         # Sample replay buffer
+        #import pdb
+        #pdb.set_trace()
         [x, a] = replay_buffer.sample(args.batch_size)
 
         length = len(a)
@@ -195,7 +186,7 @@ class LearnAction(object):
 
         predicted_action = self.model(state)
 
-        loss = self.loss(predicted_action, action)
+        loss = self.loss(predicted_action, action.squeeze(-1))
 
         # debug graph
         '''
@@ -219,16 +210,22 @@ class LearnAction(object):
 
         return loss.item()
 
-    def test(self, replay_buffer):
-        [x, a] = replay_buffer.sample(args.batch_size)
-        length = len(a)
-        state, action = self._copy_sample_to_dev(x, a, length)
+    def test(self, replay_buffer, args):
+            [x, a] = replay_buffer.sample(args.batch_size)
+            length = len(a)
 
-        predicted_action = self.model(state)
+            state, action = self._copy_sample_to_dev(x, a, length)
 
-        return state, action, predicted_action
+            p = self.model(state)
+            p = F.softmax(p, dim=-1).argmax(dim=-1)
+            a = action.cpu().data.numpy().flatten()
+            p = p.cpu().data.numpy().flatten()
+
+            return a, p
 
     def save(self, path):
+        if not os.path.exists(path):
+            os.makedirs(path)
         torch.save(self.model.state_dict(), os.path.join(path, 'model.pth'))
 
     def load(self, path):

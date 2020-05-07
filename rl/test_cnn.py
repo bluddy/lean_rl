@@ -31,7 +31,7 @@ from policy.learn_action import LearnAction
 total_times, total_loss, total_acc = [],[],[]
 timestep = 0
 states = []
-w_s, w_a, w_d, w_procs = [],[],[],[]
+w_s, w_a = [],[]
 
 def process_state(mode, s):
     # Copy as uint8
@@ -268,7 +268,7 @@ def run(args):
         if os.path.exists(timestep_file):
             with open(timestep_file, 'r') as f:
                 timestep = int(f.read()) + 1
-        model.load_state_dict(torch.load(pjoin(last_model_dir, 'model.pth')))
+        model.load(pjoin(last_model_dir, 'model.pth'))
         last_csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
@@ -289,7 +289,10 @@ def run(args):
                 timestep = t + 1
         print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
 
-    replay_buffer = CNNBuffer(args.mode, args.capacity, compressed=args.compressed)
+    replay_buffers = [CNNBuffer(args.mode, args.capacity, compressed=args.compressed) for _ in range(2)]
+
+
+    proc_std = []
 
     # Reset all envs and get first state
     for env in envs:
@@ -298,18 +301,19 @@ def run(args):
     global states
     states = [env.get()[0] for env in envs] # block
 
-    proc_std = []
+    fill_steps = args.capacity / 2
 
     for _ in xrange(args.epochs):
 
-        def fill_buffer(envs):
+        for i, replay_buffer in enumerate(replay_buffers):
             global timestep, states, w_s, w_a
 
             elapsed_time = 0.
 
             # Fill the replay buffer
+            print "\nFilling replay buffer {} with {} steps".format(i, fill_steps)
             start_timestep = timestep
-            while timestep - start_timestep < args.capacity:
+            while timestep - start_timestep < fill_steps:
 
                 acted = False
                 start_t = time.time()
@@ -355,15 +359,13 @@ def run(args):
                     w_s, w_a = [],[]
 
                 elapsed_time += time.time() - start_t
-                if acted:
+                if acted and timestep % 100 == 0:
                     #print "Time: ", elapsed_time # debug
                     sys.stdout.write('.')
                     sys.stdout.flush()
                     elapsed_time = 0.
 
                 states = new_states
-
-        fill_buffer(envs)
 
         save_mode_playing_cnt = 0
         save_mode_recording_cnt = 0
@@ -381,9 +383,9 @@ def run(args):
         temp_loss = []
         for _ in xrange(args.train_loops):
             # Get data from replay buffer
-            loss = model.train(replay_buffer, args)
+            loss = model.train(replay_buffers[0], args)
 
-            temp_loss.append(loss)
+            total_loss.append(loss)
 
             s = '\nTraining T:{} TS:{:04d} L:{:.5f} Exp_std:{:.2f} p:{} r:{}'.format(
                 str(datetime.timedelta(seconds=time.time() - program_start_t)),
@@ -400,14 +402,12 @@ def run(args):
 
         model.set_eval()
 
-        total_loss.append(average(temp_loss))
+        #total_loss.append(np.mean(temp_loss))
 
         fig = plt.figure()
         plt.plot(total_loss, label='Loss')
         plt.savefig(pjoin(logdir, 'loss.png'))
         tb_writer.add_figure('loss', fig, global_step=timestep)
-
-        fill_buffer(envs)
 
         # Evaluate
         print('\n---------------------------------------')
@@ -415,11 +415,12 @@ def run(args):
         correct, total = 0, 0
         for _ in xrange(args.eval_loops):
 
-            state, action, predicted_action = model.test(replay_buffer)
-            correct += action == predicted_action
+            action, predicted_action = model.test(replay_buffers[1], args)
+            print action, predicted_action, '\n'
+            correct += (action == predicted_action).sum()
             total += len(action)
 
-        acc = float(correct) / float(total)
+        acc = correct / float(total)
 
         s = "Eval Accuracy: {:.3f}".format(acc)
         print s
@@ -435,7 +436,7 @@ def run(args):
         def save_model(path):
             if not os.path.exists(path):
                 os.makedirs(path)
-            torch.save(model.state_dict(), pjoin(path, 'model.pth'))
+            model.save(pjoin(path, 'model.pth'))
             with open(pjoin(path, 'timestep.txt'), 'w') as f:
                 f.write(str(timestep))
 
