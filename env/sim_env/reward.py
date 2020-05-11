@@ -285,7 +285,8 @@ class Reward_suture_simple(object):
 
                 self.last_dist = dist
 
-            reward -= 0.005
+            # NOTE: was 0.05, tried doubling
+            reward -= 0.01
 
         return reward, done, reward_txt, success
 
