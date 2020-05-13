@@ -504,7 +504,7 @@ class Environment(common_env.CommonEnv):
           self.server_num, self.img_count), img)
         self.img_count += 1
 
-    def _cnn_test_get_best_action(self):
+    def _get_best_action(self):
         # Simple movement for best action
         # Get motion needed
         diff = -(self.state.needle_tip_pos - self.state.cur_target_pos)
@@ -515,7 +515,7 @@ class Environment(common_env.CommonEnv):
           elif diff[i] > epsilon:
             diff[i] = 1.
 
-        return np.reshape(diff, (1, 3))
+        return np.reshape(diff, (3,))
 
     def _get_env_state(self):
         image = self.image
@@ -652,8 +652,7 @@ class Environment(common_env.CommonEnv):
 
         extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
 
-        if self.cnn_test_mode:
-            extra["best_action"] = self._cnn_test_get_best_action()
+        extra["best_action"] = self._get_best_action()
 
         return (cur_state, reward, done, extra)
 

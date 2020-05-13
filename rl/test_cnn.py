@@ -415,7 +415,7 @@ def run(args):
         correct, total = 0, 0
         for _ in xrange(args.eval_loops):
 
-            action, predicted_action = model.test(replay_buffers[1], args)
+            action, predicted_action = policy.test(replay_buffers[1], args)
             print action, predicted_action, '\n'
             correct += (action == predicted_action).sum()
             total += len(action)
@@ -432,15 +432,6 @@ def run(args):
         plt.plot(total_acc, label='Accuracy')
         plt.savefig(pjoin(logdir, 'acc.png'))
         tb_writer.add_figure('acc', fig, global_step=timestep)
-
-        def save_model(path):
-            if not os.path.exists(path):
-                os.makedirs(path)
-            model.save(pjoin(path, 'model.pth'))
-            with open(pjoin(path, 'timestep.txt'), 'w') as f:
-                f.write(str(timestep))
-
-        save_model(model_path)
 
     csv_f.close()
     log_f.close()

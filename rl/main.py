@@ -26,8 +26,8 @@ from env_wrapper import EnvWrapper
 
 def run(args):
     # Total counts
-    total_times, total_rewards, total_q_avg, total_q_max, total_loss = \
-            [],[],[],[],[]
+    total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_acc = \
+            [],[],[],[],[],[]
 
     last_learn_t, last_eval_t = 0, 0
     best_avg_reward = -1e5
@@ -64,8 +64,11 @@ def run(args):
 
     elif args.env == 'sim':
         from env.sim_env.env import Environment
-        basename = '{}_{}_{}_{}{}'.format(
-            args.env, args.policy[0:3], args.mode[0:2], args.task[:3],
+        basename = '{}_{}{}_{}_{}{}'.format(
+            args.env,
+            args.policy[0:3],
+            '_aux' if args.aux_loss else '',
+            args.mode[0:2], args.task[:3],
             '_rt' if args.random_env else '')
 
         suffix = '_'
@@ -86,6 +89,7 @@ def run(args):
     else:
         raise ValueError("Unrecognized environment " + args.env)
 
+    print "save_mode_path: ", save_mode_path
     # Save mode arguments
     save_mode = ''
     save_mode_post_play = ''
@@ -255,12 +259,19 @@ def run(args):
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'dqn':
-        from policy.DQN import DQN
-        policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
-            args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
+        if args.aux_loss:
+            from policy.DQN_aux import DQN_aux
+            policy = DQN_aux(state_dim, action_dim, action_steps, args.stack_size,
+                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
+                img_dim=args.img_dim, img_depth=img_depth,
+                amp=args.amp, dropout=args.dropout)
+        else:
+            from policy.DQN import DQN
+            policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
+                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
+                img_dim=args.img_dim, img_depth=img_depth,
+                load_encoder=args.load_encoder, amp=args.amp,
+                use_orig_q=args.orig_q, dropout=args.dropout)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
@@ -365,7 +376,7 @@ def run(args):
     proc_std = []
     terminate = False
 
-    w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
+    w_s1, w_s2, w_a, w_r, w_d, w_ba, w_procs = [],[],[],[],[],[],[]
 
     while timestep < args.max_timesteps and not terminate:
 
@@ -436,6 +447,8 @@ def run(args):
                     w_r.append(reward)
                     w_d.append(done)
                     w_a.append(action)
+                    ba = d["best_action"]
+                    w_ba.append(ba)
                     w_procs.append(env.server_num)
 
                 if done:
@@ -468,9 +481,9 @@ def run(args):
                 '''
 
             # Feed into the replay buffer
-            for s1, s2, a, r, d, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_procs):
-                replay_buffer.add([s1, s2, a, r, d], num=p)
-            w_s1, w_s2, w_a, w_r, w_d, w_procs = [],[],[],[],[],[]
+            for s1, s2, a, r, d, ba, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_ba, w_procs):
+                replay_buffer.add([s1, s2, a, r, d, ba], num=p)
+            w_s1, w_s2, w_a, w_r, w_d, w_ba, w_procs = [],[],[],[],[],[],[]
 
         elapsed_time += time.time() - start_t
         if acted:
@@ -492,9 +505,8 @@ def run(args):
 
             # Block and flush result if needed
             best_reward = evaluate_policy(
-                csv_wr, csv_f, log_f,
-                tb_writer, logdir, total_times, total_rewards, total_loss,
-                total_q_avg, total_q_max,
+                csv_wr, csv_f, log_f, tb_writer, logdir,
+                total_times, total_rewards, total_loss, total_q_avg, total_q_max,
                 temp_loss, temp_q_avg, temp_q_max,
                 envs, args, policy, timestep, test_path,
                 last_learn_t, last_eval_t, best_avg_reward)
@@ -521,6 +533,9 @@ def run(args):
                 print "Saving best avg reward: {}".format(best_avg_reward)
                 save_policy(best_path)
             save_policy(model_path)
+
+            test_cnn(replay_buffer, total_times, total_acc, logdir, tb_writer,
+                    args.eval_loops, args)
 
         ## Train
         if warmup_t <= 0 and \
@@ -578,7 +593,31 @@ def run(args):
     csv_f.close()
     log_f.close()
 
-def evaluate_policy(csv_wr, csv_f, log_f, tb_writer, logdir,
+def test_cnn(replay_buffer, total_times, total_acc, logdir, tb_writer, eval_loops, args):
+    print 'Evaluating CNN for ', logdir
+    correct, total = 0, 0
+    for _ in xrange(eval_loops):
+
+        action, predicted_action = model.test(replay_buffer, args)
+        print action, predicted_action, '\n'
+        correct += (action == predicted_action).sum()
+        total += len(action)
+
+    acc = correct / float(total)
+
+    s = "Eval Accuracy: {:.3f}".format(acc)
+    print s
+    log_f.write(s + '\n')
+
+    total_acc.append(acc)
+
+    fig = plt.figure()
+    plt.plot(total_times, total_acc, label='Accuracy')
+    plt.savefig(pjoin(logdir, 'acc.png'))
+    tb_writer.add_figure('acc', fig, global_step=timestep)
+
+def evaluate_policy(
+        csv_wr, csv_f, log_f, tb_writer, logdir,
         total_times, total_rewards, total_loss, total_q_avg, total_q_max,
         temp_loss, temp_q_avg, temp_q_max,
         envs, args, policy, timestep, test_path,
@@ -724,10 +763,8 @@ if __name__ == "__main__":
         help='How often (timesteps) we save the images in a saved episode')
     parser.add_argument("--max-timesteps", default=2e7, type=float,
         help='Max time steps to run environment for')
-    parser.add_argument("--learning-start", default=None,
+    parser.add_argument("--learning-start", default=0,
         help='Timesteps before learning')
-    parser.add_argument("--save_models", action= "store",
-        help='Whether or not models are saved')
 
     #--- Exploration Noise
     parser.add_argument("--no-ou-noise", default=True,
@@ -758,8 +795,6 @@ if __name__ == "__main__":
     parser.add_argument("--compressed", default=False,
         action='store_true', dest='compressed',
         help='Use a compressed replay buffer for efficiency')
-    parser.add_argument("--vacate-buffer", default=False, action='store_true',
-        help='Vacate low priority items in the buffer first')
     parser.add_argument("--buffer-clip", default=100.,
         help='Clip Q in buffer')
     parser.add_argument('--sub-buffer', default='replay',
@@ -775,8 +810,6 @@ if __name__ == "__main__":
         help="[image|state|mixed]")
     parser.add_argument("--network", default = 'simple',
         help="Choose [simple|densenet]")
-    parser.add_argument("--no-batchnorm", default = True, dest='batchnorm',
-        action='store_false', help="Choose whether to use batchnorm")
     parser.add_argument("--dropout", default = False,
         action='store_true', help="Choose whether to use dropout")
     parser.add_argument("--deep", default = False,
@@ -785,8 +818,9 @@ if __name__ == "__main__":
         help="Size of img [224|128|64]")
     parser.add_argument("--img-depth", default = 3, type=int,
         help="Depth of image (1 for grey, 3 for RGB)")
-    parser.add_argument("--orig-q", default=False, action='store_true',
-        help="Use original Q mechanism (from saved Q values)")
+
+    parser.add_argument("--aux-loss", default=False,
+        action='store_true', help="Choose whether to train with an auxiliary loss")
 
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')
@@ -815,14 +849,13 @@ if __name__ == "__main__":
     #---
 
     #--- Model save/load
-    parser.add_argument("--load-encoder", default='', type=str,
-        help="File from which to load the encoder model")
     parser.add_argument("--load", default=None, type=str,
         help="Continue training from a subdir of ./logs/specific_model")
     parser.add_argument("--load-last", default=False, action='store_true',
         help="Continue training from last model")
     parser.add_argument("--load-best", default=False, action='store_true',
         help="If load-last is selected, continue from last best saved model")
+    #---
 
     parser.add_argument("--policy", default="dqn", type=str,
             help="Policy type. dummy|ddpg|td3|dqn|ddqn|bdqn")
@@ -866,6 +899,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')
+    #-- Test-cnn
+    parser.add_argument('--eval-loops', default=100, type=int,
+            help='How many times to test over data in replay buffer')
 
     args = parser.parse_args()
 
@@ -875,6 +911,9 @@ if __name__ == "__main__":
     args.batchnorm = True if args.mode in ['image', 'mixed'] else args.batchnorm
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
+
+    if args.env == 'sim' and args.task == 'reach':
+        args.random_env = True
 
     if args.learning_start is None:
         args.learning_start = args.capacity

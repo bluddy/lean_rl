@@ -96,7 +96,6 @@ class ReplayBuffer(object):
         # list of lists of state, next_state etc
         batch = zip(*data)
 
-        # Reuse arrays so we save allocations
         if self.mode == 'mixed':
             # Swap it so tuple is on the outside, batch is on inside
             s1 = [np.concatenate(b) for b in zip(*batch[0])]
@@ -114,12 +113,13 @@ class ReplayBuffer(object):
         d = np.array(batch[4], copy=False).reshape(-1, 1)
         sample = [s1, s2, a, r, d]
 
-        # Process Q values if there
+        # Process extra value
         if len(batch) > 5:
-            q = np.array(batch[5], copy=False).reshape(-1, 1)
-            sample.append(q)
+            x = np.array(batch[5], copy=False)
+            sample.append(x)
         else:
             sample.append(None)
+
 
         return sample
 
@@ -500,7 +500,7 @@ class CNNBuffer(ReplayBuffer):
         batch = zip(*data)
 
         s = np.concatenate(batch[0])
-        a = np.concatenate(batch[1])
+        a = np.array(batch[1])
 
         return [s, a]
 

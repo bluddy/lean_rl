@@ -47,11 +47,12 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
     return l
 
 class BaseImage(nn.Module):
-    def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
+    def __init__(self, img_stack, drop=False, img_dim=224, **kwargs):
         super(BaseImage, self).__init__()
 
         ## input size:[img_stack, 224, 224]
-        print "BaseImage. drop:{}, deep:{}, bn:{}".format(drop, deep, bn)
+        print "BaseImage. drop:{}".format(drop)
+        bn=True
 
         ll = []
         in_f = calc_features(img_stack)
@@ -172,6 +173,32 @@ class QImage(BaseImage):
         x = self.features(x)
         x = self.linear(x)
         return x
+
+class QImage2Outs(BaseImage):
+    ''' QImage with two outputs coming out of the featres '''
+    def __init__(self, action_dim, drop=False, **kwargs):
+        super(QImage2Outs, self).__init__(drop=drop, **kwargs)
+
+        bn=True
+        d = 100
+        ll = []
+        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
+        self.linear = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(d, action_dim, bn=False, drop=False, relu=False))
+        self.linear1 = nn.Sequential(*ll)
+
+        ll = []
+        ll.extend(make_linear(d, action_dim, bn=False, drop=False, relu=False))
+        self.linear2 = nn.Sequential(*ll)
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.linear(x)
+        y = self.linear1(x)
+        z = self.linear2(x)
+        return y,z
 
 class QImageDenseNet(nn.Module):
     def __init__(self, action_dim, img_stack, pretrained=False):
