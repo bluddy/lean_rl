@@ -433,6 +433,15 @@ def run(args):
         plt.savefig(pjoin(logdir, 'acc.png'))
         tb_writer.add_figure('acc', fig, global_step=timestep)
 
+        def save_model(path):
+            if not os.path.exists(path):
+                os.makedirs(path)
+            model.save(pjoin(path, 'model.pth'))
+            with open(pjoin(path, 'timestep.txt'), 'w') as f:
+                f.write(str(timestep))
+
+        save_model(model_path)
+
     csv_f.close()
     log_f.close()
 

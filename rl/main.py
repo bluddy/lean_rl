@@ -534,8 +534,8 @@ def run(args):
                 save_policy(best_path)
             save_policy(model_path)
 
-            test_cnn(replay_buffer, total_times, total_acc, logdir, tb_writer,
-                    args.eval_loops, args)
+            test_cnn(policy, replay_buffer, total_times, total_acc, logdir, tb_writer,
+                    args.eval_loops, log_f, timestep, args)
 
         ## Train
         if warmup_t <= 0 and \
@@ -593,12 +593,13 @@ def run(args):
     csv_f.close()
     log_f.close()
 
-def test_cnn(replay_buffer, total_times, total_acc, logdir, tb_writer, eval_loops, args):
+def test_cnn(policy, replay_buffer, total_times, total_acc, logdir, tb_writer, eval_loops, log_f,
+        timestep, args):
     print 'Evaluating CNN for ', logdir
     correct, total = 0, 0
     for _ in xrange(eval_loops):
 
-        action, predicted_action = model.test(replay_buffer, args)
+        action, predicted_action = policy.test(replay_buffer, args)
         print action, predicted_action, '\n'
         correct += (action == predicted_action).sum()
         total += len(action)

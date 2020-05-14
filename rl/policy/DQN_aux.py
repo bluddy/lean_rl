@@ -182,6 +182,13 @@ class DQN_aux(object):
             w = torch.FloatTensor(w).to(device)
         return x, y, u, r, d, best_action, w
 
+    def _copy_sample_to_dev_small(self, x, best_action, batch_size):
+        x = self._process_state(x)
+        best_action = self._cont_to_discrete(best_action).reshape((batch_size, -1))
+        best_action = torch.LongTensor(best_action).to(device)
+        return x, best_action
+
+
     def select_action(self, state):
 
         state = self._process_state(state)
@@ -272,9 +279,9 @@ class DQN_aux(object):
 
     def test(self, replay_buffer, args):
             [x, _, _, _, _, best_action, _, _], _ = replay_buffer.sample(args.batch_size)
-            length = len(a)
+            length = len(best_action)
 
-            state, action = self._copy_sample_to_dev(x, best_action, length)
+            state, action = self._copy_sample_to_dev_small(x, best_action, length)
 
             _, p = self.q(state)
             p = F.softmax(p, dim=-1).argmax(dim=-1)
