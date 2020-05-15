@@ -270,15 +270,21 @@ def run(args):
             policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
                 args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
                 img_dim=args.img_dim, img_depth=img_depth,
-                load_encoder=args.load_encoder, amp=args.amp,
-                use_orig_q=args.orig_q, dropout=args.dropout)
+                amp=args.amp,
+                dropout=args.dropout)
     elif args.policy == 'ddqn':
-        from policy.DQN import DDQN
-        policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
-            args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q, deep=args.deep, dropout=args.dropout)
+        if args.aux_loss:
+            from policy.DQN_aux import DDQN_aux
+            policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
+                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
+                img_dim=args.img_dim, img_depth=img_depth,
+                amp=args.amp, deep=args.deep, dropout=args.dropout)
+        else:
+            from policy.DQN import DDQN
+            policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
+                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
+                img_dim=args.img_dim, img_depth=img_depth,
+                amp=args.amp, deep=args.deep, dropout=args.dropout)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -287,8 +293,7 @@ def run(args):
             n_samples=args.n_samples,
             network=args.network, lr=args.lr, bn=args.batchnorm,
             img_dim=args.img_dim, img_depth=img_depth,
-            load_encoder=args.load_encoder, amp=args.amp,
-            use_orig_q=args.orig_q)
+            amp=args.amp)
     elif args.policy == 'dummy':
         from policy.dummy import Dummy
         policy = Dummy()

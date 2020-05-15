@@ -4,3 +4,7 @@ python -m rl.main --env sim --procs 5 --lr 5e-5 --hires --stereo --capacity 1e4 
 
 # test_cnn
 python -m rl.test_cnn --env sim --procs 8 --lr 5e-5 --hires --stereo --capacity 1e5 --task reach --name first --mode state --random-env
+ 
+# reach task, playback
+python -m rl.main --env sim --procs 8 --lr 5e-5 --capacity 5e4 --task reach --name try --mode image --aux-loss --stereo --policy ddqn
+

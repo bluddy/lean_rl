@@ -194,19 +194,11 @@ class DQN_aux(object):
         state = self._process_state(state)
         q, _ = self.q(state)
 
-        #print "XXX q.shape: ", q.shape
-        #print "XXX DQN q: ", q
-
         # Argmax along action dimension (not batch dim)
         max_action = torch.argmax(q, -1).cpu().data.numpy()
 
-        #print "XXX DQN max_action:", max_action
-        #print "XXX max_action shape: ", max_action.shape
-
         # Translate action choice to continous domain
         action = self._discrete_to_cont(max_action)
-        #print "XXX DQN action:", action
-        #print "XXX DQN action.shape:", action.shape
         return action
 
     def train(self, replay_buffer, timesteps, beta, args):
@@ -298,9 +290,10 @@ class DQN_aux(object):
         self.q.load_state_dict(torch.load(os.path.join(path, 'q.pth')))
         self.q_target.load_state_dict(torch.load(os.path.join(path, 'q_target.pth')))
 
+
 class DDQN_aux(DQN_aux):
     def __init__(self, *args, **kwargs):
-        super(DDQN, self).__init__(*args, **kwargs)
+        super(DDQN_aux, self).__init__(*args, **kwargs)
 
     def _create_models(self):
         # q is now 2 networks
@@ -315,7 +308,7 @@ class DDQN_aux(DQN_aux):
     def select_action(self, state):
 
         state = self._process_state(state)
-        q = self.qs[0](state)
+        q, _ = self.qs[0](state)
 
         max_action = torch.argmax(q, -1).cpu().data.numpy()
 
@@ -324,23 +317,20 @@ class DDQN_aux(DQN_aux):
 
     def train(self, replay_buffer, timesteps, beta, args):
 
-        losses, Q_max, Q_mean = [], [], []
+        q_losses, aux_losses, Q_max, Q_mean = [], [], [], []
 
         for num, (update_q, update_qt, opt) in \
                 enumerate(zip(self.qs, self.qts, self.opts)):
 
             # Get samples
-            [x, y, u, r, d, qorig, indices, w], qorig_prob = \
+            [x, y, u, r, d, best_action, indices, w], qorig_prob = \
                 replay_buffer.sample(args.batch_size, beta=beta, num=num)
             length = len(u)
 
-            state, state2, action, reward, done, qorig, weights = \
+            state, state2, action, reward, done, best_action, weights = \
                 self._copy_sample_to_dev(x, y, u, r, d, qorig, w, length)
 
-            #from rl.utils import ForkablePdb
-            #ForkablePdb().set_trace()
-
-            Qt = [qt(state2) for qt in self.qts]
+            Qt = [qt(state2)[0] for qt in self.qts]
             Qt = torch.min(*Qt)
 
             Qt_max, _ = torch.max(Qt, dim=-1, keepdim=True)
@@ -348,23 +338,25 @@ class DDQN_aux(DQN_aux):
             y = reward + (done * args.discount * Qt_max).detach()
 
             # Get current Q estimate
-            Q_now = update_q(state)
+            Q_now, predicted_action = update_q(state)
             Q_now = torch.gather(Q_now, -1, action)
 
             # Compute loss
-            loss = (Q_now - y).pow(2)
-            prios = loss + 1e-5
+            q_loss = (Q_now - y).pow(2)
+            prios = q_loss + 1e-5
             prios = prios.data.cpu().numpy()
             if weights is not None:
-                loss *= weights
-            loss = loss.mean()
+                q_loss *= weights
+            q_loss = q_loss.mean()
+
+            # Compute aux loss
+            aux_loss = self.aux_loss(predicted_action, best_action.squeeze(-1))
+
+            loss = q_loss + aux_loss
 
             # Optimize the model
             opt.zero_grad()
             loss.backward()
-
-            if args.clip_grad is not None:
-                nn.utils.clip_grad_norm_(update_q.parameters(), args.clip_grad)
 
             opt.step()
 
@@ -374,11 +366,25 @@ class DDQN_aux(DQN_aux):
             for p, pt in zip(update_q.parameters(), update_qt.parameters()):
                 pt.data.copy_(args.tau * p.data + (1 - args.tau) * pt.data)
 
-            losses.append(loss.item())
+            q_losses.append(loss.item())
+            aux_losses.append(aux_loss.item())
             Q_mean.append(Q_now.mean().item())
             Q_max.append(Q_now.max().item())
 
-        return np.mean(losses), None, np.mean(Q_mean), np.max(Q_max)
+        return np.mean(q_losses), np.mean(aux_losses), np.mean(Q_mean), np.max(Q_max)
+
+    def test(self, replay_buffer, args):
+            [x, _, _, _, _, best_action, _, _], _ = replay_buffer.sample(args.batch_size)
+            length = len(best_action)
+
+            state, action = self._copy_sample_to_dev_small(x, best_action, length)
+
+            _, p = self.qs[0](state)
+            p = F.softmax(p, dim=-1).argmax(dim=-1)
+            a = action.cpu().data.numpy().flatten()
+            p = p.cpu().data.numpy().flatten()
+
+            return a, p
 
     def set_eval(self):
         for q in self.qs:

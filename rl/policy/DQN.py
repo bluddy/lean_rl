@@ -15,8 +15,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
-            load_encoder='', amp=False, use_orig_q=False,
-            deep=False, dropout=False):
+            amp=False, dropout=False):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
