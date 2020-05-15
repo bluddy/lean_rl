@@ -64,12 +64,16 @@ def run(args):
 
     elif args.env == 'sim':
         from env.sim_env.env import Environment
-        basename = '{}_{}{}_{}_{}{}'.format(
-            args.env,
-            args.policy[0:3],
-            '_aux' if args.aux_loss else '',
-            args.mode[0:2], args.task[:3],
-            '_rt' if args.random_env else '')
+        basename = args.env
+        if args.random_env:
+            basename += '_rt'
+        basename += '_' + args.policy
+        if args.aux is not None:
+            basename += '_aux' + args.aux
+        if args.stereo_mode:
+            basename += '_s'
+        basename += '_' + args.mode[:2]
+        basename += '_' + args.task[:3]
 
         suffix = '_'
         if args.random_env:
@@ -259,32 +263,17 @@ def run(args):
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'dqn':
-        if args.aux_loss:
-            from policy.DQN_aux import DQN_aux
-            policy = DQN_aux(state_dim, action_dim, action_steps, args.stack_size,
-                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-                img_dim=args.img_dim, img_depth=img_depth,
-                amp=args.amp, dropout=args.dropout)
-        else:
-            from policy.DQN import DQN
-            policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
-                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-                img_dim=args.img_dim, img_depth=img_depth,
-                amp=args.amp,
-                dropout=args.dropout)
+        from policy.DQN import DQN
+        policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
+            args.mode, network=args.network, lr=args.lr,
+            img_dim=args.img_dim, img_depth=img_depth,
+            amp=args.amp, dropout=args.dropout, aux=args.aux)
     elif args.policy == 'ddqn':
-        if args.aux_loss:
-            from policy.DQN_aux import DDQN_aux
-            policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
-                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-                img_dim=args.img_dim, img_depth=img_depth,
-                amp=args.amp, deep=args.deep, dropout=args.dropout)
-        else:
-            from policy.DQN import DDQN
-            policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
-                args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-                img_dim=args.img_dim, img_depth=img_depth,
-                amp=args.amp, deep=args.deep, dropout=args.dropout)
+        from policy.DQN import DDQN
+        policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
+            args.mode, network=args.network, lr=args.lr,
+            img_dim=args.img_dim, img_depth=img_depth,
+            amp=args.amp, dropout=args.dropout, aux=args.aux)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -381,7 +370,7 @@ def run(args):
     proc_std = []
     terminate = False
 
-    w_s1, w_s2, w_a, w_r, w_d, w_ba, w_procs = [],[],[],[],[],[],[]
+    w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
 
     while timestep < args.max_timesteps and not terminate:
 
@@ -453,7 +442,9 @@ def run(args):
                     w_d.append(done)
                     w_a.append(action)
                     ba = d["best_action"]
+                    es = d["extra_state"]
                     w_ba.append(ba)
+                    w_es.append(es)
                     w_procs.append(env.server_num)
 
                 if done:
@@ -486,9 +477,12 @@ def run(args):
                 '''
 
             # Feed into the replay buffer
-            for s1, s2, a, r, d, ba, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_ba, w_procs):
-                replay_buffer.add([s1, s2, a, r, d, ba], num=p)
-            w_s1, w_s2, w_a, w_r, w_d, w_ba, w_procs = [],[],[],[],[],[],[]
+            for s1, s2, a, r, d, ba, es, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs):
+                if args.aux_state:
+                    replay_buffer.add([s1, s2, a, r, d, es], num=p)
+                else:
+                    replay_buffer.add([s1, s2, a, r, d, ba], num=p)
+            w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
 
         elapsed_time += time.time() - start_t
         if acted:
@@ -825,8 +819,8 @@ if __name__ == "__main__":
     parser.add_argument("--img-depth", default = 3, type=int,
         help="Depth of image (1 for grey, 3 for RGB)")
 
-    parser.add_argument("--aux-loss", default=False,
-        action='store_true', help="Choose whether to train with an auxiliary loss")
+    parser.add_argument("--aux", default=None, type=str,
+        help="Auxiliary loss: [state|action]"
 
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')

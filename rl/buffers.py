@@ -113,13 +113,16 @@ class ReplayBuffer(object):
         d = np.array(batch[4], copy=False).reshape(-1, 1)
         sample = [s1, s2, a, r, d]
 
-        # Process extra value
+        # Process extra values
         if len(batch) > 5:
-            x = np.array(batch[5], copy=False)
-            sample.append(x)
+            sample.append(np.array(batch[5], copy=False))
         else:
             sample.append(None)
 
+        if len(batch) > 6:
+            sample.append(np.array(batch[6], copy=False))
+        else:
+            sample.append(None)
 
         return sample
 
@@ -226,86 +229,12 @@ class NaivePrioritizedBuffer(ReplayBuffer):
         data = self._process_samples(samples)
         # Append columns
         data.append(indices)
-        data.append(weights)
 
-        return data, 0.
+        return data
 
     def update_priorities(self, batch_indices, batch_priorities):
         for idx, prio in list(zip(batch_indices, batch_priorities)):
             self.priorities[idx] = prio
-
-class DiskReplayBuffer(ReplayBuffer):
-    ''' Replay buffer that writes to disk, thus having unlimited storage space '''
-    def __init__(self, mode, capacity, path, buffer_capacity=1000, **kwargs):
-        super(DiskReplayBuffer, self).__init__(mode, capacity)
-        self.path = pjoin(path, 'rbuffer')
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
-        self.length = 0 # Number of entries in disk buffer
-        self.buffer = []
-        self.buffer_capacity = buffer_capacity
-        self.buf_offset = 0
-
-    def add(self, data, *args, **kwargs):
-        ''' In compressed mode, the states must be pre-compressed '''
-
-        self.buffer.append(data)
-
-        if len(self.buffer) > self.buffer_capacity:
-            # Dump buffer to disk
-            #print "dumping buffer. offset: ", self.buf_offset, " size: ", len(self.buffer) # Debug
-            # TODO: Support mixed mode
-            for i, data in enumerate(self.buffer):
-                file = pjoin(self.path, 's_' + str(self.buf_offset + i))
-                #joblib.dump(data, file)
-                # debug test
-                d = np.transpose(data[0].squeeze(0), (1, 2, 0))
-                imageio.imwrite(file + '1.png', d)
-                d = np.transpose(data[1].squeeze(0), (1, 2, 0))
-                imageio.imwrite(file + '2.png', d)
-                joblib.dump(data[2:], file + '.data')
-            self.buf_offset = \
-                    (self.buf_offset + len(self.buffer)) % self.capacity
-            self.buffer = []
-
-        if len(self) < self.capacity:
-            self.length += 1
-
-    def sample(self, batch_size, *args, **kwargs):
-        ''' Sample from disk buffer '''
-        assert(len(self) >= 0)
-
-        pick_size = len(self) if len(self) < batch_size else batch_size
-
-        indices = np.random.choice(len(self), pick_Size)
-
-        #print "offset: ", self.buf_offset, "buflen: ", len(self.buffer), "len: ", len(self) # Debug
-
-        samples = []
-        for idx in indices:
-            # Check if it's in our buffer
-            if idx >= self.buf_offset and idx < self.buf_offset + len(self.buffer):
-                samples.append(self.buffer[idx - self.buf_offset])
-            else:
-                file = pjoin(self.path, 's_' + str(idx))
-                #data = joblib.load(file)
-                # debug test
-                s1 = imageio.imread(file + '1.png')
-                s1 = np.expand_dims(np.transpose(s1, (2, 0, 1)), 0)
-                s2 = imageio.imread(file + '2.png')
-                s2 = np.expand_dims(np.transpose(s2, (2, 0, 1)), 0)
-                x, y, z = joblib.load(file + '.data')
-                data = (s1, s2, x, y, z)
-                samples.append(data)
-
-        data = self._process_samples(samples)
-        # Append columns
-        data.append([None, None])
-
-        return data, 0.
-
-    def __len__(self):
-        return self.length
 
 class StatCalc(object):
     ''' Rolling buffer with mean and max '''
@@ -500,9 +429,10 @@ class CNNBuffer(ReplayBuffer):
         batch = zip(*data)
 
         s = np.concatenate(batch[0])
-        a = np.array(batch[1])
+        a = np.concatenate(batch[1])
+        es = np.concatenate(batch[2])
 
-        return [s, a]
+        return [s, a, es]
 
     def sample(self, batch_size):
         assert(len(self) > 0)

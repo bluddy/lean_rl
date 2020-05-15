@@ -517,6 +517,14 @@ class Environment(common_env.CommonEnv):
 
         return np.reshape(diff, (3,))
 
+    def _get_extra_state(self):
+        ''' Get extra state for aux loss '''
+        return np.concatenate([
+            self.state.needle_tip_pos.reshape((1, -1)),
+            self.state.cur_target_pos.reshape((1, -1)),
+        ], axis=-1)
+
+
     def _get_env_state(self):
         image = self.image
         # Resize to non-hires, but possibly stereo
@@ -653,6 +661,7 @@ class Environment(common_env.CommonEnv):
         extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
 
         extra["best_action"] = self._get_best_action()
+        extra["extra_state"] = self._get_extra_state()
 
         return (cur_state, reward, done, extra)
 

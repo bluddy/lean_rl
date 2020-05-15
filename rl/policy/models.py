@@ -108,23 +108,6 @@ class BaseImage(nn.Module):
         ll.extend([Flatten()])
         self.features = nn.Sequential(*ll)
 
-class ImageToPos(BaseImage):
-    ''' Class converting the image to a position of the needle.
-        We train on this to accelerate RL training off images
-    '''
-    def __init__(self, img_stack, out_size=3, bn=False, img_dim=224):
-        super(ImageToPos, self).__init__(img_stack, bn, img_dim=img_dim)
-
-        ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn))
-        ll.extend(make_linear(400, out_size, bn=False, relu=False)) # x, y, w
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        return x
-
 class ActorImage(BaseImage):
     def __init__(self, action_dim, bn=False, **kwargs):
         super(ActorImage, self).__init__(bn=bn, **kwargs)
@@ -172,11 +155,11 @@ class QImage(BaseImage):
     def forward(self, x):
         x = self.features(x)
         x = self.linear(x)
-        return x
+        return x, None
 
 class QImage2Outs(BaseImage):
     ''' QImage with two outputs coming out of the featres '''
-    def __init__(self, action_dim, drop=False, **kwargs):
+    def __init__(self, action_dim, aux_size, drop=False, **kwargs):
         super(QImage2Outs, self).__init__(drop=drop, **kwargs)
 
         bn=True
@@ -190,7 +173,7 @@ class QImage2Outs(BaseImage):
         self.linear1 = nn.Sequential(*ll)
 
         ll = []
-        ll.extend(make_linear(d, action_dim, bn=False, drop=False, relu=False))
+        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
         self.linear2 = nn.Sequential(*ll)
 
     def forward(self, x):
@@ -222,7 +205,7 @@ class QImageDenseNet(nn.Module):
         x = F.adaptive_avg_pool2d(x, (1,1))
         x = torch.flatten(x, 1)
         x = self.classifier(x)
-        return x
+        return x, None
 
 class QMixedDenseNet(QImageDenseNet):
     def __init__(self, action_dim, state_dim, img_stack):
@@ -254,7 +237,7 @@ class QMixedDenseNet(QImageDenseNet):
         x = self.linear1(x)
         y = self.linear2(state)
         z = self.linear3(torch.cat((x, y), dim=-1))
-        return z
+        return z, None
 
 class ActorState(nn.Module):
     def __init__(self, state_dim, action_dim, bn=False):
@@ -339,7 +322,7 @@ class QMixed(BaseImage):
         x = self.linear1(x)
         y = self.linear2(state)
         x = self.linear3(torch.cat((x, y), dim=-1))
-        return x
+        return x, None
 
 class QMixed2(nn.Module):
     def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):

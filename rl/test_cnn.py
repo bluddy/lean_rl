@@ -31,7 +31,7 @@ from policy.learn_action import LearnAction
 total_times, total_loss, total_acc = [],[],[]
 timestep = 0
 states = []
-w_s, w_a = [],[]
+w_s, w_ba, w_es = [],[],[]
 
 def process_state(mode, s):
     # Copy as uint8
@@ -336,7 +336,8 @@ def run(args):
 
                         if action is not None: # reset
                             w_s.append(state)
-                            w_a.append(dict["best_action"])
+                            w_ba.append(dict["best_action"])
+                            w_es.append(dict["extra_state"])
 
                         if done:
                             env.reset(render_ep_path=None) # Send async action
@@ -354,9 +355,9 @@ def run(args):
                                 (args.mode, s) for s in w_s)
 
                     # Feed into the replay buffer
-                    for s, a in zip(w_s, w_a):
-                        replay_buffer.add([s, a])
-                    w_s, w_a = [],[]
+                    for s, a, es in zip(w_s, w_ba, w_es):
+                        replay_buffer.add([s, a, es])
+                    w_s, w_ba, w_es = [],[],[]
 
                 elapsed_time += time.time() - start_t
                 if acted and timestep % 100 == 0:
@@ -547,6 +548,9 @@ if __name__ == "__main__":
     parser.add_argument('--depthmap', default=False, action='store_true',
             dest='depthmap_mode',
             help='Use depth map from sim')
+
+    parser.add_argument('--use-state', default=False, action='store_true',
+            help='Use extra state rather than best action')
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')

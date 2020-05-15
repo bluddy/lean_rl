@@ -15,12 +15,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # We have greyscale, and then one RGB
 
 class LearnAction(object):
-    def __init__(self, state_dim, action_dim, action_steps, stack_size,
+    def __init__(self, use_extra_state, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
-            amp=False, deep=False, dropout=False):
+            amp=False, deep=False, dropout=False, extra_state_dim=9):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.use_extra_state = use_extra_state
+        self.extra_state_dim = extra_state_dim
         self.action_steps = action_steps
         self.deep = deep
         self.dropout = dropout
@@ -40,7 +42,10 @@ class LearnAction(object):
         self.img_dim = img_dim
         self.amp = amp
 
-        self.loss = nn.CrossEntropyLoss()
+        if use_extra_state:
+            self.loss = nn.MSELoss()
+        else:
+            self.loss = nn.CrossEntropyLoss()
 
         self._create_models()
 
@@ -58,7 +63,10 @@ class LearnAction(object):
     def _create_model(self):
         if self.mode == 'image':
             if self.network == 'simple':
-                n = QImage(action_dim=self.total_steps, img_stack=self.total_stack,
+                action_dim = self.total_steps
+                if self.use_extra_state:
+                    action_dim = self.extra_state_dim
+                n = QImage(action_dim=action_dim, img_stack=self.total_stack,
                     bn=self.bn, img_dim=self.img_dim, deep=self.deep,
                     drop=self.dropout).to(device)
             elif self.network == 'densenet':
@@ -165,28 +173,33 @@ class LearnAction(object):
 
         return state
 
-    def _copy_sample_to_dev(self, x, a, batch_size):
+    def _copy_sample_to_dev(self, x, a, es, batch_size):
         x = self._process_state(x)
         a = a.reshape((batch_size, self.action_dim))
         # Convert continuous action to discrete
         a = self._cont_to_discrete(a).reshape((batch_size, -1))
         a = torch.LongTensor(a).to(device)
-        return x, a
+        es = es.reshape((batch_size, -1))
+        es = torch.FloatTensor(es).to(device)
+        return x, a, es
 
     def train(self, replay_buffer, args):
 
         # Sample replay buffer
         #import pdb
         #pdb.set_trace()
-        [x, a] = replay_buffer.sample(args.batch_size)
+        [x, ba, es] = replay_buffer.sample(args.batch_size)
 
         length = len(a)
 
-        state, action = self._copy_sample_to_dev(x, a, length)
+        state, best_action, extra_state = self._copy_sample_to_dev(x, ba, es, length)
 
-        predicted_action = self.model(state)
-
-        loss = self.loss(predicted_action, action.squeeze(-1))
+        if self.use_extra_state:
+            predicted_state = self.model(state)
+            loss = self.loss(predicted_state, extra_state)
+        else:
+            predicted_action = self.model(state)
+            loss = self.loss(predicted_action, action.squeeze(-1))
 
         # debug graph
         '''
@@ -211,17 +224,22 @@ class LearnAction(object):
         return loss.item()
 
     def test(self, replay_buffer, args):
-            [x, a] = replay_buffer.sample(args.batch_size)
-            length = len(a)
+            [x, ba, es] = replay_buffer.sample(args.batch_size)
+            length = len(ba)
 
-            state, action = self._copy_sample_to_dev(x, a, length)
+            state, best_action, extra_state = self._copy_sample_to_dev(x, ba, es, length)
 
-            p = self.model(state)
-            p = F.softmax(p, dim=-1).argmax(dim=-1)
-            a = action.cpu().data.numpy().flatten()
-            p = p.cpu().data.numpy().flatten()
+            x = self.model(state)
 
-            return a, p
+            if self.use_extra_state:
+                x = x.cpu().data.numpy().flatten()
+                y = extra_state.cpu().data.numpy().flatten()
+            else:
+                x = F.softmax(x, dim=-1).argmax(dim=-1)
+                x = x.cpu().data.numpy().flatten()
+                y = best_action.cpu().data.numpy().flatten()
+
+            return y, x
 
     def save(self, path):
         if not os.path.exists(path):
