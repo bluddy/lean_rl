@@ -41,8 +41,6 @@ class DQN(object):
             self.aux_loss = nn.CrossEntropyLoss()
         elif self.aux == 'state':
             self.aux_loss = nn.MSELoss()
-        else:
-            raise InvalidArgument(self.aux)
         self.aux_size = aux_size
 
         self._create_models()
@@ -243,7 +241,9 @@ class DQN(object):
         Q_t = reward + (done * args.discount * Q_t).detach()
 
         # Get current Q estimate
-        Q_now, predicted = self.q(state)
+        Q_now = self.q(state)
+        if self.aux is not None:
+            Q_now, predicted = Q_now
         Q_now = torch.gather(Q_now, -1, action)
 
         # Compute Q loss
@@ -367,7 +367,9 @@ class DDQN(DQN):
             y = reward + (done * args.discount * Qt_max).detach()
 
             # Get current Q estimate
-            Q_now, predicted = update_q(state)
+            Q_now = update_q(state)
+            if self.aux is not None:
+                Q_now, predicted = Q_now
             Q_now = torch.gather(Q_now, -1, action)
 
             # Compute loss
@@ -407,6 +409,19 @@ class DDQN(DQN):
             aux_ret = np.mean(aux_losses)
 
         return np.mean(q_losses), aux_ret, np.mean(Q_mean), np.max(Q_max)
+
+    def test(self, replay_buffer, args):
+            [x, _, _, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
+            length = len(x)
+
+            state, action = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
+
+            _, p = self.qs[0](state)
+            p = F.softmax(p, dim=-1).argmax(dim=-1)
+            a = action.cpu().data.numpy().flatten()
+            p = p.cpu().data.numpy().flatten()
+
+            return a, p
 
     def set_eval(self):
         for q in self.qs:
