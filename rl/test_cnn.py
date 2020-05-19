@@ -28,7 +28,7 @@ from env_wrapper import EnvWrapper
 from policy.learn_action import LearnAction
 
 # Total counts
-total_times, total_loss, total_acc = [],[],[]
+total_times, total_loss, total_measure = [],[],[]
 timestep = 0
 states = []
 w_s, w_ba, w_es = [],[],[]
@@ -61,6 +61,7 @@ def copy_to_dev(action_dim, batch_size, mode, s, a):
     return s, a
 
 def run(args):
+    global w_s, w_ba, w_es
 
     program_start_t = time.time()
 
@@ -94,6 +95,8 @@ def run(args):
             args.env, args.mode[0:2], args.task[:3],
             '_rt' if args.random_env else '')
 
+        print "basename is", basename
+
         suffix = '_'
         if args.random_env:
             suffix += 'r'
@@ -104,6 +107,8 @@ def run(args):
 
         save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
                 args.env, args.task, suffix))
+
+        print "save_mode_path is", save_mode_path
 
     elif args.env == 'atari':
         from env.atari.atari_env import Environment
@@ -247,16 +252,16 @@ def run(args):
 
     action_steps = dummy_env.action_steps
     action_dim = dummy_env.action_dim
+    extra_state_dim = dummy_env.extra_state_dim
 
     img_depth = args.img_depth
     if args.stereo_mode or args.depthmap_mode:
         img_depth *= 2
 
-    model = LearnAction(state_dim, action_dim, action_steps, args.stack_size,
-            args.mode, network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            amp=args.amp,
-            deep=args.deep, dropout=args.dropout)
+    model = LearnAction(args.aux, state_dim, action_dim, action_steps, args.stack_size,
+            args.mode, network=args.network, lr=args.lr,
+            img_dim=args.img_dim, img_depth=img_depth, amp=args.amp,
+            dropout=args.dropout, extra_state_dim=extra_state_dim)
 
     # Load from files if requested
     if args.load_last and last_dir is not None:
@@ -413,24 +418,33 @@ def run(args):
         # Evaluate
         print('\n---------------------------------------')
         print 'Evaluating CNN for ', logdir
-        correct, total = 0, 0
+        test_loss, correct, total = [], 0, 0
         for _ in xrange(args.eval_loops):
 
-            action, predicted_action = policy.test(replay_buffers[1], args)
-            print action, predicted_action, '\n'
-            correct += (action == predicted_action).sum()
-            total += len(action)
+            x, pred_x = model.test(replay_buffers[1], args)
+            #print action, pred_x, '\n'
+            if args.aux == 'action':
+                correct += (x == pred_x).sum()
+                total += len(action)
+            elif args.aux == 'state':
+                loss = (x - pred_x) * (x - pred_x)
+                test_loss.append(loss)
 
-        acc = correct / float(total)
-
-        s = "Eval Accuracy: {:.3f}".format(acc)
+        if args.aux == 'action':
+            measure = correct / float(total)
+            s = "Eval Accuracy: {:.3f}".format(measure)
+            label = 'Accuracy'
+        elif args.aux == 'state':
+            measure = np.mean(test_loss)
+            s = "Eval L2: {:.3f}".format(measure)
+            label = 'L2 Dist'
         print s
         log_f.write(s + '\n')
 
-        total_acc.append(acc)
+        total_measure.append(measure)
 
         fig = plt.figure()
-        plt.plot(total_acc, label='Accuracy')
+        plt.plot(total_measure, label=label)
         plt.savefig(pjoin(logdir, 'acc.png'))
         tb_writer.add_figure('acc', fig, global_step=timestep)
 
@@ -549,8 +563,8 @@ if __name__ == "__main__":
             dest='depthmap_mode',
             help='Use depth map from sim')
 
-    parser.add_argument('--use-state', default=False, action='store_true',
-            help='Use extra state rather than best action')
+    parser.add_argument("--aux", default='state', type=str,
+            help="Auxiliary loss: [state|action]")
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')
@@ -570,6 +584,9 @@ if __name__ == "__main__":
             args.task = 'reach'
         elif args.env == 'needle':
             args.task = '15'
+
+    if args.env == 'sim' and args.task == 'reach':
+        args.random_env = True
 
     assert (args.mode in ['image', 'mixed', 'state'])
     assert (args.network in ['simple', 'densenet'])

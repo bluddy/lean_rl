@@ -87,10 +87,10 @@ class ReplayBuffer(object):
 
         data = self._process_samples(samples)
 
-        # Append columns: idx, w
-        data.extend([None, None])
+        # Append columns: idx
+        data.extend([None])
 
-        return data, 0.
+        return data
 
     def _process_samples(self, data):
         # list of lists of state, next_state etc

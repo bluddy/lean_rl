@@ -15,16 +15,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # We have greyscale, and then one RGB
 
 class LearnAction(object):
-    def __init__(self, use_extra_state, state_dim, action_dim, action_steps, stack_size,
-            mode, network, lr=1e-4, img_depth=3, bn=True, img_dim=224,
-            amp=False, deep=False, dropout=False, extra_state_dim=9):
+    def __init__(self, aux, state_dim, action_dim, action_steps, stack_size,
+            mode, network, lr=1e-4, img_depth=3, img_dim=224,
+            amp=False, dropout=False, extra_state_dim=9):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.use_extra_state = use_extra_state
+        self.aux = aux
         self.extra_state_dim = extra_state_dim
         self.action_steps = action_steps
-        self.deep = deep
+        self.deep = True
+        self.bn = True
         self.dropout = dropout
 
         # odd dims should be centered at 0
@@ -38,11 +39,10 @@ class LearnAction(object):
         self.mode = mode
         self.network = network
         self.lr = lr
-        self.bn = bn
         self.img_dim = img_dim
         self.amp = amp
 
-        if use_extra_state:
+        if aux == 'state':
             self.loss = nn.MSELoss()
         else:
             self.loss = nn.CrossEntropyLoss()
@@ -64,7 +64,7 @@ class LearnAction(object):
         if self.mode == 'image':
             if self.network == 'simple':
                 action_dim = self.total_steps
-                if self.use_extra_state:
+                if self.aux == 'state':
                     action_dim = self.extra_state_dim
                 n = QImage(action_dim=action_dim, img_stack=self.total_stack,
                     bn=self.bn, img_dim=self.img_dim, deep=self.deep,
@@ -190,11 +190,11 @@ class LearnAction(object):
         #pdb.set_trace()
         [x, ba, es] = replay_buffer.sample(args.batch_size)
 
-        length = len(a)
+        length = len(x)
 
         state, best_action, extra_state = self._copy_sample_to_dev(x, ba, es, length)
 
-        if self.use_extra_state:
+        if self.aux == 'state':
             predicted_state = self.model(state)
             loss = self.loss(predicted_state, extra_state)
         else:
@@ -225,13 +225,13 @@ class LearnAction(object):
 
     def test(self, replay_buffer, args):
             [x, ba, es] = replay_buffer.sample(args.batch_size)
-            length = len(ba)
+            length = len(x)
 
             state, best_action, extra_state = self._copy_sample_to_dev(x, ba, es, length)
 
             x = self.model(state)
 
-            if self.use_extra_state:
+            if self.aux == 'state':
                 x = x.cpu().data.numpy().flatten()
                 y = extra_state.cpu().data.numpy().flatten()
             else:

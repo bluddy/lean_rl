@@ -155,7 +155,7 @@ class QImage(BaseImage):
     def forward(self, x):
         x = self.features(x)
         x = self.linear(x)
-        return x, None
+        return x
 
 class QImage2Outs(BaseImage):
     ''' QImage with two outputs coming out of the featres '''
@@ -163,7 +163,7 @@ class QImage2Outs(BaseImage):
         super(QImage2Outs, self).__init__(drop=drop, **kwargs)
 
         bn=True
-        d = 100
+        d = 50
         ll = []
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)
@@ -205,7 +205,7 @@ class QImageDenseNet(nn.Module):
         x = F.adaptive_avg_pool2d(x, (1,1))
         x = torch.flatten(x, 1)
         x = self.classifier(x)
-        return x, None
+        return x
 
 class QMixedDenseNet(QImageDenseNet):
     def __init__(self, action_dim, state_dim, img_stack):
@@ -237,7 +237,7 @@ class QMixedDenseNet(QImageDenseNet):
         x = self.linear1(x)
         y = self.linear2(state)
         z = self.linear3(torch.cat((x, y), dim=-1))
-        return z, None
+        return z
 
 class ActorState(nn.Module):
     def __init__(self, state_dim, action_dim, bn=False):
@@ -322,7 +322,7 @@ class QMixed(BaseImage):
         x = self.linear1(x)
         y = self.linear2(state)
         x = self.linear3(torch.cat((x, y), dim=-1))
-        return x, None
+        return x
 
 class QMixed2(nn.Module):
     def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):

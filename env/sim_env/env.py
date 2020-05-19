@@ -237,6 +237,8 @@ class Environment(common_env.CommonEnv):
 
         self.action_dim = len(self.action_steps)
 
+        self.extra_state_dim = 6
+
         if full_init:
             if not self._connect_to_sim():
                 self._reboot_until_up()

@@ -4,7 +4,7 @@ import torch.nn as nn
 import os, sys, math
 import torch.nn.functional as F
 from os.path import join as pjoin
-from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet
+from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -13,7 +13,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, img_dim=224,
-            amp=False, dropout=False, aux=None):
+            amp=False, dropout=False, aux=None, aux_size=6):
         '''@aux: None/'action'/state' '''
 
         self.state_dim = state_dim
@@ -43,6 +43,7 @@ class DQN(object):
             self.aux_loss = nn.MSELoss()
         else:
             raise InvalidArgument(self.aux)
+        self.aux_size = aux_size
 
         self._create_models()
 
@@ -68,7 +69,8 @@ class DQN(object):
                     if self.aux == 'action':
                         aux_size = self.total_steps
                     elif self.aux == 'state':
-                        aux_size = 9
+                        aux_size = self.aux_size
+
                     n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
                         aux_size=aux_size).to(device)
@@ -195,6 +197,7 @@ class DQN(object):
             extra_state = extra_state.reshape((batch_size, -1))
             extra_state = torch.FloatTensor(extra_state).to(device)
         return x, y, u, r, d, best_action, extra_state
+
     def _copy_sample_to_dev_small(self, x, best_action, extra_state, batch_size):
         x = self._process_state(x)
         best_action = self._cont_to_discrete(best_action).reshape((batch_size, -1))
@@ -206,7 +209,10 @@ class DQN(object):
     def select_action(self, state):
 
         state = self._process_state(state)
-        q = self.q(state)[0]
+        q = self.q(state)
+
+        if self.aux is not None:
+            q = q[0]
 
         # Argmax along action dimension (not batch dim)
         max_action = torch.argmax(q, -1).cpu().data.numpy()
@@ -226,7 +232,9 @@ class DQN(object):
         state, state2, action, reward, done, best_action, extra_state = \
             self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
 
-        Q_ts = self.q_target(state2)[0]
+        Q_ts = self.q_target(state2)
+        if self.aux is not None:
+            Q_ts = Q_ts[0]
         Q_t = torch.max(Q_ts, dim=-1, keepdim=True)[0]
 
         # Compute the target Q value
@@ -288,10 +296,10 @@ class DQN(object):
         return q_loss.item(), a_ret, Q_now.mean().item(), Q_now.max().item()
 
     def test(self, replay_buffer, args):
-            [x, _, _, _, _, best_action, _, _] = replay_buffer.sample(args.batch_size)
-            length = len(best_action)
+            [x, _, _, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
+            length = len(x)
 
-            state, action = self._copy_sample_to_dev_small(x, best_action, length)
+            state, action = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
 
             _, p = self.q(state)
             p = F.softmax(p, dim=-1).argmax(dim=-1)
@@ -325,7 +333,9 @@ class DDQN(DQN):
     def select_action(self, state):
 
         state = self._process_state(state)
-        q = self.qs[0](state)[0]
+        q = self.qs[0](state)
+        if self.aux is not None:
+            q = q[0]
 
         max_action = torch.argmax(q, -1).cpu().data.numpy()
 
@@ -347,7 +357,9 @@ class DDQN(DQN):
             state, state2, action, reward, done, best_action, extra_state = \
                 self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
 
-            Qt = [qt(state2)[0] for qt in self.qts]
+            Qt = [qt(state2) for qt in self.qts]
+            if self.aux is not None:
+                Qt = [q[0] for q in Qt]
             Qt = torch.min(*Qt)
 
             Qt_max, _ = torch.max(Qt, dim=-1, keepdim=True)

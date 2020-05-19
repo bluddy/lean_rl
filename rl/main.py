@@ -26,7 +26,7 @@ from env_wrapper import EnvWrapper
 
 def run(args):
     # Total counts
-    total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_acc = \
+    total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_measure = \
             [],[],[],[],[],[]
 
     last_learn_t, last_eval_t = 0, 0
@@ -73,6 +73,8 @@ def run(args):
         if args.stereo_mode:
             basename += '_s'
         basename += '_' + args.mode[:2]
+        if args.dropout:
+            basename += '_drop'
         basename += '_' + args.task[:3]
 
         suffix = '_'
@@ -247,6 +249,7 @@ def run(args):
 
     action_steps = dummy_env.action_steps
     action_dim = dummy_env.action_dim
+    extra_state_dim = dummy_env.extra_state_dim
 
     img_depth = args.img_depth
     if args.stereo_mode or args.depthmap_mode:
@@ -267,13 +270,13 @@ def run(args):
         policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
-            amp=args.amp, dropout=args.dropout, aux=args.aux)
+            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
-            amp=args.amp, dropout=args.dropout, aux=args.aux)
+            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -478,10 +481,7 @@ def run(args):
 
             # Feed into the replay buffer
             for s1, s2, a, r, d, ba, es, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs):
-                if args.aux_state:
-                    replay_buffer.add([s1, s2, a, r, d, es], num=p)
-                else:
-                    replay_buffer.add([s1, s2, a, r, d, ba], num=p)
+                replay_buffer.add([s1, s2, a, r, d, ba, es], num=p)
             w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
 
         elapsed_time += time.time() - start_t
@@ -533,7 +533,7 @@ def run(args):
                 save_policy(best_path)
             save_policy(model_path)
 
-            test_cnn(policy, replay_buffer, total_times, total_acc, logdir, tb_writer,
+            test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
                     args.eval_loops, log_f, timestep, args)
 
         ## Train
@@ -592,27 +592,36 @@ def run(args):
     csv_f.close()
     log_f.close()
 
-def test_cnn(policy, replay_buffer, total_times, total_acc, logdir, tb_writer, eval_loops, log_f,
+def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer, eval_loops, log_f,
         timestep, args):
     print 'Evaluating CNN for ', logdir
-    correct, total = 0, 0
+    test_loss, correct, total = [], 0, 0
     for _ in xrange(eval_loops):
 
-        action, predicted_action = policy.test(replay_buffer, args)
-        print action, predicted_action, '\n'
-        correct += (action == predicted_action).sum()
-        total += len(action)
+        x, pred_x = policy.test(replay_buffer, args)
+        #print action, predicted_action, '\n'
+        if args.aux == 'action':
+            correct += (x == pred_x).sum()
+            total += len(action)
+        elif args.aux == 'state':
+            loss = (x - pred_x) * (x - pred_x)
+            test_loss.append(loss)
 
-    acc = correct / float(total)
-
-    s = "Eval Accuracy: {:.3f}".format(acc)
+    if args.aux == 'action':
+        measure = correct / float(total)
+        s = "Eval Accuracy: {:.3f}".format(measure)
+        label = 'Accuracy'
+    elif args.aux == 'state':
+        measure = np.mean(test_loss)
+        s = "Eval L2: {:.3f}".format(measure)
+        label = 'L2 Dist'
     print s
     log_f.write(s + '\n')
 
-    total_acc.append(acc)
+    total_measure.append(measure)
 
     fig = plt.figure()
-    plt.plot(total_times, total_acc, label='Accuracy')
+    plt.plot(total_times, total_measure, label=label)
     plt.savefig(pjoin(logdir, 'acc.png'))
     tb_writer.add_figure('acc', fig, global_step=timestep)
 
@@ -820,7 +829,7 @@ if __name__ == "__main__":
         help="Depth of image (1 for grey, 3 for RGB)")
 
     parser.add_argument("--aux", default=None, type=str,
-        help="Auxiliary loss: [state|action]"
+        help="Auxiliary loss: [state|action]")
 
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')
@@ -912,20 +921,15 @@ if __name__ == "__main__":
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
 
-    if args.env == 'sim' and args.task == 'reach':
-        args.random_env = True
-
-    if args.learning_start is None:
-        args.learning_start = args.capacity
-    else:
-        args.learning_start = int(args.learning_start)
-
     # Set default task
     if args.task is None:
         if args.env == 'sim':
             args.task = 'reach'
         elif args.env == 'needle':
             args.task = '15'
+
+    if args.env == 'sim' and args.task == 'reach':
+        args.random_env = True
 
     assert (args.mode in ['image', 'mixed', 'state'])
     assert (args.network in ['simple', 'densenet'])
