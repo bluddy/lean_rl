@@ -533,7 +533,7 @@ def run(args):
                 save_policy(best_path)
             save_policy(model_path)
 
-            if aux is not None:
+            if args.aux is not None:
                 test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
                         args.eval_loops, log_f, timestep, args)
 
