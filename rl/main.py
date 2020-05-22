@@ -599,13 +599,18 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
     test_loss, correct, total = [], 0, 0
     for _ in xrange(eval_loops):
 
+        #import pdb
+        #pdb.set_trace()
+
         x, pred_x = policy.test(replay_buffer, args)
         #print action, predicted_action, '\n'
         if args.aux == 'action':
             correct += (x == pred_x).sum()
             total += len(action)
         elif args.aux == 'state':
-            loss = (x - pred_x) * (x - pred_x)
+            loss = (x - pred_x)
+            loss = loss * loss
+            loss = np.mean(loss)
             test_loss.append(loss)
 
     if args.aux == 'action':

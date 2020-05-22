@@ -163,7 +163,7 @@ class QImage2Outs(BaseImage):
         super(QImage2Outs, self).__init__(drop=drop, **kwargs)
 
         bn=True
-        d = 50
+        d = 100
         ll = []
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)

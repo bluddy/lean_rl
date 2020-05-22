@@ -202,7 +202,7 @@ class DQN(object):
         best_action = torch.LongTensor(best_action).to(device)
         extra_state = extra_state.reshape((batch_size, -1))
         extra_state = torch.FloatTensor(extra_state).to(device)
-        return x, best_action
+        return x, best_action, extra_state
 
     def select_action(self, state):
 
@@ -299,14 +299,18 @@ class DQN(object):
             [x, _, _, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
             length = len(x)
 
-            state, action = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
+            state, action, extra_state = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
 
-            _, p = self.q(state)
-            p = F.softmax(p, dim=-1).argmax(dim=-1)
-            a = action.cpu().data.numpy().flatten()
-            p = p.cpu().data.numpy().flatten()
+            _, predict = self.q(state)
+            if self.aux == 'action':
+                predict = F.softmax(predict, dim=-1).argmax(dim=-1)
+                y = action.cpu().data.numpy()
+            elif self.aux == 'state':
+                y = extra_state.cpu().data.numpy()
 
-            return a, p
+            predict = predict.cpu().data.numpy()
+
+            return y, predict
 
     def save(self, path):
         torch.save(self.q.state_dict(), os.path.join(path, 'q.pth'))
@@ -414,14 +418,18 @@ class DDQN(DQN):
             [x, _, _, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
             length = len(x)
 
-            state, action = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
+            state, action, extra_state = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
 
-            _, p = self.qs[0](state)
-            p = F.softmax(p, dim=-1).argmax(dim=-1)
-            a = action.cpu().data.numpy().flatten()
-            p = p.cpu().data.numpy().flatten()
+            _, predict = self.qs[0](state)
+            if self.aux == 'action':
+                predict = F.softmax(predict, dim=-1).argmax(dim=-1)
+                y = action.cpu().data.numpy()
+            elif self.aux == 'state':
+                y = extra_state.cpu().data.numpy()
 
-            return a, p
+            predict = predict.cpu().data.numpy()
+
+            return y, predict
 
     def set_eval(self):
         for q in self.qs:

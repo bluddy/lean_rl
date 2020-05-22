@@ -29,7 +29,7 @@ def norm_angle_between(v1, v2):
 class Reward_reach_v0(object):
     def __init__(self, env):
         self.env = env
-        self.dist_epsilon = 0.025
+        self.dist_epsilon = 0.03
 
     def reset(self):
         ''' Called from the env reset function '''
