@@ -159,11 +159,13 @@ class QImage(BaseImage):
 
 class QImage2Outs(BaseImage):
     ''' QImage with two outputs coming out of the featres '''
-    def __init__(self, action_dim, aux_size, drop=False, **kwargs):
+    def __init__(self, action_dim, aux_size, drop=False, reduced_dim=100, **kwargs):
         super(QImage2Outs, self).__init__(drop=drop, **kwargs)
 
+        print "QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+
         bn=True
-        d = 100
+        d = reduced_dim
         ll = []
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)

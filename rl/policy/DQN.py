@@ -13,7 +13,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, img_dim=224,
-            amp=False, dropout=False, aux=None, aux_size=6):
+            amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=100):
         '''@aux: None/'action'/state' '''
 
         self.state_dim = state_dim
@@ -35,6 +35,7 @@ class DQN(object):
         self.bn = True
         self.img_dim = img_dim
         self.amp = amp
+        self.reduced_dim = reduced_dim
 
         self.aux = aux
         if self.aux == 'action':
@@ -71,7 +72,7 @@ class DQN(object):
 
                     n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                        aux_size=aux_size).to(device)
+                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
             elif self.network == 'densenet':
                 n = QImageDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack).to(device)

@@ -270,13 +270,15 @@ def run(args):
         policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
-            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim)
+            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
+            reduced_dim=args.reduced_dim)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
-            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim)
+            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
+            reduced_dim=args.reduced_dim)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -836,6 +838,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--aux", default=None, type=str,
         help="Auxiliary loss: [state|action]")
+    parser.add_argument("--reduced-dim", default = 100, type=int,
+            help="Bottleneck for neural network (default:100)")
 
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')
