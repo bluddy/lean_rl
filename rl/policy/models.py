@@ -19,7 +19,7 @@ def make_linear(in_size, out_size, bn=False, drop=False, relu=True):
     if bn:
         l.append(nn.BatchNorm1d(out_size))
     if drop:
-        l.append(nn.Dropout(p=0.2))
+        l.append(nn.Dropout(p=0.1))
     return l
 
 def hidden_init(layer):
