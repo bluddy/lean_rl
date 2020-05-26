@@ -68,6 +68,8 @@ shared_path = "/H3D"
 SHARED_VAR_NUM = 3  # Variables before array
 SHARED_VAR_SIZE = SHARED_VAR_NUM * 4  # size of variables
 
+e24 = int(pow(2, 24))
+
 class State(object):
     def __init__(self):
         pass
@@ -302,6 +304,7 @@ class Environment(common_env.CommonEnv):
         self.resolution = (width, height)
         #print "XXX width = ", width, "height = ", height # debug
 
+        # DEBUG
         #from rl.utils import ForkablePdb
         #ForkablePdb().set_trace()
 
@@ -311,6 +314,14 @@ class Environment(common_env.CommonEnv):
         depth = np.ctypeslib.as_array(self.shared_depth)
         depth = np.reshape(depth, (height, width, 1))
         depth = np.flipud(depth)
+        '''
+        depth *= e24
+        depth = depth.astype(int)
+        depth2 = np.zeros((height, width, 3), dtype=np.uint8)
+        depth2[:,:,0] = depth[:, :] & 0xFF
+        depth2[:,:,1] = (depth[:, :] >> 8) & 0xFF
+        depth2[:,:,2] = (depth[:, :] >> 16) & 0xFF
+        '''
 
         if save_img:
             scipy.misc.imsave('./img{}_{}.png'.format(
