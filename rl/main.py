@@ -629,7 +629,7 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
     total_measure.append(measure)
 
     fig = plt.figure()
-    plt.plot(total_times, total_measure, label=label)
+    plt.plot(total_measure, label=label)
     plt.savefig(pjoin(logdir, 'acc.png'))
     tb_writer.add_figure('acc', fig, global_step=timestep)
 
