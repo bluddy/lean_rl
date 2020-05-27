@@ -312,23 +312,21 @@ class Environment(common_env.CommonEnv):
         rgb = np.reshape(rgb, (height, width, 3))
         rgb = np.flipud(rgb)
         depth = np.ctypeslib.as_array(self.shared_depth)
-        depth = np.reshape(depth, (height, width, 1))
+        depth = np.reshape(depth, (height, width))
         depth = np.flipud(depth)
-        '''
         depth *= e24
         depth = depth.astype(int)
         depth2 = np.zeros((height, width, 3), dtype=np.uint8)
         depth2[:,:,0] = depth[:, :] & 0xFF
         depth2[:,:,1] = (depth[:, :] >> 8) & 0xFF
         depth2[:,:,2] = (depth[:, :] >> 16) & 0xFF
-        '''
 
         if save_img:
             scipy.misc.imsave('./img{}_{}.png'.format(
               self.server_num, self.img_count), arr)
             self.img_count += 1
 
-        return rgb, depth
+        return rgb, depth2
 
     def _init_shared_mem(self):
         # open shared mem
@@ -497,9 +495,19 @@ class Environment(common_env.CommonEnv):
         cropy = [int(self.resolution[1] * y[0]), int(self.resolution[1] * y[1]) + 1]
         image = image[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
-        # Always save hires, stereo
-        w, h = self._get_width_height(hires=True, stereo=True)
-        self.image = scipy.misc.imresize(image, (h, w))
+        if self.depthmap_mode:
+            # Crop depth to just the left image
+            x = [0., 0.5]
+            cropx = [int(self.resolution[0] * x[0]), int(self.resolution[0] * x[1]) + 1]
+            depth = depth[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
+
+            #self._save_img(depth) # debug
+
+            image = np.concatenate([image, depth], axis=1)
+
+        #w, h = self._get_width_height(hires=True, stereo=True, depth=depthmap_mode)
+        #self.image = scipy.misc.imresize(image, (h,w), interp='nearest')
+        self.image = image
 
         event = self.last_event
         self.last_event = None
@@ -540,14 +548,21 @@ class Environment(common_env.CommonEnv):
 
     def _get_env_state(self):
         image = self.image
-        # Resize to non-hires, but possibly stereo
-        w, h = self._get_width_height(hires=False, stereo=True)
-        image = scipy.misc.imresize(self.image, (h, w))
-        if self.stereo_mode:
-            # Process stereo into 6 layers
-            # h = w / 2
+        # Resize to non-hires
+        w, h = self._get_width_height(hires=False, stereo=True, depth=self.depthmap_mode)
+        image = scipy.misc.imresize(self.image, (h, w), interp='nearest')
+        if self.depthmap_mode:
+            # Process depthmap_mode into 6 layers
+            # We'll later stitch it into 4
+            # h = w / 3
             image_l = image[:, :h, :]
-            image_r = image[:, h:, :]
+            depth = image[:, (h*2):, :]
+            image = np.concatenate([image_l, depth], axis=2)
+        elif self.stereo_mode:
+            # Process stereo into 6 layers
+            # h = w / 3
+            image_l = image[:, :h, :]
+            image_r = image[:, h:(h*2), :]
             image = np.concatenate([image_l, image_r], axis=2)
         else:
             image = image[:, :h, :]
@@ -706,9 +721,13 @@ class Environment(common_env.CommonEnv):
                 good = False
             self.error_ctr += 1
 
-    def _get_width_height(self, hires=False, stereo=False):
+    def _get_width_height(self, hires=False, stereo=False, depth=False):
         img_dim = self.img_dim * 2 if hires else self.img_dim
-        w = img_dim * 2 if stereo else img_dim
+        w = img_dim
+        if stereo and depth:
+          w *= 3
+        elif stereo or depth:
+          w *= 2
         h = img_dim
         return w, h
 
@@ -724,7 +743,7 @@ class Environment(common_env.CommonEnv):
         self.last_state = None
         self.image = None
 
-        w, h = self._get_width_height(hires=True, stereo=True)
+        w, h = self._get_width_height(hires=True, stereo=True, depth=self.depthmap_mode)
         if not self._reset_try_play(w, h):
             self._reset_real()
 
