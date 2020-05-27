@@ -185,6 +185,8 @@ class DQN(object):
 
                 # debug
                 #plt.imsave('./depth_test.png', depth.squeeze()) # debug
+                #debug_img = img[0, :3, :, :].transpose((1,2,0))
+                #plt.imsave('./img_test.png', debug_img)
 
                 depth = torch.from_numpy(depth).to(device)
                 # Add onto state
@@ -194,6 +196,8 @@ class DQN(object):
 
                 #depth[0,0,0,0] = 0. #debug vs broadcasting
                 img[:,3,:,:] = depth[:,0,:,:] # Overwrite with depth
+
+
             else:
                 img = torch.from_numpy(img).to(device).float()
                 img /= 255.0
