@@ -495,19 +495,20 @@ class Environment(common_env.CommonEnv):
         cropy = [int(self.resolution[1] * y[0]), int(self.resolution[1] * y[1]) + 1]
         image = image[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
+        w, h = self._get_width_height(hires=True, stereo=True, depth=False)
+        self.image = scipy.misc.imresize(image, (h,w))
+
         if self.depthmap_mode:
             # Crop depth to just the left image
             x = [0., 0.5]
             cropx = [int(self.resolution[0] * x[0]), int(self.resolution[0] * x[1]) + 1]
             depth = depth[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
-            #self._save_img(depth) # debug
+            # no interpolation on depth
+            w, h = self._get_width_height(hires=True, stereo=False, depth=False)
+            depth = scipy.misc.imresize(depth, (h,w), interp='nearest') 
 
-            image = np.concatenate([image, depth], axis=1)
-
-        #w, h = self._get_width_height(hires=True, stereo=True, depth=depthmap_mode)
-        #self.image = scipy.misc.imresize(image, (h,w), interp='nearest')
-        self.image = image
+            self.image = np.concatenate([self.image, depth], axis=1)
 
         event = self.last_event
         self.last_event = None
