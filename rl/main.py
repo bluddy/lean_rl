@@ -929,7 +929,7 @@ if __name__ == "__main__":
     args.policy = args.policy.lower()
     args.env = args.env.lower()
     # Image mode requires batchnorm
-    args.batchnorm = True if args.mode in ['image', 'mixed'] else args.batchnorm
+    args.batchnorm = True
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
 
