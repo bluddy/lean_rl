@@ -5,21 +5,26 @@ import os, sys, math
 import torch.nn.functional as F
 from os.path import join as pjoin
 from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # DQN
 
+e24 = pow(2,24)
+
 class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, img_dim=224,
-            amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=100):
+            amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=100,
+            depthmap_mode=False):
         '''@aux: None/'action'/state' '''
 
         self.state_dim = state_dim
         self.env_action_dim = action_dim
         self.action_steps = action_steps
         self.dropout = dropout
+        self.depthmap_mode = depthmap_mode
 
         # odd dims should be centered at 0
         odd_dims = action_steps % 2 == 1
@@ -158,20 +163,50 @@ class DQN(object):
         return cont3
 
     def _process_state(self, state):
+
+        def handle_img(img):
+
+            if img.ndim < 4:
+                img = np.expand_dims(img, 0)
+            if self.depthmap_mode:
+
+                # unswizzle depth
+                shape = img.shape
+                depth = np.zeros((shape[0], 3, shape[2], shape[3]), dtype=np.int32)
+                depth[:,0,:,:] = img[:,3,:,:]
+                depth[:,1,:,:] = img[:,4,:,:]
+                depth[:,2,:,:] = img[:,5,:,:]
+                depth[:,0,:,:] |= depth[:,1,:,:] << 8
+                depth[:,0,:,:] |= depth[:,2,:,:] << 16
+                depth = depth[:,0,:,:]
+                depth = np.expand_dims(depth, 1)
+                depth = depth.astype(np.float32)
+                depth /= e24
+
+                # debug
+                #plt.imsave('./depth_test.png', depth.squeeze()) # debug
+
+                depth = torch.from_numpy(depth).to(device)
+                # Add onto state
+                img = img[:,:4,:,:] # Only 4 dims
+                img = torch.from_numpy(img).to(device).float()
+                img /= 255.0
+
+                #depth[0,0,0,0] = 0. #debug vs broadcasting
+                img[:,3,:,:] = depth[:,0,:,:] # Overwrite with depth
+            else:
+                img = torch.from_numpy(img).to(device).float()
+                img /= 255.0
+            return img
+
         # Copy as uint8
         if self.mode == 'image':
-            if state.ndim < 4:
-                state = np.expand_dims(state, 0)
-            state = torch.from_numpy(state).to(device).float() # possibly missing squeeze(1)
-            state /= 255.0
+            state = handle_img(state)
         elif self.mode == 'state':
             state = torch.from_numpy(state).to(device).float()
         elif self.mode == 'mixed':
             img = state[0]
-            if img.ndim < 4:
-                img = np.expand_dims(img, 0)
-            img = torch.from_numpy(img).to(device).float()
-            img /= 255.0
+            img = handle_img(img)
             state2 = torch.from_numpy(state[1]).to(device).float()
             state = (img, state2)
         else:

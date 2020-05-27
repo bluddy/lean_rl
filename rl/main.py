@@ -252,7 +252,9 @@ def run(args):
     extra_state_dim = dummy_env.extra_state_dim
 
     img_depth = args.img_depth
-    if args.stereo_mode or args.depthmap_mode:
+    if args.depthmap_mode:
+        img_depth += 1
+    elif args.stereo_mode:
         img_depth *= 2
 
     if args.policy == 'td3':
@@ -271,14 +273,14 @@ def run(args):
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            reduced_dim=args.reduced_dim)
+            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            reduced_dim=args.reduced_dim)
+            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -931,6 +933,7 @@ if __name__ == "__main__":
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
 
+
     # Set default task
     if args.task is None:
         if args.env == 'sim':
@@ -941,6 +944,7 @@ if __name__ == "__main__":
     if args.env == 'sim' and args.task == 'reach':
         args.random_env = True
 
+    assert not (args.depthmap_mode and args.stereo_mode)
     assert (args.mode in ['image', 'mixed', 'state'])
     assert (args.network in ['simple', 'densenet'])
 
