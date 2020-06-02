@@ -158,25 +158,31 @@ class QImage(BaseImage):
         return x
 
 class QImage2Outs(BaseImage):
-    ''' QImage with two outputs coming out of the featres '''
-    def __init__(self, action_dim, aux_size, drop=False, reduced_dim=100, **kwargs):
+    ''' QImage with two outputs coming out of the featres
+        Use state shape of QState
+    '''
+    def __init__(self, action_dim, aux_size, drop=False, reduced_dim=10, **kwargs):
         super(QImage2Outs, self).__init__(drop=drop, **kwargs)
 
         print "QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
 
         bn=True
         d = reduced_dim
+
         ll = []
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)
 
         ll = []
-        ll.extend(make_linear(d, action_dim, bn=False, drop=False, relu=False))
+        ll.extend(make_linear(d, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
+        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
         self.linear1 = nn.Sequential(*ll)
 
         ll = []
         ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
         self.linear2 = nn.Sequential(*ll)
+
 
     def forward(self, x):
         x = self.features(x)

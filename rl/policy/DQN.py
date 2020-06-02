@@ -16,7 +16,7 @@ e24 = pow(2,24)
 class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, img_dim=224,
-            amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=100,
+            amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=10,
             depthmap_mode=False):
         '''@aux: None/'action'/state' '''
 
