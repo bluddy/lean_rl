@@ -183,6 +183,12 @@ class QImage2Outs(BaseImage):
         ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
         self.linear2 = nn.Sequential(*ll)
 
+    def freeze_some(self, frozen):
+        for p in self.linear.parameters():
+            p.requires_grad = not frozen
+        for p in self.features.parameters():
+            p.requires_grad = not frozen
+
 
     def forward(self, x):
         x = self.features(x)

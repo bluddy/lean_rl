@@ -292,13 +292,18 @@ class DQN(object):
         prios = prios.data.cpu().numpy()
         q_loss = q_loss.mean()
 
-        if self.aux is None:
-            loss = q_loss
-        else:
+        if self.aux is not None:
             compare_to = best_action if self.aux == 'action' else extra_state
             aux_loss = self.aux_loss(predicted, compare_to)
+            aux_losses.append(aux_loss.item())
 
-            loss = q_loss + aux_loss
+            self.q.freeze_some(False)
+
+            self.q_optimizer.zero_grad()
+            aux_loss.backward()
+            self.q_optimizer.step()
+
+            self.q.freeze_some(True) # Only backprop last layers
 
         # debug graph
         '''
@@ -313,10 +318,10 @@ class DQN(object):
         self.q_optimizer.zero_grad()
 
         if self.amp:
-            with amp.scale_loss(loss, self.q_optimizer) as scaled_loss:
+            with amp.scale_loss(q_loss, self.q_optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            loss.backward()
+            q_loss.backward()
 
         if args.clip_grad is not None:
             nn.utils.clip_grad_value_(self.q.parameters(), args.clip_grad)
@@ -401,6 +406,21 @@ class DDQN(DQN):
             state, state2, action, reward, done, best_action, extra_state = \
                 self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
 
+            if self.aux is not None:
+                update_q.freeze_some(False)
+
+                _, predicted = update_q(state)
+                compare_to = best_action if self.aux == 'action' else extra_state
+                aux_loss = self.aux_loss(predicted, compare_to)
+                aux_losses.append(aux_loss.item())
+
+                opt.zero_grad()
+                aux_loss.backward()
+                opt.step()
+
+                update_q.freeze_some(True) # Only backprop last layers
+
+
             Qt = [qt(state2) for qt in self.qts]
             if self.aux is not None:
                 Qt = [q[0] for q in Qt]
@@ -413,38 +433,26 @@ class DDQN(DQN):
             # Get current Q estimate
             Q_now = update_q(state)
             if self.aux is not None:
-                Q_now, predicted = Q_now
+                Q_now, _ = Q_now
             Q_now = torch.gather(Q_now, -1, action)
 
             # Compute loss
             q_loss = (Q_now - y).pow(2)
             prios = q_loss + 1e-5
             prios = prios.data.cpu().numpy()
+            replay_buffer.update_priorities(indices, prios)
             q_loss = q_loss.mean()
-
-            if self.aux is None:
-                loss = q_loss
-            else:
-                compare_to = best_action if self.aux == 'action' else extra_state
-                aux_loss = self.aux_loss(predicted, compare_to)
-                aux_losses.append(aux_loss.item())
-
-                loss = q_loss + aux_loss
-
 
             # Optimize the model
             opt.zero_grad()
-            loss.backward()
-
+            q_loss.backward()
             opt.step()
-
-            replay_buffer.update_priorities(indices, prios)
 
             # Update the frozen target models
             for p, pt in zip(update_q.parameters(), update_qt.parameters()):
                 pt.data.copy_(args.tau * p.data + (1 - args.tau) * pt.data)
 
-            q_losses.append(loss.item())
+            q_losses.append(q_loss.item())
             Q_mean.append(Q_now.mean().item())
             Q_max.append(Q_now.max().item())
 
