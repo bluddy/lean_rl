@@ -292,13 +292,18 @@ class DQN(object):
         prios = prios.data.cpu().numpy()
         q_loss = q_loss.mean()
 
-        if self.aux is None:
-            loss = q_loss
-        else:
+        if self.aux is not None:
             compare_to = best_action if self.aux == 'action' else extra_state
             aux_loss = self.aux_loss(predicted, compare_to)
+            aux_losses.append(aux_loss.item())
 
-            loss = q_loss + aux_loss
+            self.q.freeze_some(False)
+
+            self.q_optimizer.zero_grad()
+            aux_loss.backward()
+            self.q_optimizer.step()
+
+            self.q.freeze_some(True) # Only backprop last layers
 
         # debug graph
         '''
@@ -313,10 +318,10 @@ class DQN(object):
         self.q_optimizer.zero_grad()
 
         if self.amp:
-            with amp.scale_loss(loss, self.q_optimizer) as scaled_loss:
+            with amp.scale_loss(q_loss, self.q_optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            loss.backward()
+            q_loss.backward()
 
         if args.clip_grad is not None:
             nn.utils.clip_grad_value_(self.q.parameters(), args.clip_grad)
@@ -422,19 +427,23 @@ class DDQN(DQN):
             prios = prios.data.cpu().numpy()
             q_loss = q_loss.mean()
 
-            if self.aux is None:
-                loss = q_loss
-            else:
+            if self.aux is not None:
                 compare_to = best_action if self.aux == 'action' else extra_state
                 aux_loss = self.aux_loss(predicted, compare_to)
                 aux_losses.append(aux_loss.item())
 
-                loss = q_loss + aux_loss
+                update_q.freeze_some(False)
+
+                opt.zero_grad()
+                aux_loss.backward()
+                opt.step()
+
+                update_q.freeze_some(True) # Only backprop last layers
 
 
             # Optimize the model
             opt.zero_grad()
-            loss.backward()
+            q_loss.backward()
 
             opt.step()
 
@@ -444,7 +453,7 @@ class DDQN(DQN):
             for p, pt in zip(update_q.parameters(), update_qt.parameters()):
                 pt.data.copy_(args.tau * p.data + (1 - args.tau) * pt.data)
 
-            q_losses.append(loss.item())
+            q_losses.append(q_loss.item())
             Q_mean.append(Q_now.mean().item())
             Q_max.append(Q_now.max().item())
 
