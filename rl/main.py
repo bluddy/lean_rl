@@ -162,6 +162,10 @@ def run(args):
     csv_f = open(pjoin(logdir, 'log.csv'), 'w')
     csv_wr = csv.writer(csv_f, delimiter=',')
 
+    if args.aux is not None:
+        csv_aux_f = open(pjoin(logdir, 'log_aux.csv'), 'w')
+        csv_aux = csv.writer(csv_aux_f, delimiter=',')
+
     ## dump args to file
     log_f.write(str(args))
     log_f.write('\n')
@@ -539,7 +543,7 @@ def run(args):
 
             if args.aux is not None:
                 test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
-                        args.eval_loops, log_f, timestep, args)
+                        args.eval_loops, log_f, timestep, csv_aux, args)
 
         ## Train
         if warmup_t <= 0 and \
@@ -598,7 +602,7 @@ def run(args):
     log_f.close()
 
 def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer, eval_loops, log_f,
-        timestep, args):
+        timestep, csv_aux, args):
     print 'Evaluating CNN for ', logdir
     test_loss, correct, total = [], 0, 0
     for _ in xrange(eval_loops):
@@ -607,6 +611,8 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         #pdb.set_trace()
 
         x, pred_x = policy.test(replay_buffer, args)
+        csv_aux.writerow(x)
+        csv_aux.writerow(pred_x)
         #print action, predicted_action, '\n'
         if args.aux == 'action':
             correct += (x == pred_x).sum()
