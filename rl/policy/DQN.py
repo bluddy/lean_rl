@@ -443,20 +443,6 @@ class DDQN(DQN):
             replay_buffer.update_priorities(indices, prios)
             q_loss = q_loss.mean()
 
-            if self.aux is not None:
-                compare_to = best_action if self.aux == 'action' else extra_state
-                aux_loss = self.aux_loss(predicted, compare_to)
-                aux_losses.append(aux_loss.item())
-
-                update_q.freeze_some(False)
-
-                opt.zero_grad()
-                aux_loss.backward()
-                opt.step()
-
-                update_q.freeze_some(True) # Only backprop last layers
-
-
             # Optimize the model
             opt.zero_grad()
             q_loss.backward()
