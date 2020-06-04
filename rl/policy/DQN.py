@@ -47,6 +47,9 @@ class DQN(object):
             self.aux_loss = nn.CrossEntropyLoss()
         elif self.aux == 'state':
             self.aux_loss = nn.MSELoss()
+            self.aux_model = QImage(action_dim=10, img_stack=self.total_stack,
+                        bn=self.bn, img_dim=self.img_dim,
+                        drop=self.dropout).to(device)
         self.aux_size = aux_size
 
         self._create_models()
@@ -75,9 +78,12 @@ class DQN(object):
                     elif self.aux == 'state':
                         aux_size = self.aux_size
 
-                    n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
-                        bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    n = QState(state_dim=10, action_dim=self.total_steps,
+                            bn=self.bn, drop=self.dropout).to(device)
+
+                    #n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
+                    #    bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                    #    aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
             elif self.network == 'densenet':
                 n = QImageDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack).to(device)
@@ -247,10 +253,8 @@ class DQN(object):
     def select_action(self, state):
 
         state = self._process_state(state)
-        q = self.q(state)
-
-        if self.aux is not None:
-            q = q[0]
+        s2 = self.aux_model(state)
+        q = self.q(s2)
 
         # Argmax along action dimension (not batch dim)
         max_action = torch.argmax(q, -1).cpu().data.numpy()
@@ -269,6 +273,9 @@ class DQN(object):
 
         state, state2, action, reward, done, best_action, extra_state = \
             self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
+
+        state = self.aux_model(state)
+        state2 = self.aux_model(state2)
 
         Q_ts = self.q_target(state2)
         if self.aux is not None:
