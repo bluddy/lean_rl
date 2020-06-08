@@ -17,7 +17,7 @@ class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, img_dim=224,
             amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=10,
-            depthmap_mode=False):
+            depthmap_mode=False, freeze=False):
         '''@aux: None/'action'/state' '''
 
         self.state_dim = state_dim
@@ -297,13 +297,15 @@ class DQN(object):
             aux_loss = self.aux_loss(predicted, compare_to)
             aux_losses.append(aux_loss.item())
 
-            self.q.freeze_some(False)
+            if self.freeze:
+                self.q.freeze_some(False)
 
             self.q_optimizer.zero_grad()
             aux_loss.backward()
             self.q_optimizer.step()
 
-            self.q.freeze_some(True) # Only backprop last layers
+            if self.freeze:
+                self.q.freeze_some(True) # Only backprop last layers
 
         # debug graph
         '''
@@ -407,7 +409,8 @@ class DDQN(DQN):
                 self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
 
             if self.aux is not None:
-                update_q.freeze_some(False)
+                if self.freeze:
+                    update_q.freeze_some(False)
 
                 _, predicted = update_q(state)
                 compare_to = best_action if self.aux == 'action' else extra_state
@@ -418,7 +421,8 @@ class DDQN(DQN):
                 aux_loss.backward()
                 opt.step()
 
-                update_q.freeze_some(True) # Only backprop last layers
+                if self.freeze:
+                    update_q.freeze_some(True) # Only backprop last layers
 
 
             Qt = [qt(state2) for qt in self.qts]

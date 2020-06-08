@@ -277,14 +277,15 @@ def run(args):
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode)
+            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode)
+            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode,
+            freeze=args.freeze)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -611,8 +612,8 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         #pdb.set_trace()
 
         x, pred_x = policy.test(replay_buffer, args)
-        csv_aux.writerow(x)
-        csv_aux.writerow(pred_x)
+        #csv_aux.writerow(x) # debug, takes up a lot of space
+        #csv_aux.writerow(pred_x)
         #print action, predicted_action, '\n'
         if args.aux == 'action':
             correct += (x == pred_x).sum()
@@ -837,6 +838,7 @@ if __name__ == "__main__":
         help="Choose [simple|densenet]")
     parser.add_argument("--dropout", default = False,
         action='store_true', help="Choose whether to use dropout")
+
     parser.add_argument("--deep", default = False,
         action='store_true', help="Use a deeper NN")
     parser.add_argument("--img-dim", default = 224, type=int,
@@ -923,6 +925,8 @@ if __name__ == "__main__":
     parser.add_argument('--depthmap', default=False, action='store_true',
             dest='depthmap_mode',
             help='Use depth map from sim')
+    parser.add_argument('--freeze', default=False, action='store_true',
+            help='Freeze the models halfway')
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')

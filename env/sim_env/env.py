@@ -540,7 +540,9 @@ class Environment(common_env.CommonEnv):
         return np.reshape(diff, (3,))
 
     def _get_extra_state(self):
-        ''' Get extra state for aux loss '''
+        ''' Get extra state for aux loss
+            Make sure to normalize!
+        '''
         nt = self.state.needle_tip_pos
         nt -= np.array([-0.02, -0.47, -10.82])
         nt /= np.array([0.12, 0.06, 0.08])
