@@ -506,7 +506,7 @@ class Environment(common_env.CommonEnv):
 
             # no interpolation on depth
             w, h = self._get_width_height(hires=True, stereo=False, depth=False)
-            depth = scipy.misc.imresize(depth, (h,w), interp='nearest') 
+            depth = scipy.misc.imresize(depth, (h,w), interp='nearest')
 
             self.image = np.concatenate([self.image, depth], axis=1)
 
@@ -541,9 +541,15 @@ class Environment(common_env.CommonEnv):
 
     def _get_extra_state(self):
         ''' Get extra state for aux loss '''
+        nt = self.state.needle_tip_pos
+        nt -= np.array([-0.02, -0.47, -10.82])
+        nt /= np.array([0.12, 0.06, 0.08])
+        tar = self.state.cur_target_pos
+        tar -= np.array([-0.18, -0.59, -10.71])
+        tar /= np.array([0.17, 0.11, 0.13])
         return np.concatenate([
-            self.state.needle_tip_pos.reshape((1, -1)),
-            self.state.cur_target_pos.reshape((1, -1)),
+          nt.reshape((1, -1)),
+          tar.reshape((1, -1))
         ], axis=-1)
 
 

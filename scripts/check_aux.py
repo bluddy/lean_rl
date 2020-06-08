@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+''' Parse the csv files for auxiliary losses and get their stats
+    for normalization
+'''
 
 import os
 import argparse
