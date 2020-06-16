@@ -41,6 +41,7 @@ class DQN(object):
         self.img_dim = img_dim
         self.amp = amp
         self.reduced_dim = reduced_dim
+        self.freeze = freeze
 
         self.aux = aux
         if self.aux == 'action':
@@ -54,7 +55,7 @@ class DQN(object):
         if self.amp:
             import amp
 
-        print "LR=", lr
+        print "LR=", lr, "freeze=", freeze
 
     def set_eval(self):
         self.q.eval()
