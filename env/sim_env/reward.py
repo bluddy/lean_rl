@@ -273,7 +273,7 @@ class Reward_suture_simple(object):
                     if tstatus == 0:
                         reward += d
                     else:
-                        reward += d * 10
+                        reward += d * 100 # was 10
                     reward_txt += "delta: {:.3f}".format(d)
                     #print "ts=ls, r={}, d={}".format(reward, dist) #debug
                 else:
