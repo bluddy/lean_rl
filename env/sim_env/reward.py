@@ -220,7 +220,10 @@ class Reward_suture_simple(object):
         if tstatus == 0:
             dist = self._needle_to_target_d()
         elif tstatus == 1:
-            dist = self._needle_to_target_d(src=-1, dst=0)
+            # I think it makes more sense to minimize dist to avg of both distances
+            dist1 = self._needle_to_target_d(src=-1, dst=0)
+            dist2 = self._needle_to_target_d(src=0, dst=1)
+            dist = dist1 + dist2
         elif tstatus == 2:
             dist = -self._needle_to_target_d(src=0, dst=1)
         elif tstatus == 3:
@@ -270,6 +273,9 @@ class Reward_suture_simple(object):
                 elif tstatus == last_tstatus:
                     # Check for change of dist
                     d = self.last_dist - dist
+                    # Make negative moves worse
+                    if d < 0:
+                        d *= 2
                     if tstatus == 0:
                         reward += d
                     else:
