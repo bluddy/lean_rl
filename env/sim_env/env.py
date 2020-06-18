@@ -427,19 +427,19 @@ class Environment(common_env.CommonEnv):
                   self.episode, self.reward.last_dist)
 
             if self.task == 'reach':
-                reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                reward_s += ' n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
                     n[0], n[1], n[2], t[0], t[1], t[2])
 
             elif self.task == 'suture':
                 if self.reward_type == 'v1':
-                    reward_s += 'ai:{:.2f}, di:{:.2f}'.format(
+                    reward_s += ' ai:{:.2f}, di:{:.2f}'.format(
                         float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal))
                 reward_s += 'ns:{}, ts:{}, {}'.format(
                     self.state.needle_insert_status, self.state.target_insert_status,
                     text)
                 n = self.state.needle_tip_pos
                 t = self.state.cur_target_pos
-                reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                reward_s += ' n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
                     n[0], n[1], n[2], t[0], t[1], t[2])
 
                 reward_s += ' ' + self.reward_txt
