@@ -434,7 +434,7 @@ class Environment(common_env.CommonEnv):
                 if self.reward_type == 'v1':
                     reward_s += ' ai:{:.2f}, di:{:.2f}'.format(
                         float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal))
-                reward_s += 'ns:{}, ts:{}, {}'.format(
+                reward_s += ' ns:{}, ts:{}, {}'.format(
                     self.state.needle_insert_status, self.state.target_insert_status,
                     text)
                 n = self.state.needle_tip_pos
