@@ -171,12 +171,14 @@ class Reward_suture_simple(object):
             reward -= 2.
 
         # Check for collisions
+        '''
         if ls is not None and \
             (ls.instr_collisions < ss.instr_collisions or \
             ls.instr_endo_collisions < ss.instr_endo_collisions):
               reward -= 2.
               reward_txt = "Instr collision!"
               done = True
+        '''
 
         # check for errors
         if ss.error:
@@ -223,7 +225,7 @@ class Reward_suture_simple(object):
             # I think it makes more sense to minimize dist to avg of both distances
             dist1 = self._needle_to_target_d(src=-1, dst=0)
             dist2 = self._needle_to_target_d(src=0, dst=1)
-            dist = dist1 + dist2
+            dist = (dist1 + dist2) / 2.
         elif tstatus == 2:
             dist = -self._needle_to_target_d(src=0, dst=1)
         elif tstatus == 3:
@@ -280,19 +282,19 @@ class Reward_suture_simple(object):
                         reward += d
                     else:
                         reward += d * 100 # was 10
-                    reward_txt += "delta: {:.3f}".format(d)
+                    reward_txt += "delta: {:.5f}".format(d)
                     #print "ts=ls, r={}, d={}".format(reward, dist) #debug
                 else:
                     # regression. no good
                     reward_txt = "Regression!"
-                    reward -= 5.
+                    reward -= 8.
                     done = True
                     #print "ts=ls, r={}".format(reward) #debug
 
                 self.last_dist = dist
 
             # NOTE: was 0.05, tried doubling
-            reward -= 0.01
+            #reward -= 0.01 # time is from doubling of negative delta
 
         return reward, done, reward_txt, success
 

@@ -422,7 +422,7 @@ class Environment(common_env.CommonEnv):
         if not sim_save:
             n = self.state.needle_tip_pos
             t = self.state.cur_target_pos
-            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{:.2f}'.format(
+            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{:.4f}'.format(
                   self.server_num, self.total_reward, self.last_reward,
                   self.episode, self.reward.last_dist)
 
