@@ -95,15 +95,19 @@ class CommonEnv(object):
 
             #print "Searching for ", save_path # debug
 
-            if not os.path.exists(save_path):
-                print save_path, "not found"
+            if os.path.exists(save_path):
 
-            self._sm.states = []
-            self._sm.states = joblib.load(save_path)
+                self._sm.states = []
+                try:
+                    self._sm.states = joblib.load(save_path)
+                except:
+                    continue
 
-            # A proper episode must have at least 2 steps: reset and a step
-            if len(self._sm.states) > 1:
-                return True
+                # A proper episode must have at least 2 steps: reset and a step
+                if len(self._sm.states) > 1:
+                    return True
+
+            #print save_path, "not found"
 
     def _dump_sim_ep_states(self):
         ''' Save episode state from memory for future replay '''
