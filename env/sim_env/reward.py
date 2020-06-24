@@ -119,7 +119,7 @@ class Reward_reach_v0(object):
             reward -= 5.
 
         # Check for errors
-        if s.error:
+        if s.error and self.env.get_save_mode() != 'play':
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
                 reward_txt = "Error!"
@@ -181,7 +181,7 @@ class Reward_suture_simple(object):
         '''
 
         # check for errors
-        if ss.error:
+        if ss.error and self.env.get_save_mode() != 'play':
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
                 reward_txt = "Error!"

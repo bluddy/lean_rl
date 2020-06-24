@@ -198,6 +198,8 @@ class Environment(common_env.CommonEnv):
         # How often to reset the environment
         # Due to memory leaks or just errors
         self.reboot_eps = 300
+        if self.get_save_mode() == 'play':
+            self.reboot_eps = 1000000
         # Reboot after these many errors
         self.max_error_ctr = 7
         self.error_ctr = 0
@@ -710,8 +712,12 @@ class Environment(common_env.CommonEnv):
     def _reset_real(self):
         self._connect_to_sim()
 
-        if self.episode % self.reboot_eps == 0 or \
-           self.error_ctr >= self.max_error_ctr:
+        if self.episode % self.reboot_eps == 0:
+            print "Episode is ", self.episode
+            self._reboot_until_up()
+
+        if self.error_ctr >= self.max_error_ctr:
+            print "Error ctr is ", self.error_ctr
             self._reboot_until_up()
 
         self.error_ctr = 0
