@@ -240,6 +240,7 @@ class Environment(common_env.CommonEnv):
         self.action_dim = len(self.action_steps)
 
         self.extra_state_dim = 6
+        self.render_ep_path = None
 
         if full_init:
             if not self._connect_to_sim():
@@ -695,6 +696,10 @@ class Environment(common_env.CommonEnv):
         # Upon reset, we'll dump the states file
         self._step_record()
 
+        # Handle epsiode render if needed
+        if self.render_ep_path is not None:
+            self.render(self.render_ep_path, sim_save=False)
+
         extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
 
         extra["best_action"] = self._get_best_action()
@@ -740,7 +745,13 @@ class Environment(common_env.CommonEnv):
         h = img_dim
         return w, h
 
-    def reset(self, sim_save=True, **kwargs):
+    def reset(self, render_ep_path=None):
+
+        # Check if last episode was a record. If so, convert
+        if self.render_ep_path is not None:
+            self.convert_to_video(self.render_ep_path, sim_save=False)
+
+        self.render_ep_path=render_ep_path
         self.t = 0
         self.episode += 1
         self.done = False
@@ -762,6 +773,10 @@ class Environment(common_env.CommonEnv):
 
         # Things required for the reward function
         self.reward.reset()
+
+        # Handle episode render if needed
+        if self.render_ep_path is not None:
+            self.render(self.render_ep_path, sim_save=False)
 
         return (cur_state, 0, False, {"action": None, "save_mode": self.get_save_mode(), "success":False})
 

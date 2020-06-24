@@ -150,7 +150,7 @@ class Environment(common_env.CommonEnv):
         stack = [x.transpose((2,0,1)) for x in self.stack]
         ob = np.array(stack)
 
-        # Handle episode save
+        # Handle episode render if needed
         if self.render_ep_path is not None:
             self.render(self.render_ep_path, sim_save=False)
 
@@ -449,7 +449,7 @@ class Environment(common_env.CommonEnv):
 
         self._step_record()
 
-        # Handle epsiode save
+        # Handle epsiode render if needed
         if self.render_ep_path is not None:
             self.render(self.render_ep_path, sim_save=False)
 
