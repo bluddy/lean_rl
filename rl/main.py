@@ -29,7 +29,7 @@ def run(args):
     total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_measure = \
             [],[],[],[],[],[]
 
-    last_learn_t, last_eval_t = 0, 0
+    last_learn_t, last_eval_t, last_stat_t = 0, 0, 0
     best_avg_reward = -1e5
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
@@ -598,6 +598,22 @@ def run(args):
         states = new_states
         states_nd = dummy_env.combine_states(states)
 
+        ## Get stats
+        if args.stat_freq != 0 and \
+            timestep - last_stat_t > args.stat_freq and \
+            len(replay_buffer) > 10000:
+
+            last_stat_t = timestep
+            data = replay_buffer.sample(10000)
+            data = data[0]
+            avg = np.mean(data, axis=0)
+            std = np.std(data, axis=0)
+
+            s = 'Data mean:{}\n Data stdev:{}'.format(avg, std)
+            print s
+            log_f.write(s + '\n')
+
+
     print("Best Reward: ", best_reward)
     csv_f.close()
     log_f.close()
@@ -930,9 +946,13 @@ if __name__ == "__main__":
 
     parser.add_argument('--no-clean', default=True, action='store_false',
             dest='clean', help='Clean up previous envs')
-    #-- Test-cnn
+    #-- Test-cnn for aux
     parser.add_argument('--eval-loops', default=100, type=int,
             help='How many times to test over data in replay buffer')
+
+    #-- find stats of data
+    parser.add_argument('--stat-freq', default=0, type=int,
+            help='How often to evaluate statistics from replay buffer')
 
     args = parser.parse_args()
 

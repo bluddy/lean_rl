@@ -80,6 +80,9 @@ class State(object):
         index = 1 # Skip msg_id
         self.error = data[index]; index += 1
 
+        # TODO: for some reason, we're only getting one arm data
+        # The other arm is zeroed out
+
         #2 arms * (pos, orn) * x,y,z
         arm_dims = (2,2,3)
         arm_size = np.prod(arm_dims)
@@ -544,7 +547,7 @@ class Environment(common_env.CommonEnv):
 
     def _get_extra_state(self):
         ''' Get extra state for aux loss
-            Make sure to normalize!
+            Make sure to normalize or it messes up losses
         '''
         nt = self.state.needle_tip_pos
         nt -= np.array([-0.02, -0.47, -10.82])
