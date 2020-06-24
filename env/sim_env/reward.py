@@ -223,9 +223,10 @@ class Reward_suture_simple(object):
             dist = self._needle_to_target_d()
         elif tstatus == 1:
             # I think it makes more sense to minimize dist to avg of both distances
-            dist1 = self._needle_to_target_d(src=-1, dst=0)
-            dist2 = self._needle_to_target_d(src=0, dst=1)
-            dist = (dist1 + dist2) / 2.
+            dist1 = self._needle_to_target_d(src=-1, dst=0) # dist to entry
+            dist2 = self._needle_to_target_d(src=0, dst=1) # dist to target
+            # Weight dist to target more heavily
+            dist = 0.2 * dist1 + 0.8 * dist2
         elif tstatus == 2:
             dist = -self._needle_to_target_d(src=0, dst=1)
         elif tstatus == 3:
