@@ -601,17 +601,17 @@ def run(args):
         ## Get stats
         if args.stat_freq != 0 and \
             timestep - last_stat_t > args.stat_freq and \
-            len(replay_buffer) > 10000:
+            len(replay_buffer) >= 50000:
 
             last_stat_t = timestep
-            data = replay_buffer.sample(10000)
+            data = replay_buffer.sample(50000)
             data = data[0]
             avg = np.mean(data, axis=0)
             std = np.std(data, axis=0)
 
-            s = 'Data mean:{}\n Data stdev:{}'.format(avg, std)
+            s = '\nData mean:{}\n Data stdev:{}\n'.format(avg, std)
             print s
-            log_f.write(s + '\n')
+            log_f.write(s)
 
 
     print("Best Reward: ", best_reward)
