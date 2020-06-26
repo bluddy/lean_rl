@@ -119,7 +119,7 @@ class Reward_reach_v0(object):
             reward -= 5.
 
         # Check for errors
-        if s.error:
+        if s.error and self.env.get_save_mode() != 'play':
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
                 reward_txt = "Error!"
@@ -171,15 +171,17 @@ class Reward_suture_simple(object):
             reward -= 2.
 
         # Check for collisions
+        '''
         if ls is not None and \
             (ls.instr_collisions < ss.instr_collisions or \
             ls.instr_endo_collisions < ss.instr_endo_collisions):
               reward -= 2.
               reward_txt = "Instr collision!"
               done = True
+        '''
 
         # check for errors
-        if ss.error:
+        if ss.error and self.env.get_save_mode() != 'play':
             self.env.error_ctr += 1
             if self.env.error_ctr >= self.env.max_error_ctr:
                 reward_txt = "Error!"
@@ -201,7 +203,7 @@ class Reward_suture_simple(object):
             # Insert in wrong place
             txt = "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
                     self.env.server_num, nstatus, tstatus,
-                    ls.needle_insert_status, ls.target_insert_status)
+                    ls.needle_insert_status if ls else -1, ls.target_insert_status if ls else -1)
             print txt
             reward_txt = txt
             done = True
@@ -220,7 +222,11 @@ class Reward_suture_simple(object):
         if tstatus == 0:
             dist = self._needle_to_target_d()
         elif tstatus == 1:
-            dist = self._needle_to_target_d(src=-1, dst=0)
+            # I think it makes more sense to minimize dist to avg of both distances
+            dist1 = self._needle_to_target_d(src=-1, dst=0) # dist to entry
+            dist2 = self._needle_to_target_d(src=0, dst=1) # dist to target
+            # Weight dist to target more heavily
+            dist = 0.2 * dist1 + 0.8 * dist2
         elif tstatus == 2:
             dist = -self._needle_to_target_d(src=0, dst=1)
         elif tstatus == 3:
@@ -270,16 +276,19 @@ class Reward_suture_simple(object):
                 elif tstatus == last_tstatus:
                     # Check for change of dist
                     d = self.last_dist - dist
+                    # Make negative moves worse
+                    if d < 0:
+                        d *= 2
                     if tstatus == 0:
                         reward += d
                     else:
-                        reward += d * 10
-                    reward_txt += "delta: {:.3f}".format(d)
+                        reward += d * 100 # was 10
+                    reward_txt += "delta: {:.5f}".format(d)
                     #print "ts=ls, r={}, d={}".format(reward, dist) #debug
                 else:
                     # regression. no good
                     reward_txt = "Regression!"
-                    reward -= 5.
+                    reward -= 8.
                     done = True
                     #print "ts=ls, r={}".format(reward) #debug
 

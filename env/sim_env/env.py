@@ -60,6 +60,21 @@ import ISISim.common_module_starter
 from SimulationBase import SimulatorConnection
 from SimulationBase.NetworkHelper import Action
 
+# stats from analyzing, for normalization
+g_state_mean_suture = np.array([0., 0., 0., 0., 0., 0., # arm1
+  -0.02851895, -0.01229529, -0.03983802, 0.20836899, 0.49168926, .1693523, # arm2
+  -1., -1., # jaws
+  -0.10972147, -0.6796254,  -10.591319, 1.7183018, 0.1363969, -0.6918012, # needle
+  -0.07567041, -0.6896427, -10.585802, # cur_target
+  -0.13098323, -0.72658867, -10.531871 # next_target
+  ])
+
+g_state_std_suture = np.array([1., 1., 1., 1., 1., 1., # arm1 (just for div)
+ 1.3650687e-02, 1.6208388e-02, 1.4525504e-02, 2.9186731e-05, 9.6843083e-05, 7.5277233e-01, #arm2
+ 1., 1., #jaws (for div)
+ 2.8134113e-02, 4.2242080e-02, 1.9235633e-02, 7.3476839e-01, 6.6922742e-01, 2.4341759e-01, #needle
+ 1.0, 1.0, 1.0,
+ 1.0, 1.0, 1.0])
 
 # Random number to avoid conflict with other running sims
 random_num = random.randrange(10000)
@@ -79,6 +94,9 @@ class State(object):
 
         index = 1 # Skip msg_id
         self.error = data[index]; index += 1
+
+        # TODO: for some reason, we're only getting one arm data
+        # The other arm is zeroed out
 
         #2 arms * (pos, orn) * x,y,z
         arm_dims = (2,2,3)
@@ -198,6 +216,8 @@ class Environment(common_env.CommonEnv):
         # How often to reset the environment
         # Due to memory leaks or just errors
         self.reboot_eps = 300
+        if self.get_save_mode() == 'play':
+            self.reboot_eps = 1000000
         # Reboot after these many errors
         self.max_error_ctr = 7
         self.error_ctr = 0
@@ -240,6 +260,7 @@ class Environment(common_env.CommonEnv):
         self.action_dim = len(self.action_steps)
 
         self.extra_state_dim = 6
+        self.render_ep_path = None
 
         if full_init:
             if not self._connect_to_sim():
@@ -422,24 +443,24 @@ class Environment(common_env.CommonEnv):
         if not sim_save:
             n = self.state.needle_tip_pos
             t = self.state.cur_target_pos
-            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{:.2f}'.format(
+            reward_s = 'S{} TR:{:.3f}  R:{:.3f}  EP:{} d:{:.4f}'.format(
                   self.server_num, self.total_reward, self.last_reward,
                   self.episode, self.reward.last_dist)
 
             if self.task == 'reach':
-                reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                reward_s += ' n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
                     n[0], n[1], n[2], t[0], t[1], t[2])
 
             elif self.task == 'suture':
                 if self.reward_type == 'v1':
-                    reward_s += 'ai:{:.2f}, di:{:.2f}'.format(
+                    reward_s += ' ai:{:.2f}, di:{:.2f}'.format(
                         float(self.reward.last_a_ideal), float(self.reward.last_dist_ideal))
-                reward_s += 'ns:{}, ts:{}, {}'.format(
+                reward_s += ' ns:{}, ts:{}, {}'.format(
                     self.state.needle_insert_status, self.state.target_insert_status,
                     text)
                 n = self.state.needle_tip_pos
                 t = self.state.cur_target_pos
-                reward_s += 'n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
+                reward_s += ' n:({:.2f},{:.2f},{:.2f}) t:({:.2f},{:.2f},{:.2f})'.format(
                     n[0], n[1], n[2], t[0], t[1], t[2])
 
                 reward_s += ' ' + self.reward_txt
@@ -541,14 +562,17 @@ class Environment(common_env.CommonEnv):
 
     def _get_extra_state(self):
         ''' Get extra state for aux loss
-            Make sure to normalize!
+            Make sure to normalize or it messes up losses
         '''
         nt = self.state.needle_tip_pos
-        nt -= np.array([-0.02, -0.47, -10.82])
-        nt /= np.array([0.12, 0.06, 0.08])
         tar = self.state.cur_target_pos
-        tar -= np.array([-0.18, -0.59, -10.71])
-        tar /= np.array([0.17, 0.11, 0.13])
+
+        if self.task == 'reach':
+            nt -= np.array([-0.02, -0.47, -10.82])
+            nt /= np.array([0.12, 0.06, 0.08])
+            tar -= np.array([-0.18, -0.59, -10.71])
+            tar /= np.array([0.17, 0.11, 0.13])
+
         return np.concatenate([
           nt.reshape((1, -1)),
           tar.reshape((1, -1))
@@ -591,6 +615,12 @@ class Environment(common_env.CommonEnv):
                 np.array(self.state.cur_target_pos, dtype=np.float32).reshape((1, -1)),
                 np.array(self.state.next_target_pos, dtype=np.float32).reshape((1, -1)),
             ], axis=-1)
+
+            # Normalize for suture task
+            if self.task == 'suture':
+                cur_state -= g_state_mean_suture
+                cur_state /= g_state_std_suture
+
         elif self.mode == 'mixed':
             cur_state = (
                 np.expand_dims(image, 0),
@@ -695,6 +725,10 @@ class Environment(common_env.CommonEnv):
         # Upon reset, we'll dump the states file
         self._step_record()
 
+        # Handle epsiode render if needed
+        if self.render_ep_path is not None:
+            self.render(self.render_ep_path, sim_save=False)
+
         extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
 
         extra["best_action"] = self._get_best_action()
@@ -705,8 +739,12 @@ class Environment(common_env.CommonEnv):
     def _reset_real(self):
         self._connect_to_sim()
 
-        if self.episode % self.reboot_eps == 0 or \
-           self.error_ctr >= self.max_error_ctr:
+        if self.episode % self.reboot_eps == 0:
+            print "Episode is ", self.episode
+            self._reboot_until_up()
+
+        if self.error_ctr >= self.max_error_ctr:
+            print "Error ctr is ", self.error_ctr
             self._reboot_until_up()
 
         self.error_ctr = 0
@@ -740,7 +778,13 @@ class Environment(common_env.CommonEnv):
         h = img_dim
         return w, h
 
-    def reset(self, sim_save=True, **kwargs):
+    def reset(self, render_ep_path=None):
+
+        # Check if last episode was a record. If so, convert
+        if self.render_ep_path is not None:
+            self.convert_to_video(self.render_ep_path, sim_save=False)
+
+        self.render_ep_path=render_ep_path
         self.t = 0
         self.episode += 1
         self.done = False
@@ -762,6 +806,10 @@ class Environment(common_env.CommonEnv):
 
         # Things required for the reward function
         self.reward.reset()
+
+        # Handle episode render if needed
+        if self.render_ep_path is not None:
+            self.render(self.render_ep_path, sim_save=False)
 
         return (cur_state, 0, False, {"action": None, "save_mode": self.get_save_mode(), "success":False})
 
