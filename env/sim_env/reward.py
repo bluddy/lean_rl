@@ -203,7 +203,7 @@ class Reward_suture_simple(object):
             # Insert in wrong place
             txt = "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
                     self.env.server_num, nstatus, tstatus,
-                    ls.needle_insert_status, ls.target_insert_status)
+                    ls.needle_insert_status if ls else -1, ls.target_insert_status if ls else -1)
             print txt
             reward_txt = txt
             done = True
