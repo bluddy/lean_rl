@@ -61,7 +61,7 @@ from SimulationBase import SimulatorConnection
 from SimulationBase.NetworkHelper import Action
 
 # stats from analyzing, for normalization
-g_state_mean = np.array([0., 0., 0., 0., 0., 0., # arm1
+g_state_mean_suture = np.array([0., 0., 0., 0., 0., 0., # arm1
   -0.02851895, -0.01229529, -0.03983802, 0.20836899, 0.49168926, .1693523, # arm2
   -1., -1., # jaws
   -0.10972147, -0.6796254,  -10.591319, 1.7183018, 0.1363969, -0.6918012, # needle
@@ -69,7 +69,7 @@ g_state_mean = np.array([0., 0., 0., 0., 0., 0., # arm1
   -0.13098323, -0.72658867, -10.531871 # next_target
   ])
 
-g_state_std = np.array([1., 1., 1., 1., 1., 1., # arm1 (just for div)
+g_state_std_suture = np.array([1., 1., 1., 1., 1., 1., # arm1 (just for div)
  1.3650687e-02, 1.6208388e-02, 1.4525504e-02, 2.9186731e-05, 9.6843083e-05, 7.5277233e-01, #arm2
  1., 1., #jaws (for div)
  2.8134113e-02, 4.2242080e-02, 1.9235633e-02, 7.3476839e-01, 6.6922742e-01, 2.4341759e-01, #needle
@@ -565,11 +565,14 @@ class Environment(common_env.CommonEnv):
             Make sure to normalize or it messes up losses
         '''
         nt = self.state.needle_tip_pos
-        nt -= np.array([-0.02, -0.47, -10.82])
-        nt /= np.array([0.12, 0.06, 0.08])
         tar = self.state.cur_target_pos
-        tar -= np.array([-0.18, -0.59, -10.71])
-        tar /= np.array([0.17, 0.11, 0.13])
+
+        if self.task == 'reach':
+            nt -= np.array([-0.02, -0.47, -10.82])
+            nt /= np.array([0.12, 0.06, 0.08])
+            tar -= np.array([-0.18, -0.59, -10.71])
+            tar /= np.array([0.17, 0.11, 0.13])
+
         return np.concatenate([
           nt.reshape((1, -1)),
           tar.reshape((1, -1))
@@ -612,8 +615,12 @@ class Environment(common_env.CommonEnv):
                 np.array(self.state.cur_target_pos, dtype=np.float32).reshape((1, -1)),
                 np.array(self.state.next_target_pos, dtype=np.float32).reshape((1, -1)),
             ], axis=-1)
-            cur_state -= g_state_mean
-            cur_state /= g_state_std
+
+            # Normalize for suture task
+            if self.task == 'suture':
+                cur_state -= g_state_mean_suture
+                cur_state /= g_state_std_suture
+
         elif self.mode == 'mixed':
             cur_state = (
                 np.expand_dims(image, 0),
