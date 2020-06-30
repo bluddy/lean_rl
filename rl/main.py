@@ -973,7 +973,8 @@ if __name__ == "__main__":
     parser.add_argument('--depthmap', default=False, action='store_true',
             dest='depthmap_mode',
             help='Use depth map from sim')
-    parser.add_argument('--freeze', default=False, action='store_true',
+    parser.add_argument('--no-freeze', default=True, action='store_false',
+            dest='freeze',
             help='Freeze the models halfway')
 
     parser.add_argument('--no-clean', default=True, action='store_false',
