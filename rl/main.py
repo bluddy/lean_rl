@@ -26,8 +26,9 @@ from env_wrapper import EnvWrapper
 
 def run(args):
     # Total counts
-    total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_measure = \
-            [],[],[],[],[],[]
+    total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_measure, total_success1, \
+    total_success2 = \
+            [],[],[],[],[],[],[],[]
 
     last_learn_t, last_eval_t, last_stat_t = 0, 0, 0
     best_avg_reward = -1e5
@@ -326,11 +327,16 @@ def run(args):
                 r, q_avg, q_max, loss, best_avg_reward = map(
                     lambda x: float(x), line[1:6])
                 last_learn_t, last_eval_t = int(line[6]), int(line[7])
+                if len(line) > 8:
+                    succ1_pct = float(line[8])
+                    succ2_pct = float(line[9])
                 total_times.append(t)
                 total_rewards.append(r)
                 total_q_avg.append(q_avg)
                 total_q_max.append(q_max)
                 total_loss.append(loss)
+                total_success1.append(succ1_pct)
+                total_success2.append(succ2_pct)
                 csv_wr.writerow(line)
             csv_f.flush()
             if timestep is None:
@@ -514,7 +520,8 @@ def run(args):
             # Block and flush result if needed
             best_reward = evaluate_policy(
                 csv_wr, csv_f, log_f, tb_writer, logdir,
-                total_times, total_rewards, total_loss, total_q_avg, total_q_max,
+                total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
+                total_success2,
                 temp_loss, temp_q_avg, temp_q_max,
                 envs, args, policy, timestep, test_path,
                 last_learn_t, last_eval_t, best_avg_reward)
@@ -660,7 +667,8 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
 
 def evaluate_policy(
         csv_wr, csv_f, log_f, tb_writer, logdir,
-        total_times, total_rewards, total_loss, total_q_avg, total_q_max,
+        total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
+        total_success2,
         temp_loss, temp_q_avg, temp_q_max,
         envs, args, policy, timestep, test_path,
         last_learn_t, last_eval_t, best_avg_reward):
@@ -672,6 +680,8 @@ def evaluate_policy(
     #policy.actor.eval() # set for batchnorm
     rewards = np.zeros((args.procs,), dtype=np.float32)
     actions = []
+    success_1 = []
+    success_2 = []
     num_done = 0
     for env in envs:
         env.set_save_mode('eval') # Stop recording
@@ -679,11 +689,15 @@ def evaluate_policy(
             env.get()
         env.reset()
     states = [env.get()[0] for env in envs]
+    succ_temp = [0 for _ in range(3)]
     while num_done < args.procs:
         acted = False
         # Send action
         for i, env in enumerate(envs):
-            if not env.done:
+            if env.done:
+                # If done, add success value
+                succ_temp[env.success] += 1
+            else:
                 if env.is_ready():
                     action = policy.select_action(states[i]).squeeze(0)
                     actions.append(action)
@@ -700,6 +714,11 @@ def evaluate_policy(
             sys.stdout.write('.')
             sys.stdout.flush()
 
+    #Get average % for success states 1 and 2
+    succ_sum = sum(succ_temp)
+    succ1_pct = succ_temp[1] / float(succ_sum)
+    succ2_pct = succ_temp[2] / float(succ_sum)
+
     # Restore envs
     for env in envs:
         env.convert_to_video(save_path=test_path)
@@ -714,48 +733,61 @@ def evaluate_policy(
 
     total_rewards.append(avg_reward)
     total_rewards_nd = np.array(total_rewards)
+    r_avg, r_var, r_low, r_high = utils.get_stats(total_rewards_nd)
+
+    total_success1.append(succ1_pct)
+    total_success1_nd = np.array(total_success1)
+    succ1_avg, succ1_var, _, _ = utils.get_stats(total_success1_nd)
+    total_success2.append(succ2_pct)
+    total_success2_nd = np.array(total_success2)
+    use_succ2 = np.any(total_success2_nd != 0.)
+    if use_succ2:
+        succ2_avg, succ2_var, _, _ = utils.get_stats(total_success2_nd)
+
     total_times.append(timestep)
     total_times_nd = np.array(total_times)
 
-    # Average over all the training we did since last timestep
+    #-- Average over all the training we did since last timestep
     q_avg = np.mean(temp_q_avg) if len(temp_q_avg) > 0 else 0.
     q_max = np.max(temp_q_max) if len(temp_q_max) > 0 else 0.
     loss_avg = np.mean(temp_loss) if len(temp_loss) > 0 else 0.
-    r_avg, r_var, r_low, r_up = utils.get_stats(total_rewards_nd)
 
     total_q_avg.append(q_avg)
     total_q_max.append(q_max)
     total_loss.append(loss_avg)
 
+    ## Plot Q
     fig = plt.figure()
     plt.plot(total_times_nd, total_q_avg, label='Average Q')
     plt.plot(total_times_nd, total_q_max, label='Max Q')
     plt.savefig(pjoin(logdir, 'q_avg_max.png'))
     tb_writer.add_figure('q_avg_max', fig, global_step=timestep)
+    #--
 
+    ## Plot loss
     fig = plt.figure()
     plt.plot(total_times_nd, total_loss, label='Loss')
     plt.savefig(pjoin(logdir, 'loss_avg.png'))
     tb_writer.add_figure('loss_avg', fig, global_step=timestep)
 
-    '''
-    fig = plt.figure()
-    plt.plot(total_times_nd, total_rewards_nd, label='Rewards')
-    if len(total_rewards) > 100:
-        # Plot average line
-        plt.plot(total_times_nd[:len(avg_rewards)], avg_rewards)
-    plt.savefig(pjoin(logdir, 'rewards.png'))
-    tb_writer.add_figure('rewards', fig, global_step=timestep)
-    '''
-
+    ## Plot rewards
     fig = plt.figure()
     length = len(r_avg)
     plt.plot(total_times_nd[:length], r_avg, label='Rewards')
-    #plt.fill_between(np.arange(len(r_avg)), r_low, r_up, alpha=0.4)
-    plt.fill_between(total_times_nd[:length], r_low, r_up, alpha=0.4)
-    plt.legend()
+    plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
+    #plt.legend()
     plt.savefig(pjoin(logdir, 'rewards.png'))
     tb_writer.add_figure('rewards', fig, global_step=timestep)
+
+    ## Plot success
+    fig = plt.figure()
+    length = len(succ1_avg)
+    if use_succ2:
+        plt.plot(total_times_nd[:length], succ1_avg, label='State 1')
+        plt.plot(total_times_nd[:length], succ1_avg, label='State 2')
+    else:
+        plt.plot(total_times_nd[:length], succ1_avg, label='Success')
+    plt.savefig(pjoin(logdir, 'success.png'))
 
     s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
@@ -767,7 +799,7 @@ def evaluate_policy(
     log_f.write(s + '\n')
     csv_wr.writerow([
         timestep, avg_reward, q_avg, q_max, loss_avg,
-        best_avg_reward, last_learn_t, last_eval_t
+        best_avg_reward, last_learn_t, last_eval_t, succ1_pct, succ2_pct
     ])
     csv_f.flush()
 

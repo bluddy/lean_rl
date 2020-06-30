@@ -40,12 +40,12 @@ class Reward_reach_v0(object):
         reward_txt = None
 
     def get_reward_data(self):
-        success = False
         reward = 0.
         reward_txt = None
         done = False
         s = self.env.state
         ls = self.env.last_state
+        success = 0
 
         # Distance to target component
         dist = calc_dist(s.needle_tip_pos, s.cur_target_pos)
@@ -59,8 +59,8 @@ class Reward_reach_v0(object):
         if dist <= self.dist_epsilon:
             reward_txt = "Success!"
             done = True
-            success = True
             reward += 5.
+            success = 1
 
         # End if we've touched the skin
         # y is height going up
@@ -241,7 +241,8 @@ class Reward_suture_simple(object):
         tstatus = ss.target_insert_status
         needle = ss.needle_points_pos
         reward_txt = ''
-        success = False
+
+        success = tstatus
 
         reward, done, reward_txt = self._check_basic_errors()
 
@@ -268,7 +269,6 @@ class Reward_suture_simple(object):
 
                     if tstatus >= 3:
                         done = True
-                        success = True
                         reward += 5.
                         reward_txt = "Success!"
 

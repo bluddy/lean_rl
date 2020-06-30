@@ -317,17 +317,17 @@ class QMixed(BaseImage):
         super(QMixed, self).__init__(bn=bn, drop=drop, **kwargs)
 
         ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(self.latent_dim, 50, bn=bn, drop=drop))
+        ll.extend(make_linear(50, 20, bn=bn, drop=drop))
         self.linear1 = nn.Sequential(*ll)
 
         ll = []
-        ll.extend(make_linear(state_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(state_dim, 50, bn=bn, drop=drop))
+        ll.extend(make_linear(50, 20, bn=bn, drop=drop))
         self.linear2 = nn.Sequential(*ll)
 
         ll = []
-        ll.extend(make_linear(200, action_dim, bn=False, drop=False, relu=False))
+        ll.extend(make_linear(40, action_dim, bn=False, drop=False, relu=False))
         self.linear3 = nn.Sequential(*ll)
 
     def forward(self, x):
