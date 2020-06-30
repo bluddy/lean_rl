@@ -355,7 +355,7 @@ def run(args):
                 compressed=args.compressed)
     elif args.buffer == 'priority':
         replay_buffer = NaivePrioritizedBuffer(args.mode, args.capacity,
-                compressed=args.compressed, vacate=args.vacate_buffer)
+                compressed=args.compressed)
     elif args.buffer == 'multi':
         replay_buffer = MultiBuffer(args.mode, args.capacity,
                 compressed=args.compressed, sub_buffer='priority')
