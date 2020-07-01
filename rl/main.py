@@ -689,13 +689,17 @@ def evaluate_policy(
             env.get()
         env.reset()
     states = [env.get()[0] for env in envs]
-    succ_temp = [0 for _ in range(3)]
+    succ_temp = [0 for _ in range(5)]
     while num_done < args.procs:
         acted = False
         # Send action
         for i, env in enumerate(envs):
             if env.done:
                 # If done, add success value
+                if env.success < 0:
+                    env.success = 0
+                if env.success > 2:
+                    env.success = 2
                 succ_temp[env.success] += 1
             else:
                 if env.is_ready():
