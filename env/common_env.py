@@ -137,7 +137,7 @@ class CommonEnv(object):
         if self._sm.path is None:
             return
 
-        last_save_mode = self._sm.mode
+        #last_save_mode = self._sm.mode
         self._sm.mode = save_mode
 
         #print "[{:02d}] save mode: {}, cur: {}, last: {} ".format(self.server_num,

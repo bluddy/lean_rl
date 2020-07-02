@@ -97,13 +97,6 @@ def run(args):
         raise ValueError("Unrecognized environment " + args.env)
 
     print "save_mode_path: ", save_mode_path
-    # Save mode arguments
-    save_mode = ''
-    save_mode_post_play = ''
-    if args.playback:
-        save_mode = 'play'
-    elif args.record:
-        save_mode = 'record'
 
     now = datetime.datetime.now()
     time_s = now.strftime('%y%m%d_%H%M')
@@ -186,8 +179,7 @@ def run(args):
                 action_steps=args.action_steps,
                 server_num=server_num,
                 save_mode_path=save_mode_path,
-                save_mode=save_mode,
-                save_mode_play_ratio=args.play_ratio,
+                save_mode='',
                 )
 
         elif args.env == 'sim':
@@ -204,8 +196,7 @@ def run(args):
                 full_init=not dummy_env,
                 server_num=server_num,
                 save_mode_path=save_mode_path,
-                save_mode=save_mode,
-                save_mode_play_ratio=args.play_ratio,
+                save_mode='',
                 )
 
         elif args.env == 'atari':
@@ -227,6 +218,12 @@ def run(args):
 
     # Create environments
     envs = [EnvWrapper(i, create_env, args) for i in range(args.procs)]
+
+    for i, env in enumerate(envs):
+        if i < args.playback or args.playback == -1:
+            env.set_save_mode('play')
+        elif args.record:
+            env.set_save_mode('record')
 
     # Delays for resets, which are slow
     sleep_time = 0.2
@@ -581,9 +578,6 @@ def run(args):
                         save_mode_playing_cnt += 1
                     if env.get_save_mode() == 'record':
                         save_mode_recording_cnt += 1
-
-                if args.stop_after_playback and save_mode_playing_cnt == 0:
-                    terminate = True
 
                 s = '\nTraining T:{} TS:{:04d} CL:{:.5f} Exp_std:{:.2f} p:{} r:{}'.format(
                     str(datetime.timedelta(seconds=time.time() - program_start_t)),
@@ -956,15 +950,9 @@ if __name__ == "__main__":
 
 
     # -- save mode
-    parser.add_argument('--playback', default=False, action='store_true',
-            help='Play back the recorded data before running new simulation')
-    parser.add_argument('--stop-after-playback', default=False, action='store_true',
-            help='Stop after playback')
-    parser.add_argument('--play-ratio', default=0, type=int,
-            help='How many play episodes to real episodes to run')
-
+    parser.add_argument('--playback', default=0, type=int,
+            help='Play back the recorded data, -1 is all sims')
     parser.add_argument('--record', default=False, action='store_true',
-            dest='record',
             help='Record data from the experiment for future playback')
     # --
 
