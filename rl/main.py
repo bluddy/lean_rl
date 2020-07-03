@@ -226,7 +226,6 @@ def run(args):
             nums = env_nums
         else:
             nums = random.sample(env_nums, args.playback)
-        print "nums: ", nums
 
         for i, env in enumerate(envs):
             if i in nums:
