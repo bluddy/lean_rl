@@ -376,7 +376,8 @@ def run(args):
     states_nd = dummy_env.combine_states(states)
 
     zero_noises = np.zeros((args.procs, action_dim))
-    ou_noises = [utils.OUNoise(action_dim) for _ in range(args.procs)]
+    ou_noises = [utils.OUNoise(action_dim, theta=args.ou_theta, sigma=args.ou_sigma) \
+            for _ in range(args.procs)]
 
     policy.set_eval()
 
@@ -842,6 +843,13 @@ if __name__ == "__main__":
     parser.add_argument("--no-ou-noise", default=True,
         action='store_false', dest='ou_noise',
         help='Use OU Noise process for noise instead of epsilon greedy')
+    parser.add_argument("--ou-sigma", default=0.25, type=float,
+        help='OU sigma level: how much to add per step')
+    parser.add_argument("--ou-theta", default=0.15, type=float,
+        help='OU theta: how much to reuse current levels')
+
+
+
     parser.add_argument("--ep-greedy", default=False,
         action='store_true',
         help='Use epsilon greedy')
