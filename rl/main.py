@@ -218,12 +218,25 @@ def run(args):
 
     # Create environments
     envs = [EnvWrapper(i, create_env, args) for i in range(args.procs)]
+    env_nums = list(range(args.procs))
 
-    for i, env in enumerate(envs):
-        if i < args.playback or args.playback == -1:
-            env.set_save_mode('play')
-        elif args.record:
-            env.set_save_mode('record')
+    def set_save_mode_randomly():
+        # Choose which envs to play, record, or n/a
+        if args.playback == -1:
+            nums = env_nums
+        else:
+            nums = random.sample(env_nums, args.playback)
+        print "nums: ", nums
+
+        for i, env in enumerate(envs):
+            if i in nums:
+                env.set_save_mode('play')
+            elif args.record:
+                env.set_save_mode('record')
+            else:
+                envs.set_save_mode('')
+
+    set_save_mode_randomly()
 
     # Delays for resets, which are slow
     sleep_time = 0.2
@@ -523,6 +536,9 @@ def run(args):
                 temp_loss, temp_q_avg, temp_q_max,
                 envs, args, policy, timestep, test_path,
                 last_learn_t, last_eval_t, best_avg_reward)
+            
+            # Set save mode randomly
+            set_save_mode_randomly()
 
             # Restore envs
             for env in envs:
