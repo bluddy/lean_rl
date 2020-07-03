@@ -782,7 +782,7 @@ def evaluate_policy(
     length = len(succ1_avg)
     if use_succ2:
         plt.plot(total_times_nd[:length], succ1_avg, label='State 1')
-        plt.plot(total_times_nd[:length], succ1_avg, label='State 2')
+        plt.plot(total_times_nd[:length], succ2_avg, label='State 2')
     else:
         plt.plot(total_times_nd[:length], succ1_avg, label='Success')
     plt.savefig(pjoin(logdir, 'success.png'))
