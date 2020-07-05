@@ -131,6 +131,7 @@ class Reward_suture_simple(object):
     ''' A sparse reward '''
     def __init__(self, env):
         self.env = env
+        self.success_count = 3
 
     def _needle_to_target_d(self, src=0, dst=0):
         ss = self.env.state
@@ -267,10 +268,13 @@ class Reward_suture_simple(object):
                     reward += 5.
                     reward_txt = "TStatus increase"
 
-                    if tstatus >= 3:
-                        done = True
-                        reward += 5.
-                        reward_txt = "Success!"
+                    if tstatus >= 2:
+                        if success_count <= 0:
+                            done = True
+                            reward += 5.
+                            reward_txt = "Success!"
+                        else:
+                            success_count -= 1
 
                     #print "ts>ls, r={}".format(reward) #debug
                 elif tstatus == last_tstatus:
