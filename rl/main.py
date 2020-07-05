@@ -841,7 +841,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--seed", default=1e6, type=int,
         help='Sets Gym, PyTorch and Numpy seeds')
-    parser.add_argument("--eval-freq", default=3000, type=int, # 200
+    parser.add_argument("--eval-freq", default=10000, type=int, # 200
         help='How often (time steps) we evaluate')
     parser.add_argument("--learn-freq", default=100, type=int,
         help='Timesteps to explore before applying learning')
