@@ -145,6 +145,7 @@ class Reward_suture_simple(object):
         dist = self._needle_to_target_d()
         self.reset_dist = dist
         self.last_dist = dist
+        self.success_count = 3
 
     def _check_basic_errors(self):
         ss = self.env.state
@@ -269,12 +270,12 @@ class Reward_suture_simple(object):
                     reward_txt = "TStatus increase"
 
                     if tstatus >= 2:
-                        if success_count <= 0:
+                        if self.success_count <= 0:
                             done = True
                             reward += 5.
                             reward_txt = "Success!"
                         else:
-                            success_count -= 1
+                            self.success_count -= 1
 
                     #print "ts>ls, r={}".format(reward) #debug
                 elif tstatus == last_tstatus:

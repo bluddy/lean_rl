@@ -535,7 +535,7 @@ def run(args):
                 temp_loss, temp_q_avg, temp_q_max,
                 envs, args, policy, timestep, test_path,
                 last_learn_t, last_eval_t, best_avg_reward)
-            
+
             # Set save mode randomly
             set_save_mode_randomly()
 
@@ -801,6 +801,7 @@ def evaluate_policy(
         plt.plot(total_times_nd[:length], succ2_avg, label='State 2')
     else:
         plt.plot(total_times_nd[:length], succ1_avg, label='Success')
+    plt.legend()
     plt.savefig(pjoin(logdir, 'success.png'))
 
     s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
