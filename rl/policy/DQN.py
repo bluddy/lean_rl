@@ -4,7 +4,7 @@ import torch.nn as nn
 import os, sys, math
 import torch.nn.functional as F
 from os.path import join as pjoin
-from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs
+from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs
 import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -71,10 +71,10 @@ class DQN(object):
                         bn=self.bn, img_dim=self.img_dim,
                         drop=self.dropout).to(device)
                 else:
-                    if self.aux == 'action':
-                        aux_size = self.total_steps
-                    elif self.aux == 'state':
+                    if self.aux == 'state':
                         aux_size = self.aux_size
+                    else:
+                        raise InvalidArgument()
 
                     n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
@@ -86,10 +86,23 @@ class DQN(object):
             n = QState(state_dim=self.state_dim, action_dim=self.total_steps,
                     bn=self.bn, drop=self.dropout).to(device)
         elif self.mode == 'mixed':
+            print "Mixed network"
             if self.network == 'simple':
-                n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
-                    img_stack=self.total_stack, bn=self.bn,
-                    img_dim=self.img_dim, drop=self.dropout).to(device)
+                if self.aux is None:
+                    n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
+                        img_stack=self.total_stack, bn=self.bn,
+                        img_dim=self.img_dim, drop=self.dropout).to(device)
+                else:
+                    if self.aux == 'state':
+                        print "Aux state"
+                        aux_size = self.aux_size
+                    else:
+                        raise InvalidArgument()
+
+                    n = QMixed2Outs(state_dim=self.state_dim, action_dim=self.total_steps,
+                        img_stack=self.total_stack,
+                        bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
             elif self.network == 'densenet':
                 n = QMixedDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack, state_dim=self.state_dim).to(device)
@@ -469,8 +482,9 @@ class DDQN(DQN):
         return np.mean(q_losses), aux_ret, np.mean(Q_mean), np.max(Q_max)
 
     def test(self, replay_buffer, args):
-            [x, _, _, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
-            length = len(x)
+            [x, _, u, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
+
+            length = len(u)
 
             state, action, extra_state = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
 

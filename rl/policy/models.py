@@ -169,16 +169,19 @@ class QImage2Outs(BaseImage):
         bn=True
         d = reduced_dim
 
+        # Map features to small state space
         ll = []
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)
 
+        # RL part
         ll = []
         ll.extend(make_linear(d, 100, bn=bn, drop=drop))
         ll.extend(make_linear(100, 50, bn=bn, drop=drop))
         ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
         self.linear1 = nn.Sequential(*ll)
 
+        # Aux part
         ll = []
         ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
         self.linear2 = nn.Sequential(*ll)
@@ -188,7 +191,6 @@ class QImage2Outs(BaseImage):
             p.requires_grad = not frozen
         for p in self.features.parameters():
             p.requires_grad = not frozen
-
 
     def forward(self, x):
         x = self.features(x)
@@ -316,16 +318,19 @@ class QMixed(BaseImage):
             bn=True, drop=False, **kwargs):
         super(QMixed, self).__init__(bn=bn, drop=drop, **kwargs)
 
+        # Map features
         ll = []
         ll.extend(make_linear(self.latent_dim, 50, bn=bn, drop=drop))
         ll.extend(make_linear(50, 20, bn=bn, drop=drop))
         self.linear1 = nn.Sequential(*ll)
 
+        # Map state
         ll = []
         ll.extend(make_linear(state_dim, 50, bn=bn, drop=drop))
         ll.extend(make_linear(50, 20, bn=bn, drop=drop))
         self.linear2 = nn.Sequential(*ll)
 
+        # Combine
         ll = []
         ll.extend(make_linear(40, action_dim, bn=False, drop=False, relu=False))
         self.linear3 = nn.Sequential(*ll)
@@ -337,6 +342,53 @@ class QMixed(BaseImage):
         y = self.linear2(state)
         x = self.linear3(torch.cat((x, y), dim=-1))
         return x
+
+class QMixed2Outs(BaseImage):
+    ''' QMixed with two outputs coming out of the features
+        Use state shape of QState
+    '''
+    def __init__(self, state_dim, action_dim, aux_size,
+            drop=False, reduced_dim=10, **kwargs):
+        super(QMixed2Outs, self).__init__(drop=drop, **kwargs)
+
+        print "QMixed2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+
+        bn=True
+        d = reduced_dim
+
+        # Map features to small state space
+        ll = []
+        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
+        self.linear = nn.Sequential(*ll)
+
+        # RL part
+        ll = []
+        ll.extend(make_linear(d + state_dim, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
+        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
+        self.linear1 = nn.Sequential(*ll)
+
+        # Aux part
+        ll = []
+        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
+        self.linear2 = nn.Sequential(*ll)
+
+    def freeze_some(self, frozen):
+        for p in self.linear.parameters():
+            p.requires_grad = not frozen
+        for p in self.features.parameters():
+            p.requires_grad = not frozen
+
+    def forward(self, x):
+        img, state = x
+        # Features to state
+        #import pdb
+        #pdb.set_trace()
+        x = self.features(img)
+        x = self.linear(x)
+        y = self.linear1(torch.cat((x, state), dim=-1)) # RL output
+        z = self.linear2(x) # Aux output
+        return y,z
 
 class QMixed2(nn.Module):
     def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
