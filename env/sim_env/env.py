@@ -567,11 +567,17 @@ class Environment(common_env.CommonEnv):
         nt = self.state.needle_tip_pos
         tar = self.state.cur_target_pos
 
+        # Normalizing: very important for performance!
         if self.task == 'reach':
             nt -= np.array([-0.02, -0.47, -10.82])
             nt /= np.array([0.12, 0.06, 0.08])
             tar -= np.array([-0.18, -0.59, -10.71])
             tar /= np.array([0.17, 0.11, 0.13])
+        elif self.task == 'suture':
+            nt -= np.array([-0.12, -0.73, -10.53])
+            nt /= np.array([0.06, 0.04, 0.06])
+            tar -= np.array([-0.08, -0.69, -10.53])
+            tar /= np.array([0.01, 0.01, 0.05])
 
         return np.concatenate([
           nt.reshape((1, -1)),
