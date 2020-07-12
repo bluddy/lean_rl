@@ -9,6 +9,7 @@ import numpy as np
 from shapely.geometry import Polygon, Point, LineString # using to replace sympy
 import pygame
 import glob
+
 from .. import common_env
 
 GREEN = (0, 255, 0)
@@ -226,11 +227,11 @@ class Environment(common_env.CommonEnv):
         D = safe_load_line('Dimensions', handle)
         self.state.height = int(D[1])
         self.state.width = int(D[0])
-        #print " - width=%d, height=%d"%(self.width, self.height)
+        #print(" - width=%d, height=%d"%(self.width, self.height))
 
         D = safe_load_line('Gates', handle)
         self.state.ngates = int(D[0])
-        #print " - num gates=%d"%(self.ngates)
+        #print(" - num gates=%d"%(self.ngates))
 
         for _ in range(self.state.ngates):
             gate = Gate(self.state.width, self.state.height)
@@ -387,7 +388,7 @@ class Environment(common_env.CommonEnv):
         #    state.append(0.)
         #    state.append(0.)
         s = np.array(s, dtype=np.float32)
-        #print "state = ", s # debug
+        #print("state = ", s) # debug
         return s
 
     def _step_real(self, action_orig):
@@ -414,7 +415,7 @@ class Environment(common_env.CommonEnv):
         """
 
         if self.done:
-            print "[{}] In step: Need reset".format(self.server_num)
+            print("[{}] In step: Need reset".format(self.server_num))
             return
 
         self.t += 1
@@ -432,7 +433,7 @@ class Environment(common_env.CommonEnv):
         assert len(self.stack) == self.stack_size
 
         reward, done = self._compute_reward_and_done()
-        #print "reward: {} done: {}".format(reward, done) # debug
+        #print("reward: {} done: {}".format(reward, done)) # debug
 
         done = done or play_done
 
@@ -626,7 +627,7 @@ class Gate:
         self.x = x * self.env_width
         self.y = y * self.env_height
         self.w = w
-        #print "corners: ", self.corners # debug
+        #print("corners: ", self.corners) # debug
         self.corners[:,0] *= self.env_width
         self.corners[:,1] *= self.env_height
         self.top[:,0] *= self.env_width
@@ -634,7 +635,7 @@ class Gate:
         self.bottom[:,0] *= self.env_width
         self.bottom[:,1] *= self.env_height
 
-        #print "corners2: ", self.corners # debug
+        #print("corners2: ", self.corners) # debug
 
         self._create_polys()
 
