@@ -308,7 +308,7 @@ def run(args):
 
     fill_steps = args.capacity / 2
 
-    for _ in xrange(args.epochs):
+    for _ in range(args.epochs):
 
         for i, replay_buffer in enumerate(replay_buffers):
             global timestep, states, w_s, w_a
@@ -387,7 +387,7 @@ def run(args):
 
         # Train
         temp_loss = []
-        for _ in xrange(args.train_loops):
+        for _ in range(args.train_loops):
             # Get data from replay buffer
             loss = model.train(replay_buffers[0], args)
 
@@ -419,7 +419,7 @@ def run(args):
         print('\n---------------------------------------')
         print 'Evaluating CNN for ', logdir
         test_loss, correct, total = [], 0, 0
-        for _ in xrange(args.eval_loops):
+        for _ in range(args.eval_loops):
 
             x, pred_x = model.test(replay_buffers[1], args)
             #print action, pred_x, '\n'

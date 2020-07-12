@@ -642,7 +642,7 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         timestep, csv_aux, args):
     print('Evaluating CNN for ', logdir)
     test_loss, correct, total = [], 0, 0
-    for _ in xrange(eval_loops):
+    for _ in range(eval_loops):
 
         #import pdb
         #pdb.set_trace()
