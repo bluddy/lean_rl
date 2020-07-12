@@ -51,7 +51,7 @@ class BaseImage(nn.Module):
         super(BaseImage, self).__init__()
 
         ## input size:[img_stack, 224, 224]
-        print "BaseImage. drop:{}".format(drop)
+        print("BaseImage. drop:{}".format(drop))
         bn=True
 
         ll = []
@@ -164,7 +164,7 @@ class QImage2Outs(BaseImage):
     def __init__(self, action_dim, aux_size, drop=False, reduced_dim=10, **kwargs):
         super(QImage2Outs, self).__init__(drop=drop, **kwargs)
 
-        print "QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+        print("QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop))
 
         bn=True
         d = reduced_dim
@@ -203,7 +203,7 @@ class QImageDenseNet(nn.Module):
     def __init__(self, action_dim, img_stack, pretrained=False):
         super(QImageDenseNet, self).__init__()
 
-        print "QImageDenseNet. action_dim:{}, img_stack:{}".format(action_dim, img_stack)
+        print("QImageDenseNet. action_dim:{}, img_stack:{}".format(action_dim, img_stack))
 
         model = tmodels.densenet121(pretrained=False)
         layers = list(model.features.children())
@@ -228,7 +228,7 @@ class QMixedDenseNet(QImageDenseNet):
         self.latent_dim = 100
         super(QMixedDenseNet, self).__init__(action_dim=self.latent_dim, img_stack=img_stack)
 
-        print "QMixedDenseNet. action_dim:{}, img_stack:{}, state_dim:{}".format(action_dim, img_stack, state_dim)
+        print("QMixedDenseNet. action_dim:{}, img_stack:{}, state_dim:{}".format(action_dim, img_stack, state_dim))
 
         bn = True
         drop = False
@@ -351,7 +351,7 @@ class QMixed2Outs(BaseImage):
             drop=False, reduced_dim=10, **kwargs):
         super(QMixed2Outs, self).__init__(drop=drop, **kwargs)
 
-        print "QMixed2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+        print("QMixed2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop))
 
         bn=True
         d = reduced_dim
@@ -395,7 +395,7 @@ class QMixed2(nn.Module):
         super(QMixed2, self).__init__()
 
         ## input size:[img_stack, 224, 224]
-        print "QMixed2. drop:{}, deep:{}, bn:{}".format(drop, deep, bn)
+        print("QMixed2. drop:{}, deep:{}, bn:{}".format(drop, deep, bn))
 
         ll = []
         in_f = calc_features(img_stack)

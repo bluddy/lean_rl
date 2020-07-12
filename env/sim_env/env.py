@@ -23,7 +23,7 @@ import getpass
 
 # Import reward functions
 
-from reward import *
+from env.sim_env.reward import *
 
 from .. import common_env
 
@@ -190,7 +190,7 @@ class Environment(common_env.CommonEnv):
         self.env_port = start_env_port + random_num + self.server_num * 2
         self.msg_id = 0
         self.rcv_msg_id = -1
-        print "XXX port=", self.port, " env_port=", self.env_port # debug
+        print("XXX port=", self.port, " env_port=", self.env_port) # debug
 
         # For shared memory support
         self.shared_mem = None
@@ -270,11 +270,11 @@ class Environment(common_env.CommonEnv):
         ''' Reboot the sim and reconnect to it '''
         good = False
         while not good:
-            print '[{}] Rebooting'.format(self.server_num)
+            print('[{}] Rebooting'.format(self.server_num))
             self._kill_sim()
             time.sleep(6)
             good = self._connect_to_sim()
-            self.clean_up_env() # Remove zombies
+            self.clean_up_env()  # Remove zombies
 
     def _kill_sim(self):
         self.sim_connection = None
@@ -296,7 +296,7 @@ class Environment(common_env.CommonEnv):
 
         self.ready_flag_old = self.shared_vars[0]
         self.msg_id += 1
-        #print "sending msg_id ", self.msg_id #debug
+        #print("sending msg_id ", self.msg_id) #debug
 
         # List of items -> list of strings
         if isinstance(data, list):
@@ -304,26 +304,26 @@ class Environment(common_env.CommonEnv):
         else:
             data = [str(self.msg_id), str(data)]
 
-        #print "callAndCheckAction: {}, sending {}".format(name, data) # debug
+        #print("callAndCheckAction: {}, sending {}".format(name, data)) # debug
         action = Action(name, '', data)
         res = self.sim_connection.call(action)
         if not res.isSuccess():
             s = 'There was an error executing the action ' + name + ':'
             s += '\nDescription: ' + res.getDescription() + '\n'
-            print s
+            print(s)
         return res
 
     def _formatActionResult(self, name, action_result):
           if not action_result.isSuccess():
               s = "There was an error executing the action:"
               s += "\nDescription: " + action_result.getDescription() + "\n"
-              print s
+              print(s)
 
     def _read_shared_data(self, save_img=False):
         width = self.shared_vars[1]
         height = self.shared_vars[2]
         self.resolution = (width, height)
-        #print "XXX width = ", width, "height = ", height # debug
+        #print("XXX width = ", width, "height = ", height) # debug
 
         # DEBUG
         #from rl.utils import ForkablePdb
@@ -402,13 +402,13 @@ class Environment(common_env.CommonEnv):
                 apiName = result.getContentText()
             else:
                 self.sim_connection = None
-                print 'Could not connect to network API.'
+                print('Could not connect to network API.')
                 self.error_ctr += 1
                 if self.error_ctr > self.max_error_ctr:
                     return False
                 time.sleep(6)
 
-        print 'Connected to ' + apiName
+        print('Connected to ' + apiName)
         self.error_ctr = 0
 
         # Create a callback and tell the simulation about it (event)
@@ -416,10 +416,10 @@ class Environment(common_env.CommonEnv):
         result = self.sim_connection.startCallbackListener(
             'localhost', self.env_port)
         if not result.isSuccess():
-            print 'ERROR: SimulatorConnection::startCallbackListener' \
-                'could NOT be performed successfully.'
-            print result.getDescription()
-            print result.getContentText()
+            print('ERROR: SimulatorConnection::startCallbackListener' \
+                'could NOT be performed successfully.')
+            print(result.getDescription())
+            print(result.getContentText())
             sys.exit()
 
         # Set the callback id in the simulator
@@ -467,7 +467,7 @@ class Environment(common_env.CommonEnv):
             try:
                 txt_surface = self.font.render(reward_s, False, (255,0,0))
             except:
-                print "reward_s = ", reward_s
+                print("reward_s = ", reward_s)
                 raise
 
             surface.blit(txt_surface, (10,10))
@@ -488,19 +488,19 @@ class Environment(common_env.CommonEnv):
             for f in filelist:
                 os.remove(f)
         else:
-            print "convert_to_video: No files found for ", pattern
+            print("convert_to_video: No files found for ", pattern)
 
     def _wait_for_sim(self):
         # Wait for reply: both the packet and the shared mem
         # debug
-        #print "rcv_msg_id is {}, ready_flag is {}".format(
-        #    self.rcv_msg_id, self.shared_vars[0])
+        #print("rcv_msg_id is {}, ready_flag is {}".format(
+        #    self.rcv_msg_id, self.shared_vars[0]))
 
         while (self.rcv_msg_id < self.msg_id or
                self.ready_flag_old == self.shared_vars[0]):
             # debug
-            #print "rcv_msg_id is {}, ready_flag is {}".format(
-            #    self.rcv_msg_id, self.shared_vars[0])
+            #print("rcv_msg_id is {}, ready_flag is {}".format(
+            #    self.rcv_msg_id, self.shared_vars[0]))
             time.sleep(0.04)
 
     def _update_sim_state(self, action=None):
@@ -540,7 +540,7 @@ class Environment(common_env.CommonEnv):
 
         self.state.from_data(event)
         self.state.action = action
-        #print "_update_sim_state: action = ", self.state.action # debug
+        #print("_update_sim_state: action = ", self.state.action) # debug
 
     def _save_img(self, img):
         scipy.misc.imsave('./out/img{}_{}.png'.format(
@@ -703,7 +703,7 @@ class Environment(common_env.CommonEnv):
     def step(self, action_orig):
 
         if self.done:
-            print "[{}] In step: Need reset".format(self.server_num)
+            print("[{}] In step: Need reset".format(self.server_num))
             return
 
         #from rl.utils import ForkablePdb
@@ -746,11 +746,11 @@ class Environment(common_env.CommonEnv):
         self._connect_to_sim()
 
         if self.episode % self.reboot_eps == 0:
-            print "Episode is ", self.episode
+            print("Episode is ", self.episode)
             self._reboot_until_up()
 
         if self.error_ctr >= self.max_error_ctr:
-            print "Error ctr is ", self.error_ctr
+            print("Error ctr is ", self.error_ctr)
             self._reboot_until_up()
 
         self.error_ctr = 0
@@ -827,7 +827,7 @@ class Environment(common_env.CommonEnv):
             if 'h3drunner' in p.name().lower() and \
                 p.username() == getpass.getuser() and \
                 p.ppid() == 1: # zombie
-                  print "Cleaning up pid", p.pid
+                  print("Cleaning up pid", p.pid)
                   os.kill(p.pid, signal.SIGTERM)
 
 
@@ -869,7 +869,7 @@ if __name__ == '__main__':
             continue
         if text[0] == 'r':
             env.reset()
-            print "here"
+            print("here")
         elif text[0] == 's':
             name = text[2:]
             env.save_state(name)
@@ -885,5 +885,5 @@ if __name__ == '__main__':
                 data = [float(x) for x in data]
                 env._move_arm_one(arm, text[2], data)
         else:
-           print "Commands: r(eset), s(ave), l(oad), 1/2/3"
+           print("Commands: r(eset), s(ave), l(oad), 1/2/3")
 

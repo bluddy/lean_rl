@@ -1,0 +1,7 @@
+Lean Reinforcement Learning
+
+- Install via pip3:
+  - psutil
+  - pygame
+  - scipy
+  - numpy
