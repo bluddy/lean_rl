@@ -94,19 +94,15 @@ class ReplayBuffer(object):
 
     def _process_samples(self, data):
         # list of lists of state, next_state etc
-        batch = zip(*data)
+        batch = list(zip(*data))
 
         if self.mode == 'mixed':
             # Swap it so tuple is on the outside, batch is on inside
             s1 = [np.concatenate(b) for b in zip(*batch[0])]
             s2 = [np.concatenate(b) for b in zip(*batch[1])]
         else:
-            try:
-                s1 = np.concatenate(batch[0])
-                s2 = np.concatenate(batch[1])
-            except:
-                import pdb
-                pdb.set_trace()
+            s1 = np.concatenate(batch[0])
+            s2 = np.concatenate(batch[1])
 
         a = np.array(batch[2], copy=False)
         r = np.array(batch[3], copy=False).reshape(-1, 1)
