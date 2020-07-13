@@ -23,15 +23,19 @@ with open(args.csv_file, 'r') as f:
         data[target].extend(line)
         target = 1 - target
 
+# Zipping allows us to examine all
 data = list(zip(*data))
 
 data2 = []
 data3 = []
+
+#import pdb
+#pdb.set_trace()
+
 for line1, line2 in data:
     def process(line):
-        line = line.replace('\n','')
-        line = line.split(' ')
-        line = line[1:-1]
+        line = line.replace('\n','').replace('[','').replace(']','')
+        line = line.strip().split(' ')
         line = filter(lambda x: x != '', line)
         line = np.array([float(x) for x in line], dtype=np.float32)
         return line
@@ -42,27 +46,26 @@ data, data2 = data2, data3
 
 data3, data4 = [], []
 for l1, l2 in zip(data, data2):
-    if len(l1) == 6 and len(l2) == 6:
-        data3.append(l1)
-        data4.append(l2)
+    assert len(l1) == 6 and len(l2) == 6
+    data3.append(l1)
+    data4.append(l2)
 
 data, data2 = data3, data4
 
-data, data2 = data[-200:], data2[-200:]
+#data, data2 = data[-200:], data2[-200:] # comment if you want all
 
-data = np.array(data)
-data2 = np.array(data2)
+#import pdb
+#pdb.set_trace()
 
-print "data mean: {:.4f}\ndata stdev: {:.4f}\ndata2 mean: {:.4f}\ndata2 stdev: {:.4f}".format(
+data, data2 = np.array(data), np.array(data2)
+
+print "data mean: {}\ndata stdev: {}\ndata2 mean: {}\ndata2 stdev: {}".format(
         np.mean(data, axis=0), np.std(data, axis=0), np.mean(data2, axis=0), np.std(data2, axis=0))
 
 delta = np.abs(data - data2)
 
-print "delta mean: {:.4f}\ndelta stdev: {:.4f}".format(
+print "delta mean: {}\ndelta stdev: {}".format(
         np.mean(delta, axis=0), np.std(delta, axis=0))
-
-import pdb
-pdb.set_trace()
 
 print "done"
 

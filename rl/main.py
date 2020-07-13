@@ -563,8 +563,9 @@ def run(args):
             save_policy(model_path)
 
             if args.aux is not None:
+                csv_aux_arg = csv_aux if args.aux_collect else None
                 test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
-                        args.eval_loops, log_f, timestep, csv_aux, args)
+                        args.eval_loops, log_f, timestep, csv_aux_arg, args)
 
         ## Train
         if warmup_t <= 0 and \
@@ -645,8 +646,9 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         #pdb.set_trace()
 
         x, pred_x = policy.test(replay_buffer, args)
-        #csv_aux.writerow(x) # debug, takes up a lot of space
-        #csv_aux.writerow(pred_x)
+        if csv_aux is not None:
+            csv_aux.writerow(x) # debug, takes up a lot of space
+            csv_aux.writerow(pred_x)
         #print action, predicted_action, '\n'
         if args.aux == 'action':
             correct += (x == pred_x).sum()
@@ -918,6 +920,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--aux", default=None, type=str,
         help="Auxiliary loss: [state|action]")
+    parser.add_argument("--aux-collect", default=False, action='store_true',
+        help="Collect data for auxiliary loss")
     parser.add_argument("--reduced-dim", default = 100, type=int,
             help="Bottleneck for neural network (default:100)")
 
