@@ -233,7 +233,7 @@ def run(args):
             elif args.record:
                 env.set_save_mode('record')
             else:
-                envs.set_save_mode('')
+                env.set_save_mode('')
 
     set_save_mode_randomly()
 
