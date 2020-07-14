@@ -172,25 +172,26 @@ class QImage2Outs(BaseImage):
         # Map features to small state space
         ll = []
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
+        ll.extend(make_linear(d, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)
 
         # RL part
         ll = []
-        ll.extend(make_linear(d, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
         ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
         self.linear1 = nn.Sequential(*ll)
 
         # Aux part
         ll = []
-        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
+        ll.extend(make_linear(50, aux_size, bn=False, drop=False, relu=False))
         self.linear2 = nn.Sequential(*ll)
 
     def freeze_some(self, frozen):
-        for p in self.linear.parameters():
-            p.requires_grad = not frozen
-        for p in self.features.parameters():
-            p.requires_grad = not frozen
+        pass
+        #for p in self.linear.parameters():
+        #    p.requires_grad = not frozen
+        #for p in self.features.parameters():
+        #    p.requires_grad = not frozen
 
     def forward(self, x):
         x = self.features(x)
@@ -361,33 +362,36 @@ class QMixed2Outs(BaseImage):
         ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
         self.linear = nn.Sequential(*ll)
 
-        # RL part
         ll = []
         ll.extend(make_linear(d + state_dim, 100, bn=bn, drop=drop))
         ll.extend(make_linear(100, 50, bn=bn, drop=drop))
-        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
         self.linear1 = nn.Sequential(*ll)
+
+        # RL part
+        ll = []
+        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
+        self.linear2 = nn.Sequential(*ll)
 
         # Aux part
         ll = []
-        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
-        self.linear2 = nn.Sequential(*ll)
+        ll.extend(make_linear(50, aux_size, bn=False, drop=False, relu=False))
+        self.linear3 = nn.Sequential(*ll)
 
     def freeze_some(self, frozen):
-        for p in self.linear.parameters():
-            p.requires_grad = not frozen
-        for p in self.features.parameters():
-            p.requires_grad = not frozen
+        pass
+        #for p in self.linear.parameters():
+            #p.requires_grad = not frozen
+        #for p in self.features.parameters():
+            #p.requires_grad = not frozen
 
     def forward(self, x):
         img, state = x
         # Features to state
-        #import pdb
-        #pdb.set_trace()
         x = self.features(img)
         x = self.linear(x)
-        y = self.linear1(torch.cat((x, state), dim=-1)) # RL output
-        z = self.linear2(x) # Aux output
+        x = self.linear1(torch.cat((x, state), dim=-1)) # RL output
+        y = self.linear2(x) # RL output
+        z = self.linear3(x) # Aux output
         return y,z
 
 class QMixed2(nn.Module):
