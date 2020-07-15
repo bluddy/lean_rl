@@ -31,7 +31,9 @@ def run(args):
             [],[],[],[],[],[],[],[]
 
     last_learn_t, last_eval_t, last_stat_t = 0, 0, 0
-    best_avg_reward = -1e5
+    g_best_reward = -1e5
+    g_last_reward = -1e5
+    g_total_reloads = 0
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     timestep = 0
@@ -333,7 +335,7 @@ def run(args):
                 # Stop if we know where to stop reading csv
                 if timestep is not None and t > timestep:
                     break
-                r, q_avg, q_max, loss, best_avg_reward = map(
+                r, q_avg, q_max, loss, g_best_reward = map(
                     lambda x: float(x), line[1:6])
                 last_learn_t, last_eval_t = int(line[6]), int(line[7])
                 if len(line) > 8:
@@ -528,18 +530,18 @@ def run(args):
                 print("Greedy={}, std={}".format(epsilon_greedy, noise_std))
 
             # Block and flush result if needed
-            best_reward = evaluate_policy(
+            new_reward = evaluate_policy(
                 csv_wr, csv_f, log_f, tb_writer, logdir,
                 total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
                 total_success2,
                 temp_loss, temp_q_avg, temp_q_max,
                 envs, args, policy, timestep, test_path,
-                last_learn_t, last_eval_t, best_avg_reward)
+                last_learn_t, last_eval_t, g_best_reward)
 
-            # Set save mode randomly
+            # Set save mode randomly for the environments
             set_save_mode_randomly()
 
-            # Restore envs
+            # Restore envs from evaluation
             for env in envs:
                 if not env.is_ready(): # Flush old messages
                     env.get()
@@ -555,13 +557,25 @@ def run(args):
                 with open(pjoin(path, 'timestep.txt'), 'w') as f:
                     f.write(str(timestep))
 
-            best_path = pjoin(model_path, 'best')
-            if best_reward > best_avg_reward or not os.path.exists(best_path):
-                best_avg_reward = best_reward
-                print "Saving best avg reward: {}".format(best_avg_reward)
-                save_policy(best_path)
-            save_policy(model_path)
+            # Check if we regressed badly. If so, reload the model, but don't reset timesteps
+            if new_reward < g_last_reward and \
+               (abs(g_last_reward) - abs(new_reward)) / g_last_reward > 0.05:
+                   g_total_reloads += 1
+                   print "Reloading model {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
+                           g_total_reloads, g_last_reward, new_reward)
+                   policy.load(model_path)
+            else:
+                g_last_reward = new_reward
 
+                best_path = pjoin(model_path, 'best')
+                if new_reward > g_best_reward or not os.path.exists(best_path):
+                    g_best_reward = new_reward
+                    print "Saving best avg reward: {}".format(g_best_reward)
+                    save_policy(best_path)
+
+                save_policy(model_path) # Always save
+
+            # Training aux if needed
             if args.aux is not None:
                 csv_aux_arg = csv_aux if args.aux_collect else None
                 test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
@@ -683,7 +697,7 @@ def evaluate_policy(
         total_success2,
         temp_loss, temp_q_avg, temp_q_max,
         envs, args, policy, timestep, test_path,
-        last_learn_t, last_eval_t, best_avg_reward):
+        last_learn_t, last_eval_t, g_best_reward):
     ''' Runs deterministic policy for X episodes and
         @param tb_writer: tensorboard writer
         @returns average_reward
@@ -809,18 +823,19 @@ def evaluate_policy(
     s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward, r_avg[-1], best_avg_reward, avg_action, std_action,
+      env.episode, avg_reward, r_avg[-1], g_best_reward, avg_action, std_action,
       min_action, max_action,
       q_avg, q_max, loss_avg)
     print s
     log_f.write(s + '\n')
     csv_wr.writerow([
         timestep, avg_reward, q_avg, q_max, loss_avg,
-        best_avg_reward, last_learn_t, last_eval_t, succ1_pct, succ2_pct
+        g_best_reward, last_learn_t, last_eval_t, succ1_pct, succ2_pct
     ])
     csv_f.flush()
 
-    return r_avg[-1]
+    mean_last_rewards = np.mean(total_rewards_nd[-5:])
+    return mean_last_rewards
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
