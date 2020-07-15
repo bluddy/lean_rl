@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import numpy as np
 import os, sys, argparse
 from os.path import abspath
@@ -12,25 +14,36 @@ import utils
 ''' Create graphs from experiment csv data '''
 
 # CSV: t, r, q_avg, q_max, loss_avg, best_avg_r, last_learn_t, last_eval_t, succ1_pct, succ2_pct
-def load_files(files, tmax):
+def load_files(files, labels=None, tmax=None, div=50):
     # Load files
     data = []
+    # Get lowest max t among files
+    if not tmax:
+        tmax = sys.maxsize
+        for f in files:
+            with open(f, 'r') as f:
+                csv_f = csv.reader(f, delimiter=',')
+                for line in csv_f:
+                    t = int(line[0])
+            if t < tmax:
+                tmax = t
+
     for f in files:
         ts, rs, s1, s2 = [], [], [], []
         with open(f, 'r') as f:
             csv_f = csv.reader(f, delimiter=',')
             for line in csv_f:
                 t = int(line[0])
-                if t > t_max:
+                if t > tmax:
                     break
                 ts.append(t)
                 rs.append(float(line[1]))
                 s1.append(float(line[8]))
                 s2.append(float(line[9]))
         ts, rs, s1, s2 = (np.array(ts), np.array(rs), np.array(s1), np.array(s2))
-        r_avg, _, r_low, r_high = utils.get_stats(rs)
-        s1_avg, _, s1_low, s1_high = utils.get_stats(s1)
-        s2_avg, _, s2_low, s2_high = utils.get_stats(s2)
+        r_avg, _, r_low, r_high = utils.get_stats(rs, div)
+        s1_avg, _, s1_low, s1_high = utils.get_stats(s1, div)
+        s2_avg, _, s2_low, s2_high = utils.get_stats(s2, div)
         data.append({
             "t":ts,
             "r":rs,
@@ -47,47 +60,61 @@ def load_files(files, tmax):
             "s2_high":s2_high,
         })
 
+    if not labels:
+        labels = [str(x) for x in range(len(files))]
+    use_legend = len(files) > 1
+
     # Plot R_avg
     fig = plt.figure()
-    for d in data:
-        length = len(d["r_avg")
-        plt.plot(d["t"][:length], d["r_avg"], label='Average Rewards')
+    for d, label in zip(data, labels):
+        length = len(d["r_avg"])
+        plt.plot(d["t"][:length], d["r_avg"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    plt.savefig('rewards_avg.png'))
+    if use_legend:
+        plt.legend()
+    plt.savefig('rewards_avg.png')
 
     # Plot R
     fig = plt.figure()
-    for d in data:
-        plt.plot(d["t"], d["r"], label='Rewards')
+    for d, label in zip(data, labels):
+        plt.plot(d["t"], d["r"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    plt.savefig('rewards.png'))
+    if use_legend:
+        plt.legend()
+    plt.savefig('rewards.png')
 
     # Plot Success
     fig = plt.figure()
-    for d in data:
+    for d, label in zip(data, labels):
         use_succ2 = np.any(d["s2"] != 0.)
         if use_succ2:
-            plt.plot(d["t"], d["s1"] + d["s2"], label='State 2')
-        plt.plot(d["t"], d["s1"], label='State 1')
+            plt.plot(d["t"], d["s1"] + d["s2"], label=label + ' S2')
+        plt.plot(d["t"], d["s1"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    plt.savefig('success.png'))
+    if use_legend:
+        plt.legend()
+    plt.savefig('success.png')
 
-    # Plot Success
+    # Plot Average Success
     fig = plt.figure()
-    for d in data:
+    for d, label in zip(data, labels):
         length = len(d["s1_avg"])
         use_succ2 = np.any(d["s2_avg"] != 0.)
         if use_succ2:
-            plt.plot(d["t"][:length], d["s1"] + d["s2"], label='State 2')
-        plt.plot(d["t"][:length], d["s1"], label='State 1')
+            plt.plot(d["t"][:length], d["s1_avg"] + d["s2_avg"], label=label + ' S2')
+        plt.plot(d["t"][:length], d["s1_avg"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    plt.savefig('success_avg.png'))
+    if use_legend:
+        plt.legend()
+    plt.savefig('success_avg.png')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('files', required=True, nargs='+', help='CSV files')
-    parser.add_argument('tmax', default=None, type=int, help='Max time')
+    parser.add_argument('files', nargs='+', help='CSV files')
+    parser.add_argument('--labels', nargs='+', help='Labels for files')
+    parser.add_argument('--tmax', default=None, type=int, help='Max time')
+    parser.add_argument('--div', default=10, type=int, help='Mean points in graph')
     args = parser.parse_args()
 
-    load_files(args.files, tmax=args.tmax)
+    load_files(args.files, tmax=args.tmax, div=args.div)
 

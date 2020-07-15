@@ -30,12 +30,12 @@ class OUNoise:
         self.state = x + dx
         return self.state
 
-def get_stats(data):
+def get_stats(data, div=50):
     '''
     @data: 1-d ndarray
     Returns: stats
     '''
-    N = len(data) // 50
+    N = len(data) // div
     if N == 0:
         N = 1
     frac = np.ones((N,))/N
