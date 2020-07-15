@@ -8,3 +8,5 @@ python -m rl.test_cnn --env sim --procs 8 --lr 5e-5 --hires --stereo --capacity 
 # reach task, playback
 python -m rl.main --env sim --procs 8 --lr 5e-5 --capacity 5e4 --task reach --name try --mode image --aux-loss --stereo --policy ddqn
 
+# suture task, mixed, 2r2p, stereo
+python -m rl.main --env sim --procs 4 --lr 5e-5 --capacity 5e4 --task suture --mode mixed --policy ddqn --name 2r2p_nofreeze_dim20 --stereo --playback 2 --ou-sigma 0.5 --aux state --no-freeze --reduced-dim 20
