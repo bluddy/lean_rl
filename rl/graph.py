@@ -70,8 +70,10 @@ def load_files(files, labels=None, tmax=None, div=50):
         length = len(d["r_avg"])
         plt.plot(d["t"][:length], d["r_avg"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
+    plt.xlabel('steps')
+    plt.ylabel('reward')
     if use_legend:
-        plt.legend()
+        plt.legend(frameon=True)
     plt.savefig('rewards_avg.png')
 
     # Plot R
@@ -79,8 +81,10 @@ def load_files(files, labels=None, tmax=None, div=50):
     for d, label in zip(data, labels):
         plt.plot(d["t"], d["r"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
+    plt.xlabel('steps')
+    plt.ylabel('reward')
     if use_legend:
-        plt.legend()
+        plt.legend(frameon=True)
     plt.savefig('rewards.png')
 
     # Plot Success
@@ -88,11 +92,13 @@ def load_files(files, labels=None, tmax=None, div=50):
     for d, label in zip(data, labels):
         use_succ2 = np.any(d["s2"] != 0.)
         if use_succ2:
-            plt.plot(d["t"], d["s1"] + d["s2"], label=label + ' S2')
-        plt.plot(d["t"], d["s1"], label=label)
+            plt.plot(d["t"], d["s2"], label=label)
+        else:
+            plt.plot(d["t"], d["s1"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    if use_legend:
-        plt.legend()
+    plt.xlabel('steps')
+    plt.ylabel('% success')
+    plt.legend(frameon=True)
     plt.savefig('success.png')
 
     # Plot Average Success
@@ -101,11 +107,13 @@ def load_files(files, labels=None, tmax=None, div=50):
         length = len(d["s1_avg"])
         use_succ2 = np.any(d["s2_avg"] != 0.)
         if use_succ2:
-            plt.plot(d["t"][:length], d["s1_avg"] + d["s2_avg"], label=label + ' S2')
-        plt.plot(d["t"][:length], d["s1_avg"], label=label)
+            plt.plot(d["t"][:length], d["s2_avg"], label=label)
+        else:
+            plt.plot(d["t"][:length], d["s1_avg"], label=label)
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    if use_legend:
-        plt.legend()
+    plt.xlabel('steps')
+    plt.ylabel('% success')
+    plt.legend(frameon=True)
     plt.savefig('success_avg.png')
 
 if __name__ == "__main__":
@@ -116,5 +124,5 @@ if __name__ == "__main__":
     parser.add_argument('--div', default=10, type=int, help='Mean points in graph')
     args = parser.parse_args()
 
-    load_files(args.files, tmax=args.tmax, div=args.div)
+    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels)
 
