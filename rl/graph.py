@@ -64,6 +64,11 @@ def load_files(files, labels=None, tmax=None, div=50):
         labels = [str(x) for x in range(len(files))]
     use_legend = len(files) > 1
 
+    use_succ2 = False
+    for d in data:
+        if np.any(d["s2"] != 0.):
+            use_succ2 = True
+
     # Plot R_avg
     fig = plt.figure()
     for d, label in zip(data, labels):
@@ -90,31 +95,42 @@ def load_files(files, labels=None, tmax=None, div=50):
     # Plot Success
     fig = plt.figure()
     for d, label in zip(data, labels):
-        use_succ2 = np.any(d["s2"] != 0.)
-        if use_succ2:
-            plt.plot(d["t"], d["s2"], label=label)
-        else:
-            plt.plot(d["t"], d["s1"], label=label)
-        #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
+        plt.plot(d["t"], d["s1"] + d["s2"], label=label)
     plt.xlabel('steps')
     plt.ylabel('% success')
     plt.legend(frameon=True)
-    plt.savefig('success.png')
+    plt.savefig('success1.png')
 
     # Plot Average Success
     fig = plt.figure()
     for d, label in zip(data, labels):
         length = len(d["s1_avg"])
-        use_succ2 = np.any(d["s2_avg"] != 0.)
-        if use_succ2:
-            plt.plot(d["t"][:length], d["s2_avg"], label=label)
-        else:
-            plt.plot(d["t"][:length], d["s1_avg"], label=label)
-        #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
+        plt.plot(d["t"][:length], d["s1_avg"] + d["s2_avg"], label=label)
     plt.xlabel('steps')
     plt.ylabel('% success')
     plt.legend(frameon=True)
-    plt.savefig('success_avg.png')
+    plt.savefig('success1_avg.png')
+
+    if use_succ2:
+        # Plot Success
+        fig = plt.figure()
+        for d, label in zip(data, labels):
+            length = len(d["s2_avg"])
+            plt.plot(d["t"], d["s2"], label=label)
+        plt.xlabel('steps')
+        plt.ylabel('% success')
+        plt.legend(frameon=True)
+        plt.savefig('success2.png')
+
+        # Plot Average Success
+        fig = plt.figure()
+        for d, label in zip(data, labels):
+            length = len(d["s2_avg"])
+            plt.plot(d["t"][:length], d["s2_avg"], label=label)
+        plt.xlabel('steps')
+        plt.ylabel('% success')
+        plt.legend(frameon=True)
+        plt.savefig('success2_avg.png')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
