@@ -574,7 +574,7 @@ def run(args):
             if g_consec_reloads < max_consec_reloads and \
                new_reward < g_best_reward and \
                 g_best_reward > g_start_reward and \
-               abs(g_best_reward - g_min_reward) / abs(g_min_reward) > 0.4 and \
+               abs(g_best_reward - g_start_reward) / abs(g_start_reward) > 0.4 and \
                abs(g_best_reward - new_reward) / abs(g_best_reward) > 0.1:
                    g_total_reloads += 1
                    g_consec_reloads +=1
