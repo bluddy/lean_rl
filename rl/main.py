@@ -32,6 +32,7 @@ def run(args):
 
     last_learn_t, last_eval_t, last_stat_t = 0, 0, 0
     g_best_reward = -1e5
+    g_min_reward = 1e5
     g_last_reward = -1e5
     g_total_reloads = 0
 
@@ -557,23 +558,28 @@ def run(args):
                 with open(pjoin(path, 'timestep.txt'), 'w') as f:
                     f.write(str(timestep))
 
+            best_path = pjoin(model_path, 'best')
+            if new_reward > g_best_reward or not os.path.exists(best_path):
+                g_best_reward = new_reward
+                print "Saving best avg reward: {}".format(g_best_reward)
+                save_policy(best_path)
+
+            if new_reward < g_min_reward:
+                g_min_reward = new_reward
+
             # Check if we regressed badly. If so, reload the model, but don't reset timesteps
             if new_reward < g_last_reward and \
-               (abs(g_last_reward) - abs(new_reward)) / g_last_reward > 0.05:
+                g_last_reward > g_min_reward and \
+               abs(g_last_reward - g_min_reward) / abs(g_min_reward) > 0.5 and \
+               abs(g_last_reward - new_reward) / abs(g_last_reward) > 0.1:
                    g_total_reloads += 1
                    print "Reloading model {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
                            g_total_reloads, g_last_reward, new_reward)
                    policy.load(model_path)
             else:
-                g_last_reward = new_reward
-
-                best_path = pjoin(model_path, 'best')
-                if new_reward > g_best_reward or not os.path.exists(best_path):
-                    g_best_reward = new_reward
-                    print "Saving best avg reward: {}".format(g_best_reward)
-                    save_policy(best_path)
-
                 save_policy(model_path) # Always save
+
+            g_last_reward = new_reward
 
             # Training aux if needed
             if args.aux is not None:
