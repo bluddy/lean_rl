@@ -35,6 +35,8 @@ def run(args):
     g_min_reward = 1e5
     g_last_reward = -1e5
     g_total_reloads = 0
+    g_consec_reloads = 0
+    max_consec_reloads = 3
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     timestep = 0
@@ -568,18 +570,21 @@ def run(args):
                 g_min_reward = new_reward
 
             # Check if we regressed badly. If so, reload the model, but don't reset timesteps
-            if new_reward < g_last_reward and \
+            # After x consecutive reloads, give up
+            if g_consec_reloads < max_consec_reloads and \
+               new_reward < g_last_reward and \
                 g_last_reward > g_min_reward and \
                abs(g_last_reward - g_min_reward) / abs(g_min_reward) > 0.5 and \
                abs(g_last_reward - new_reward) / abs(g_last_reward) > 0.1:
                    g_total_reloads += 1
-                   print "Reloading model {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
-                           g_total_reloads, g_last_reward, new_reward)
+                   g_consec_reloads +=1
+                   print "Reloading model {}, conseq {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
+                           g_total_reloads, g_consec_reloads, g_last_reward, new_reward)
                    policy.load(model_path)
             else:
+                g_consec_reloads = 0
+                g_last_reward = new_reward
                 save_policy(model_path) # Always save
-
-            g_last_reward = new_reward
 
             # Training aux if needed
             if args.aux is not None:
@@ -840,8 +845,8 @@ def evaluate_policy(
     ])
     csv_f.flush()
 
-    mean_last_rewards = np.mean(total_rewards_nd[-5:])
-    return mean_last_rewards
+    #mean_last_rewards = np.mean(total_rewards_nd[-5:])
+    return avg_reward #mean_last_rewards
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -907,7 +912,7 @@ if __name__ == "__main__":
     parser.add_argument("--noise_clip", default=0.1, type=float,
         help='TD3 Range to clip target policy noise') # was 0.5
 
-    parser.add_argument("--buffer", default = 'replay', # 'priority'
+    parser.add_argument("--buffer", default = 'priority', # 'priority'
         help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
     parser.add_argument("--capacity", default=1e5, type=float,
         help='Size of replay buffer (bigger is better)')
