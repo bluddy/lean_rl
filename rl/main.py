@@ -37,6 +37,8 @@ def run(args):
     g_total_reloads = 0
     g_consec_reloads = 0
     max_consec_reloads = 3
+    abs_r_delta_reload = 0.1
+    rel_r_delta_reload = 0.1
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     timestep = 0
@@ -572,10 +574,10 @@ def run(args):
             # Check if we regressed by more than 10% from max. If so, reload the model, but don't reset timesteps
             # After x consecutive reloads, give up
             if g_consec_reloads < max_consec_reloads and \
+               g_best_reward > 0. and \
                new_reward < g_best_reward and \
-                g_best_reward > g_start_reward and \
-               abs(g_best_reward - g_start_reward) / abs(g_start_reward) > 0.4 and \
-               abs(g_best_reward - new_reward) / abs(g_best_reward) > 0.1:
+               abs(g_best_reward - new_reward) > abs_r_delta_reload and \
+               abs(g_best_reward - new_reward) / abs(g_best_reward) > rel_r_delta_reload:
                    g_total_reloads += 1
                    g_consec_reloads +=1
                    print "Reloading best model {} times, conseq {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
