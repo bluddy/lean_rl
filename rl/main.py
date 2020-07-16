@@ -32,7 +32,7 @@ def run(args):
 
     last_learn_t, last_eval_t, last_stat_t = 0, 0, 0
     g_best_reward = -1e5
-    g_min_reward = 1e5
+    g_start_reward = None
     g_last_reward = -1e5
     g_total_reloads = 0
     g_consec_reloads = 0
@@ -563,24 +563,24 @@ def run(args):
             best_path = pjoin(model_path, 'best')
             if new_reward > g_best_reward or not os.path.exists(best_path):
                 g_best_reward = new_reward
-                print "Saving best avg reward: {}".format(g_best_reward)
+                print "Saving best reward model: R={}".format(g_best_reward)
                 save_policy(best_path)
 
-            if new_reward < g_min_reward:
-                g_min_reward = new_reward
+            if g_start_reward is None:
+                g_start_reward = new_reward
 
-            # Check if we regressed badly. If so, reload the model, but don't reset timesteps
+            # Check if we regressed by more than 10% from max. If so, reload the model, but don't reset timesteps
             # After x consecutive reloads, give up
             if g_consec_reloads < max_consec_reloads and \
-               new_reward < g_last_reward and \
-                g_last_reward > g_min_reward and \
-               abs(g_last_reward - g_min_reward) / abs(g_min_reward) > 0.5 and \
-               abs(g_last_reward - new_reward) / abs(g_last_reward) > 0.1:
+               new_reward < g_best_reward and \
+                g_best_reward > g_start_reward and \
+               abs(g_best_reward - g_min_reward) / abs(g_min_reward) > 0.4 and \
+               abs(g_best_reward - new_reward) / abs(g_best_reward) > 0.1:
                    g_total_reloads += 1
                    g_consec_reloads +=1
-                   print "Reloading model {}, conseq {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
+                   print "Reloading best model {} times, conseq {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
                            g_total_reloads, g_consec_reloads, g_last_reward, new_reward)
-                   policy.load(model_path)
+                   policy.load(best_path)
             else:
                 g_consec_reloads = 0
                 g_last_reward = new_reward
