@@ -4,7 +4,7 @@ import torch.nn as nn
 import os, sys, math
 import torch.nn.functional as F
 from os.path import join as pjoin
-from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs
+from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QMixed2OutsFreeze, QImage2OutsFreeze
 import matplotlib.pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -72,13 +72,21 @@ class DQN(object):
                         drop=self.dropout).to(device)
                 else:
                     if self.aux == 'state':
+                        print "Aux state"
                         aux_size = self.aux_size
                     else:
                         raise InvalidArgument()
 
-                    n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
-                        bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    if self.freeze:
+                        print "Freeze"
+                        n = QImage2OutsFreeze(action_dim=self.total_steps, img_stack=self.total_stack,
+                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    else:
+                        print "NoFreeze"
+                        n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
+                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
             elif self.network == 'densenet':
                 n = QImageDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack).to(device)
@@ -99,10 +107,18 @@ class DQN(object):
                     else:
                         raise InvalidArgument()
 
-                    n = QMixed2Outs(state_dim=self.state_dim, action_dim=self.total_steps,
-                        img_stack=self.total_stack,
-                        bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    if self.freeze:
+                        print "Freeze"
+                        n = QMixed2OutsFreeze(state_dim=self.state_dim, action_dim=self.total_steps,
+                            img_stack=self.total_stack,
+                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    else:
+                        print "NoFreeze"
+                        n = QMixed2Outs(state_dim=self.state_dim, action_dim=self.total_steps,
+                            img_stack=self.total_stack,
+                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
             elif self.network == 'densenet':
                 n = QMixedDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack, state_dim=self.state_dim).to(device)

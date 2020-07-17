@@ -187,11 +187,51 @@ class QImage2Outs(BaseImage):
         self.linear2 = nn.Sequential(*ll)
 
     def freeze_some(self, frozen):
-        pass
-        #for p in self.linear.parameters():
-        #    p.requires_grad = not frozen
-        #for p in self.features.parameters():
-        #    p.requires_grad = not frozen
+        raise ValueError("Freezing not supported in QImage2Outs")
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.linear(x)
+        y = self.linear1(x)
+        z = self.linear2(x)
+        return y,z
+
+
+class QImage2OutsFreeze(BaseImage):
+    ''' QImage with two outputs coming out of the features
+        Allow freezing of CNN part
+        Use state shape of QState
+    '''
+    def __init__(self, action_dim, aux_size, drop=False, reduced_dim=10, **kwargs):
+        super(QImage2Outs, self).__init__(drop=drop, **kwargs)
+
+        print "QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+
+        bn=True
+        d = reduced_dim
+
+        # Map features to small state space
+        ll = []
+        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
+        self.linear = nn.Sequential(*ll)
+
+        # RL part
+        ll = []
+        ll.extend(make_linear(d, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
+        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
+        self.linear1 = nn.Sequential(*ll)
+
+        # Aux part
+        ll = []
+        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
+        self.linear2 = nn.Sequential(*ll)
+
+    def freeze_some(self, frozen):
+        for p in self.linear.parameters():
+            p.requires_grad = not frozen
+        for p in self.features.parameters():
+            p.requires_grad = not frozen
 
     def forward(self, x):
         x = self.features(x)
@@ -378,11 +418,7 @@ class QMixed2Outs(BaseImage):
         self.linear3 = nn.Sequential(*ll)
 
     def freeze_some(self, frozen):
-        pass
-        #for p in self.linear.parameters():
-            #p.requires_grad = not frozen
-        #for p in self.features.parameters():
-            #p.requires_grad = not frozen
+        raise ValueError("Freezing not supported in QMixed2Outs")
 
     def forward(self, x):
         img, state = x
@@ -393,6 +429,54 @@ class QMixed2Outs(BaseImage):
         y = self.linear2(x) # RL output
         z = self.linear3(x) # Aux output
         return y,z
+
+
+class QMixed2OutsFreeze(BaseImage):
+    ''' QMixed with two outputs coming out of the features
+        Needs freezing
+        Use state shape of QState
+    '''
+    def __init__(self, state_dim, action_dim, aux_size,
+            drop=False, reduced_dim=10, **kwargs):
+        super(QMixed2Outs, self).__init__(drop=drop, **kwargs)
+
+        print "QMixed2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+
+        bn=True
+        d = reduced_dim
+
+        # Map features to small state space
+        ll = []
+        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
+        self.linear = nn.Sequential(*ll)
+
+        # RL part
+        ll = []
+        ll.extend(make_linear(d + state_dim, 100, bn=bn, drop=drop))
+        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
+        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
+        self.linear1 = nn.Sequential(*ll)
+
+        # Aux part
+        ll = []
+        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
+        self.linear2 = nn.Sequential(*ll)
+
+    def freeze_some(self, frozen):
+        for p in self.linear.parameters():
+            p.requires_grad = not frozen
+        for p in self.features.parameters():
+            p.requires_grad = not frozen
+
+    def forward(self, x):
+        img, state = x
+        # Features to state
+        x = self.features(img)
+        x = self.linear(x)
+        y = self.linear1(torch.cat((x, state), dim=-1)) # RL output
+        z = self.linear2(x) # Aux output
+        return y,z
+
 
 class QMixed2(nn.Module):
     def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
