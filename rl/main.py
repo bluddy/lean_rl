@@ -580,8 +580,8 @@ def run(args):
                abs(g_best_reward - new_reward) / abs(g_best_reward) > rel_r_delta_reload:
                    g_total_reloads += 1
                    g_consec_reloads +=1
-                   print "Reloading best model {} times, conseq {}: Last reward:{:.3f}, new reward:{:.3f}, high drop.".format(
-                           g_total_reloads, g_consec_reloads, g_last_reward, new_reward)
+                   print "Reloading best model {} times, conseq {}: Best reward:{:.3f}, new reward:{:.3f}, high drop.".format(
+                           g_total_reloads, g_consec_reloads, g_best_reward, new_reward)
                    policy.load(best_path)
             else:
                 g_consec_reloads = 0
