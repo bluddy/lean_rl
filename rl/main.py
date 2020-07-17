@@ -36,7 +36,7 @@ def run(args):
     g_last_reward = -1e5
     g_total_reloads = 0
     g_consec_reloads = 0
-    max_consec_reloads = 3
+    max_consec_reloads = 10
     abs_r_delta_reload = 0.1
     rel_r_delta_reload = 0.1
 
@@ -914,7 +914,7 @@ if __name__ == "__main__":
     parser.add_argument("--noise_clip", default=0.1, type=float,
         help='TD3 Range to clip target policy noise') # was 0.5
 
-    parser.add_argument("--buffer", default = 'priority', # 'priority'
+    parser.add_argument("--buffer", default = 'replay', # 'priority'
         help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
     parser.add_argument("--capacity", default=1e5, type=float,
         help='Size of replay buffer (bigger is better)')
