@@ -889,8 +889,8 @@ if __name__ == "__main__":
     parser.add_argument("--no-ou-noise", default=True,
         action='store_false', dest='ou_noise',
         help='Use OU Noise process for noise instead of epsilon greedy')
-    parser.add_argument("--ou-sigma", default=0.25, type=float,
-        help='OU sigma level: how much to add per step')
+    parser.add_argument("--ou-sigma", default=0.5, type=float,
+        help='OU sigma level: how much to add per step') # was 0.25
     parser.add_argument("--ou-theta", default=0.15, type=float,
         help='OU theta: how much to reuse current levels')
 
