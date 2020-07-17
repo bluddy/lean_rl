@@ -8,6 +8,8 @@ from os.path import join as pjoin
 from torch.utils.tensorboard import SummaryWriter
 import csv
 from joblib import Parallel, delayed
+import json
+from json import JSONEncoder
 
 cur_dir= os.path.dirname(abspath(__file__))
 
@@ -24,27 +26,46 @@ import scipy.misc
 from multiprocessing import Process, Pipe
 from env_wrapper import EnvWrapper
 
+class GlobalState(object):
+    ''' Easy to serialize global state for runs '''
+    def __init__(self):
+        self.step = 0    # total steps
+        self.play_steps = 0  # number of playback steps
+        self.best_reward = -1e5
+        self.last_train_step = 0
+        self.last_eval_step = 0
+        self.last_stat_step = 0
+        self.total_reloads = 0
+        self.consec_reloads = 0
+        self.runtime = 0 # total runtime
+        self.warmup_steps = 0
+        self.reload_since_eval = False
+
+class GlobalStateEncoder(JSONEncoder):
+    def default(self, o):
+        return o.__dict__
+
+
 def run(args):
     # Total counts
     total_times, total_rewards, total_q_avg, total_q_max, total_loss, total_measure, total_success1, \
     total_success2 = \
             [],[],[],[],[],[],[],[]
 
-    last_learn_t, last_eval_t, last_stat_t = 0, 0, 0
-    g_best_reward = -1e5
-    g_start_reward = None
-    g_last_reward = -1e5
-    g_total_reloads = 0
-    g_consec_reloads = 0
+    # Reload constants
+    min_reload_r = 0.
     max_consec_reloads = 10
     abs_r_delta_reload = 0.1
     rel_r_delta_reload = 0.1
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
-    timestep = 0
-    warmup_t = args.learning_start
+    env_time = 0.
 
-    program_start_t = time.time()
+    g = GlobalState()
+
+    g.warmup_t = args.learning_start
+
+    start_measure_time = time.time()
 
     if args.env == 'needle':
         from env.needle.env import Environment
@@ -321,31 +342,29 @@ def run(args):
 
     # Load from files if requested
     if args.load_last and last_dir is not None:
-        last_model_dir = pjoin(logbase, last_dir, 'model')
+        model_dir = pjoin(logbase, last_dir, 'model')
         if args.load_best:
-            last_model_dir = pjoin(last_model_dir, 'best')
-        timestep_file = pjoin(last_model_dir, 'timestep.txt')
-        timestep = None
-        if os.path.exists(timestep_file):
-            with open(timestep_file, 'r') as f:
-                timestep = int(f.read()) + 1
-                warmup_t = args.learning_start
-        policy.load(last_model_dir)
-        last_csv_file = pjoin(logbase, last_dir, 'log.csv')
+            model_dir = pjoin(model_dir, 'best')
+        data_file = pjoin(model_dir, 'data.json')
+        if os.path.exists(data_file):
+            with open(data_file, 'r') as f:
+                g = json.load(data_file)
+        policy.load(model_dir)
+        # Same csv file for best and last
+        csv_file = pjoin(logbase, last_dir, 'log.csv')
         with open(last_csv_file) as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             t = 0
+            # load data and rewrite csv
             for line in reader:
                 t = int(line[0])
-                # Stop if we know where to stop reading csv
-                if timestep is not None and t > timestep:
+                if t > g.step:
                     break
-                r, q_avg, q_max, loss, g_best_reward = map(
-                    lambda x: float(x), line[1:6])
-                last_learn_t, last_eval_t = int(line[6]), int(line[7])
+                r, q_avg, q_max, loss, _ = map(lambda x: float(x), line[1:6])
                 if len(line) > 8:
                     succ1_pct = float(line[8])
                     succ2_pct = float(line[9])
+                    # ignore play_steps -- we're not graphing that automatically
                 total_times.append(t)
                 total_rewards.append(r)
                 total_q_avg.append(q_avg)
@@ -355,16 +374,7 @@ def run(args):
                 total_success2.append(succ2_pct)
                 csv_wr.writerow(line)
             csv_f.flush()
-            if timestep is None:
-                timestep = t + 1
-                warmup_t = args.learning_start
-        print 'last_model_dir is {}, t={}'.format(last_model_dir, timestep)
-
-    ## load pre-trained policy
-    #try:
-    #    policy.load(result_path)
-    #except:
-    #    pass
+        print 'model_dir is {}, t={}'.format(model_dir, g.step)
 
     if args.buffer == 'replay':
         replay_buffer = ReplayBuffer(args.mode, args.capacity,
@@ -400,14 +410,13 @@ def run(args):
 
     policy.set_eval()
 
-    elapsed_time = 0.
-
     proc_std = []
     terminate = False
 
+    # Termporary storage for data
     w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
 
-    while timestep < args.max_timesteps and not terminate:
+    while g.step < args.max_timesteps and not terminate:
 
         # Interact with the environments
 
@@ -417,12 +426,12 @@ def run(args):
 
         elif args.ep_greedy:
             # Epsilon-greedy
-            percent_greedy = (1. - min(1., float(timestep) /
+            percent_greedy = (1. - min(1., float(g.step) /
                 greedy_decay_rate))
             epsilon_greedy = args.ep_greedy_pct * percent_greedy
             if random.random() < epsilon_greedy:
                 noise_std = ((args.expl_noise - epsilon_final) *
-                    math.exp(-1. * float(timestep) / std_decay_rate))
+                    math.exp(-1. * float(g.step) / std_decay_rate))
                 ep_decay.append(noise_std)
                 # log_f.write('epsilon decay:{}\n'.format(noise_std)) # debug
                 noise = np.random.normal(0, noise_std, size=action_dim)
@@ -444,14 +453,14 @@ def run(args):
         #print "actions2.shape: ", actions2.shape
         #print "actions: ", actions, " actions2: ", actions2 # debug
 
-        # TODO: for dqn, we need to quantize the actions
+        # for dqn, we need to quantize the actions
         if args.policy == 'dqn':
             actions2 = policy.quantize_continuous(actions)
             #print "actions: ", actions, " actions2: ", actions2 # debug
             actions = actions2
 
         acted = False
-        start_t = time.time()
+        env_measure_time = time.time()
         new_states = []
 
         # Send non-blocking actions on ready envs
@@ -470,7 +479,7 @@ def run(args):
                 action = d["action"]
                 new_states.append(new_state)
 
-                if action is not None:
+                if action is not None: # Not reset
                     w_s1.append(state)
                     w_s2.append(new_state)
                     w_r.append(reward)
@@ -491,10 +500,12 @@ def run(args):
                     ou_noise.reset() # Reset to mean
 
                 acted = True
-                if warmup_t <= 0:
-                    timestep += 1
+                if g.warmup_steps <= 0:
+                    g.step += 1
+                    if env.get_save_mode() == 'play':
+                        g.play_steps += 1
                 else:
-                    warmup_t -= 1
+                    g.warmup_steps -= 1
             else:
                 # Nothing to do with the env yet
                 new_states.append(state)
@@ -516,17 +527,17 @@ def run(args):
                 replay_buffer.add([s1, s2, a, r, d, ba, es], num=p)
             w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
 
-        elapsed_time += time.time() - start_t
+        env_time += time.time() - env_measure_time
         if acted:
-            #print "Time: ", elapsed_time # debug
+            #print "Env time: ", env_elapsed_time # debug
             sys.stdout.write('.')
             sys.stdout.flush()
-            elapsed_time = 0.
+            env_time = 0.
 
         # Evaluate episode
-        if warmup_t <= 0 and timestep - last_eval_t > args.eval_freq:
+        if g.warmup_steps <= 0 and g.step - g.last_eval_step > args.eval_freq:
 
-            last_eval_t = timestep
+            g.last_eval_step = g.step
 
             print('\n---------------------------------------')
             print 'Evaluating policy for ', logdir
@@ -540,8 +551,8 @@ def run(args):
                 total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
                 total_success2,
                 temp_loss, temp_q_avg, temp_q_max,
-                envs, args, policy, timestep, test_path,
-                last_learn_t, last_eval_t, g_best_reward)
+                envs, args, policy, g, test_path)
+            g.reload_since_eval = False
 
             # Set save mode randomly for the environments
             set_save_mode_randomly()
@@ -555,81 +566,90 @@ def run(args):
 
             temp_loss, temp_q_avg, temp_q_max = [], [], []
 
+            # Update runtime
+            cur_time = time.time()
+            g.runtime += cur_time - start_measure_time
+            start_measure_time = cur_time
+
             def save_policy(path):
                 if not os.path.exists(path):
                     os.makedirs(path)
                 policy.save(path)
-                with open(pjoin(path, 'timestep.txt'), 'w') as f:
-                    f.write(str(timestep))
+                with open(pjoin(path, 'data.json'), 'w') as f:
+                    json.dump(g, f, cls=GlobalStateEncoder)
 
             best_path = pjoin(model_path, 'best')
-            if new_reward > g_best_reward or not os.path.exists(best_path):
-                g_best_reward = new_reward
-                print "Saving best reward model: R={}".format(g_best_reward)
+            if new_reward > g.best_reward or not os.path.exists(best_path):
+                g.best_reward = new_reward
+                print "Saving best reward model: R={}".format(g.best_reward)
                 save_policy(best_path)
 
-            if g_start_reward is None:
-                g_start_reward = new_reward
-
-            # Check if we regressed by more than 10% from max. If so, reload the model, but don't reset timesteps
+            # Check if we regressed by more than 10% from max.
+            # If so, reload the model, but don't reset timesteps
             # After x consecutive reloads, give up
-            if g_consec_reloads < max_consec_reloads and \
-               g_best_reward > 0. and \
-               new_reward < g_best_reward and \
-               abs(g_best_reward - new_reward) > abs_r_delta_reload and \
-               abs(g_best_reward - new_reward) / abs(g_best_reward) > rel_r_delta_reload:
-                   g_total_reloads += 1
-                   g_consec_reloads +=1
-                   print "Reloading best model {} times, conseq {}: Best reward:{:.3f}, new reward:{:.3f}, high drop.".format(
-                           g_total_reloads, g_consec_reloads, g_best_reward, new_reward)
+            if args.autoreload and \
+               g.consec_reloads < max_consec_reloads and \
+               g.best_reward > min_reload_r and \
+               new_reward < g.best_reward and \
+               abs(g.best_reward - new_reward) > abs_r_delta_reload and \
+               abs(g.best_reward - new_reward) / abs(g.best_reward) > rel_r_delta_reload:
+                   g.total_reloads += 1
+                   g.consec_reloads +=1
+                   print "!!Reloading best model {} times, conseq {}: Best reward:{:.3f}, new reward:{:.3f}, high drop.".format(
+                           g.total_reloads, g.consec_reloads, g.best_reward, new_reward)
+                   # Only load policy, not any global vars
                    policy.load(best_path)
+                   g.reload_since_eval = True
             else:
-                g_consec_reloads = 0
-                g_last_reward = new_reward
+                # no reloads
+                g.consec_reloads = 0
                 save_policy(model_path) # Always save
 
             # Training aux if needed
             if args.aux is not None:
                 csv_aux_arg = csv_aux if args.aux_collect else None
                 test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
-                        args.eval_loops, log_f, timestep, csv_aux_arg, args)
+                        args.eval_loops, log_f, g, csv_aux_arg, args)
 
-        ## Train
-        if warmup_t <= 0 and \
-            timestep - last_learn_t > args.learn_freq and \
+        ## Train model
+        if g.warmup_steps <= 0 and \
+            g.step - g.last_train_step > args.train_freq and \
             len(replay_buffer) > args.batch_size:
 
-            last_learn_t = timestep
+            g.last_train_step = g.step
 
             policy.set_train()
 
             # Train a few times
             for _ in range(1):
-                beta = min(1.0, beta_start + timestep *
+                beta = min(1.0, beta_start + g.step *
                     (1.0 - beta_start) / beta_frames)
 
                 critic_loss, actor_loss, q_avg, q_max = policy.train(
-                    replay_buffer, timestep, beta, args)
+                    replay_buffer, g.step, beta, args)
 
                 temp_q_avg.append(q_avg)
                 temp_q_max.append(q_max)
                 temp_loss.append(critic_loss)
 
-                save_mode_playing_cnt = 0
-                save_mode_recording_cnt = 0
+                # Collect stats
+                play_cnt, rec_cnt, sim_cnt = 0, 0, 0
                 for env in envs:
-                    if env.get_save_mode() == 'play':
-                        save_mode_playing_cnt += 1
-                    if env.get_save_mode() == 'record':
-                        save_mode_recording_cnt += 1
+                    mode = env.get_save_mode()
+                    if mode == 'play':
+                        play_cnt += 1
+                    elif mode == 'record':
+                        rec_cnt += 1
+                    else:
+                        sim_cnt += 1
 
-                s = '\nTraining T:{} TS:{:04d} CL:{:.5f} Exp_std:{:.2f} p:{} r:{}'.format(
-                    str(datetime.timedelta(seconds=time.time() - program_start_t)),
-                    timestep,
+                s = '\nTraining T:{} TS:{:04d} PTS%:{:.1f} CL:{:.5f} Exp_std:{:.2f} p{}r{}s{}'.format(
+                    str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)),
+                    g.step,
+                    float(g.play_steps) / float(g.step) * 100.,
                     critic_loss,
                     0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
-                    save_mode_playing_cnt,
-                    save_mode_recording_cnt
+                    play_cnt, rec_cnt, sim_cnt
                     )
                 s2 = ' AL:{:.5f}'.format(actor_loss) if actor_loss else ''
                 print s + s2,
@@ -645,10 +665,10 @@ def run(args):
 
         ## Get stats
         if args.stat_freq != 0 and \
-            timestep - last_stat_t > args.stat_freq and \
+            g.step - g.last_stat_step > args.stat_freq and \
             len(replay_buffer) >= 50000:
 
-            last_stat_t = timestep
+            g.last_stat_step = g.step
             data = replay_buffer.sample(50000)
             data = data[0]
             avg = np.mean(data, axis=0)
@@ -659,12 +679,12 @@ def run(args):
             log_f.write(s)
 
 
-    print("Best Reward: ", best_reward)
+    print("Best Reward: ", g.best_reward)
     csv_f.close()
     log_f.close()
 
 def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer, eval_loops, log_f,
-        timestep, csv_aux, args):
+        g, csv_aux, args):
     print 'Evaluating CNN for ', logdir
     test_loss, correct, total = [], 0, 0
     for _ in xrange(eval_loops):
@@ -702,15 +722,14 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
     fig = plt.figure()
     plt.plot(total_measure, label=label)
     plt.savefig(pjoin(logdir, 'acc.png'))
-    tb_writer.add_figure('acc', fig, global_step=timestep)
+    tb_writer.add_figure('acc', fig, global_step=g.step)
 
 def evaluate_policy(
         csv_wr, csv_f, log_f, tb_writer, logdir,
         total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
         total_success2,
         temp_loss, temp_q_avg, temp_q_max,
-        envs, args, policy, timestep, test_path,
-        last_learn_t, last_eval_t, g_best_reward):
+        envs, args, policy, g, test_path):
     ''' Runs deterministic policy for X episodes and
         @param tb_writer: tensorboard writer
         @returns average_reward
@@ -787,7 +806,7 @@ def evaluate_policy(
     if use_succ2:
         succ2_avg, succ2_var, _, _ = utils.get_stats(total_success2_nd)
 
-    total_times.append(timestep)
+    total_times.append(g.step)
     total_times_nd = np.array(total_times)
 
     #-- Average over all the training we did since last timestep
@@ -804,23 +823,22 @@ def evaluate_policy(
     plt.plot(total_times_nd, total_q_avg, label='Average Q')
     plt.plot(total_times_nd, total_q_max, label='Max Q')
     plt.savefig(pjoin(logdir, 'q_avg_max.png'))
-    tb_writer.add_figure('q_avg_max', fig, global_step=timestep)
+    tb_writer.add_figure('q_avg_max', fig, global_step=g.step)
     #--
 
     ## Plot loss
     fig = plt.figure()
     plt.plot(total_times_nd, total_loss, label='Loss')
     plt.savefig(pjoin(logdir, 'loss_avg.png'))
-    tb_writer.add_figure('loss_avg', fig, global_step=timestep)
+    tb_writer.add_figure('loss_avg', fig, global_step=g.step)
 
     ## Plot rewards
     fig = plt.figure()
     length = len(r_avg)
     plt.plot(total_times_nd[:length], r_avg, label='Rewards')
     plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
-    #plt.legend()
     plt.savefig(pjoin(logdir, 'rewards.png'))
-    tb_writer.add_figure('rewards', fig, global_step=timestep)
+    tb_writer.add_figure('rewards', fig, global_step=g.step)
 
     ## Plot success
     fig = plt.figure()
@@ -830,25 +848,25 @@ def evaluate_policy(
         plt.plot(total_times_nd[:length], succ2_avg, label='State 2')
     else:
         plt.plot(total_times_nd[:length], succ1_avg, label='Success')
-    plt.legend()
     plt.savefig(pjoin(logdir, 'success.png'))
 
     s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward, r_avg[-1], g_best_reward, avg_action, std_action,
-      min_action, max_action,
-      q_avg, q_max, loss_avg)
+      env.episode, avg_reward, r_avg[-1], g.best_reward, avg_action, std_action,
+      min_action, max_action, q_avg, q_max, loss_avg)
     print s
     log_f.write(s + '\n')
+    # TODO: remove last_learn_t, last_eval_t, g.best_reward
     csv_wr.writerow([
-        timestep, avg_reward, q_avg, q_max, loss_avg,
-        g_best_reward, last_learn_t, last_eval_t, succ1_pct, succ2_pct
+        g.step, avg_reward, q_avg, q_max, loss_avg,
+        g.best_reward, g.last_train_step, g.last_eval_step, succ1_pct, succ2_pct, g.play_steps,
+        1 if g.reload_since_eval else 0
     ])
     csv_f.flush()
 
-    #mean_last_rewards = np.mean(total_rewards_nd[-5:])
-    return avg_reward #mean_last_rewards
+    mean_last_rewards = np.mean(total_rewards_nd[-5:])
+    return float(mean_last_rewards)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -874,7 +892,7 @@ if __name__ == "__main__":
         help='Sets Gym, PyTorch and Numpy seeds')
     parser.add_argument("--eval-freq", default=10000, type=int, # 200
         help='How often (time steps) we evaluate')
-    parser.add_argument("--learn-freq", default=100, type=int,
+    parser.add_argument("--train-freq", default=100, type=int,
         help='Timesteps to explore before applying learning')
     parser.add_argument("--render-freq", default=100, type=int,
         help='How often (episodes) we save the images')
@@ -1034,6 +1052,11 @@ if __name__ == "__main__":
     #-- find stats of data
     parser.add_argument('--stat-freq', default=0, type=int,
             help='How often to evaluate statistics from replay buffer')
+
+    parser.add_argument('--no-autoreload', default=True, action='store_false',
+            dest='autoreload',
+            help='Reload when quality drops')
+
 
     args = parser.parse_args()
 
