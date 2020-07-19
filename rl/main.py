@@ -58,6 +58,12 @@ def run(args):
     abs_r_delta_reload = 0.1
     rel_r_delta_reload = 0.1
 
+    # Variables for rate control
+    rate_control = utils.RateControl()
+    # The more we sleep, the more the sim has time to catch up
+    target_sleep_time = 0.
+    delta_sleep_time = 0.01
+
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     env_time = 0.
 
@@ -469,7 +475,8 @@ def run(args):
                 #print "XXX train action: ", action # debug
                 env.step(action)
 
-        #time.sleep(0.1)
+        if target_sleep_time > 0:
+            time.sleep(target_sleep_time)
 
         # Save our data so we can loop and insert it into the replay buffer
         for env, state, ou_noise in zip(envs, states, ou_noises):
@@ -504,6 +511,9 @@ def run(args):
                     g.step += 1
                     if env.get_save_mode() == 'play':
                         g.play_steps += 1
+                        rate_control.add(1.)
+                    else:
+                        rate_control.add(0.)
                 else:
                     g.warmup_steps -= 1
             else:
@@ -617,6 +627,16 @@ def run(args):
 
             g.last_train_step = g.step
 
+            # Check rate
+            if args.play_rate != 0.:
+                rate = rate_control.rate() * 100.
+                if rate > args.play_rate + 0.05:
+                    target_sleep_time += delta_sleep_time
+                elif rate < args.play_rate - 0.05:
+                    target_sleep_time -= delta_sleep_time
+                if target_sleep_time < 0:
+                    target_sleep_time = 0
+
             policy.set_train()
 
             # Train a few times
@@ -645,7 +665,7 @@ def run(args):
                 s = '\nTraining T:{} TS:{:04d} PTS%:{:.1f} CL:{:.5f} Exp_std:{:.2f} p{}r{}s{}'.format(
                     str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)),
                     g.step,
-                    float(g.play_steps) / float(g.step) * 100.,
+                    rate_control.rate() * 100.,
                     critic_loss,
                     0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
                     play_cnt, rec_cnt, sim_cnt
@@ -1055,6 +1075,9 @@ if __name__ == "__main__":
     parser.add_argument('--autoreload', default=False, action='store_true',
             dest='autoreload',
             help='Reload when quality drops')
+
+    parser.add_argument('--play-rate', default=0., type=float,
+            help='Dynamic % playing to aim for')
 
 
     args = parser.parse_args()

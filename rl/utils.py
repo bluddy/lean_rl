@@ -48,25 +48,31 @@ def get_stats(data, div=50):
     return avg, var, lower, upper
 
 
-'''
-class ForkablePdb(pdb.Pdb):
+class RateControl(object):
+    ''' Stats for rate
+        Assumes insertion of 1s and 0s
+    '''
+    def __init__(self, size=1000):
+        self.data = np.zeros((size,), dtype=np.uint8)
+        self.capacity = size
+        self.size = 0
+        self.pos = 0
 
-    _original_stdin_fd = sys.stdin.fileno()
-    _original_stdin = None
+    def add(self, x):
+        self.data[self.pos] = x
+        self.pos += 1
+        if self.size < self.capacity:
+            self.size += 1
+        if self.pos >= self.capacity:
+            self.pos = 0
 
-    def __init__(self):
-        pdb.Pdb.__init__(self)
+    def rate(self):
+        if self.size < self.capacity:
+            r = np.mean(self.data[:self.size])
+        else:
+            r = np.mean(self.data)
+        return r
 
-    def _cmdloop(self):
-        current_stdin = sys.stdin
-        try:
-            if not self._original_stdin:
-                self._original_stdin = os.fdopen(self._original_stdin_fd)
-            sys.stdin = self._original_stdin
-            self.cmdloop()
-        finally:
-            sys.stdin = current_stdin
-'''
 
 class ForkablePdb(pdb.Pdb):
     """A Pdb subclass that may be used
