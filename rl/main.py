@@ -584,7 +584,7 @@ def run(args):
                 print "Saving best reward model: R={}".format(g.best_reward)
                 save_policy(best_path)
 
-            # Check if we regressed by more than 10% from max.
+            # Check if we regressed by more than X% from max.
             # If so, reload the model, but don't reset timesteps
             # After x consecutive reloads, give up
             if args.autoreload and \
@@ -595,8 +595,7 @@ def run(args):
                abs(g.best_reward - new_reward) / abs(g.best_reward) > rel_r_delta_reload:
                    g.total_reloads += 1
                    g.consec_reloads +=1
-                   print "!!Reloading best model {} times, conseq {}: Best reward:{:.3f}, new reward:{:.3f}, high drop.".format(
-                           g.total_reloads, g.consec_reloads, g.best_reward, new_reward)
+                   print "!!Reloading best model {} times, conseq {}: Best reward:{:.3f}, new reward:{:.3f}, high drop.".format(g.total_reloads, g.consec_reloads, g.best_reward, new_reward)
                    # Only load policy, not any global vars
                    policy.load(best_path)
                    g.reload_since_eval = True
@@ -1053,7 +1052,7 @@ if __name__ == "__main__":
     parser.add_argument('--stat-freq', default=0, type=int,
             help='How often to evaluate statistics from replay buffer')
 
-    parser.add_argument('--no-autoreload', default=True, action='store_false',
+    parser.add_argument('--autoreload', default=False, action='store_true',
             dest='autoreload',
             help='Reload when quality drops')
 
