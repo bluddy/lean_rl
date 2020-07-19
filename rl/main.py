@@ -62,7 +62,8 @@ def run(args):
     rate_control = utils.RateControl()
     # The more we sleep, the more the sim has time to catch up
     target_sleep_time = 0.
-    delta_sleep_time = 0.01
+    delta_sleep_time = 0.005
+    last_rate = 0.
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     env_time = 0.
@@ -630,10 +631,12 @@ def run(args):
             # Check rate
             if args.play_rate != 0.:
                 rate = rate_control.rate() * 100.
-                if rate > args.play_rate + 0.05:
+                if rate > args.play_rate + 0.05 and rate >= last_rate:
                     target_sleep_time += delta_sleep_time
-                elif rate < args.play_rate - 0.05:
+                elif rate < args.play_rate - 0.05 and rate <= last_rate:
                     target_sleep_time -= delta_sleep_time
+                last_rate = rate
+
                 if target_sleep_time < 0:
                     target_sleep_time = 0
 
