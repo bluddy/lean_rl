@@ -576,8 +576,12 @@ class Environment(common_env.CommonEnv):
         elif self.task == 'suture':
             nt -= np.array([-0.12, -0.73, -10.53])
             nt /= np.array([0.06, 0.04, 0.06])
-            tar -= np.array([-0.08, -0.69, -10.53])
-            tar /= np.array([0.01, 0.01, 0.05])
+            if tar.dtype == 'int64':
+                print 'Error in tar: got int64: ', tar
+                tar = np.array([0., 0., 0.], dtype=np.float32)
+            else:
+                tar -= np.array([-0.08, -0.69, -10.53])
+                tar /= np.array([0.01, 0.01, 0.05])
 
         return np.concatenate([
           nt.reshape((1, -1)),
