@@ -17,7 +17,7 @@ class DQN(object):
     def __init__(self, state_dim, action_dim, action_steps, stack_size,
             mode, network, lr=1e-4, img_depth=3, img_dim=224,
             amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=10,
-            depthmap_mode=False, freeze=False):
+            depthmap_mode=False, freeze=False, opt='adam'):
         '''@aux: None/'action'/state' '''
 
         self.state_dim = state_dim
@@ -42,6 +42,7 @@ class DQN(object):
         self.amp = amp
         self.reduced_dim = reduced_dim
         self.freeze = freeze
+        self.opt_type = opt
 
         self.aux = aux
         if self.aux == 'action':
@@ -131,7 +132,12 @@ class DQN(object):
         self.q_target = self._create_model()
 
         self.q_target.load_state_dict(self.q.state_dict())
-        self.q_optimizer = torch.optim.Adam(self.q.parameters(), lr=self.lr)
+        if self.opt_type == 'adam':
+            self.q_optimizer = torch.optim.Adam(self.q.parameters(), lr=self.lr)
+        elif self.opt_type == 'sgd':
+            self.q_optimizer = torch.optim.SGD(self.q.parameters(), lr=self.lr)
+        else:
+            raise ValueError('Unknown optimizer type')
 
         if self.amp:
             self.q, self.q_optimizer = amp.initialize(
@@ -409,7 +415,12 @@ class DDQN(DQN):
         for q, qt in zip(self.qs, self.qts):
             qt.load_state_dict(q.state_dict())
 
-        self.opts = [torch.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
+        if self.opt_type == 'adam':
+            self.opts = [torch.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
+        elif self.opt_type == 'sgd':
+            self.opts = [torch.optim.SGD(q.parameters(), lr=self.lr) for q in self.qs]
+        else:
+            raise ValueError('Unknown optimizer')
 
     def select_action(self, state):
 

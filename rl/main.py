@@ -322,7 +322,7 @@ def run(args):
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze)
+            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze, opt=args.opt)
     elif args.policy == 'ddqn':
         from policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
@@ -330,7 +330,7 @@ def run(args):
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
             reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode,
-            freeze=args.freeze)
+            freeze=args.freeze, opt=args.opt)
     elif args.policy == 'bdqn':
         from policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
@@ -1008,9 +1008,11 @@ if __name__ == "__main__":
         help='Target actor network update rate')
     #---
 
-    #--- Learning rates
+    #--- Optimizer
+    parser.add_argument("--opt", default='adam',
+        help="Optimizer to use [sgd|adam]")
     parser.add_argument("--lr", default=5e-5, type=float,
-        help="Learning rate for critic optimizer")
+        help="Learning rate for critic optimizer (sgd:1e-3, adam:5e-5)")
     parser.add_argument("--lr2", default=1e-3, type=float,
         help="Learning rate for second critic optimizer")
     parser.add_argument("--actor-lr", default=1e-5, type=float,
