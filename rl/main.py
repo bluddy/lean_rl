@@ -53,10 +53,10 @@ def run(args):
             [],[],[],[],[],[],[],[]
 
     # Reload constants
-    min_reload_r = 0.
-    max_consec_reloads = 10
-    abs_r_delta_reload = 0.1
-    rel_r_delta_reload = 0.1
+    min_reload_r = 2.
+    max_consec_reloads = 4
+    abs_r_delta_reload = 1.0
+    rel_r_delta_reload = 0.4
 
     # Variables for rate control
     rate_control = utils.RateControl()
