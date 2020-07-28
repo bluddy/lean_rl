@@ -18,6 +18,8 @@ def load_info_file(file):
     with open(file, 'r') as f:
         csv_f = csv.reader(f, delimiter=',')
         for line in csv_f:
+            if len(line) == 0:
+                break
             files.append(line[0])
             labels.append(line[1])
     return files, labels
