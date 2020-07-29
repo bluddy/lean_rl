@@ -119,11 +119,6 @@ class ReplayBuffer(object):
         else:
             sample.append(None)
 
-        if len(batch) > 6:
-            sample.append(np.array(batch[6], copy=False))
-        else:
-            sample.append(None)
-
         return sample
 
     def update_priorities(self, x, y):

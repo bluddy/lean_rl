@@ -82,6 +82,7 @@ class Environment(common_env.CommonEnv):
         self.state.next_gate = None
         self.state.filename = filename
         self.state.status = None
+        self.extra_state_dim = 0
 
         self.reset()
 
@@ -163,8 +164,9 @@ class Environment(common_env.CommonEnv):
             cur_state = st
         elif self.mode == 'mixed':
             cur_state = (ob, st)
-        return (cur_state, 0, False,
-                {"action":None, "save_mode":self.get_save_mode()})
+
+        extra = {"action":None, "save_mode":self.get_save_mode(), "success":False}
+        return (cur_state, 0, False, extra)
 
     def _draw(self):
         self.screen.fill(self.background_color)
@@ -352,10 +354,11 @@ class Environment(common_env.CommonEnv):
 
     def _get_env_state(self):
         ''' Get state in a way the NN can read it '''
-        if self.state.next_gate is not None:
-            gate = self.state.gates[self.next_gate]
+        if self.state.next_gate is not None and \
+            self.state.next_gate < len(self.state.gates):
+            gate = self.state.gates[self.state.next_gate]
             gate_x, gate_y, gate_w = gate.x, gate.y, gate.w
-        elif self.state.next_gate is None:
+        else:
             gate_x, gate_y, gate_w = 0., 0., 0.
         gate_x /= self.state.width
         gate_y /= self.state.height
@@ -461,8 +464,14 @@ class Environment(common_env.CommonEnv):
         elif self.mode == 'mixed':
             st = (ob, cur_state)
 
-        return (st, reward, done,
-                {"action": action_orig, "save_mode": self.get_save_mode()})
+        extra = {
+            "action": action_orig,
+            "save_mode": self.get_save_mode(),
+            "success": self._get_next_gate_status() == None,
+            "best_action": None,
+            "extra_state": None
+        }
+        return (st, reward, done, extra)
 
     def _surface_with_needle(self):
         for s in self.state.surfaces:

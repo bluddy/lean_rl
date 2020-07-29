@@ -133,8 +133,10 @@ class DQN(object):
 
         self.q_target.load_state_dict(self.q.state_dict())
         if self.opt_type == 'adam':
+            print "opt = Adam"
             self.q_optimizer = torch.optim.Adam(self.q.parameters(), lr=self.lr)
         elif self.opt_type == 'sgd':
+            print "opt = SGD"
             self.q_optimizer = torch.optim.SGD(self.q.parameters(), lr=self.lr)
         else:
             raise ValueError('Unknown optimizer type')
@@ -254,7 +256,7 @@ class DQN(object):
 
         return state
 
-    def _copy_sample_to_dev(self, x, y, u, r, d, best_action, extra_state, batch_size):
+    def _copy_sample_to_dev(self, x, y, u, r, d, extra_state, batch_size):
         x = self._process_state(x)
         y = self._process_state(y)
         # u is the actions: still as ndarrays
@@ -264,21 +266,16 @@ class DQN(object):
         u = torch.LongTensor(u).to(device)
         r = torch.FloatTensor(r).to(device)
         d = torch.FloatTensor(1 - d).to(device)
-        if best_action is not None:
-            best_action = self._cont_to_discrete(best_action).reshape((batch_size, -1))
-            best_action = torch.LongTensor(best_action).to(device)
         if extra_state is not None:
             extra_state = extra_state.reshape((batch_size, -1))
             extra_state = torch.FloatTensor(extra_state).to(device)
-        return x, y, u, r, d, best_action, extra_state
+        return x, y, u, r, d, extra_state
 
-    def _copy_sample_to_dev_small(self, x, best_action, extra_state, batch_size):
+    def _copy_sample_to_dev_small(self, x, extra_state, batch_size):
         x = self._process_state(x)
-        best_action = self._cont_to_discrete(best_action).reshape((batch_size, -1))
-        best_action = torch.LongTensor(best_action).to(device)
         extra_state = extra_state.reshape((batch_size, -1))
         extra_state = torch.FloatTensor(extra_state).to(device)
-        return x, best_action, extra_state
+        return x, extra_state
 
     def select_action(self, state):
 
@@ -298,13 +295,12 @@ class DQN(object):
     def train(self, replay_buffer, timesteps, beta, args):
 
         # Sample replay buffer
-        [x, y, u, r, d, best_action, extra_state, indices] = replay_buffer.sample(
-            args.batch_size, beta=beta)
-
+        data = replay_buffer.sample(args.batch_size, beta=beta)
+        [x, y, u, r, d, extra_state, indices] = data
         length = len(u)
 
-        state, state2, action, reward, done, best_action, extra_state = \
-            self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
+        state, state2, action, reward, done, extra_state = \
+            self._copy_sample_to_dev(x, y, u, r, d, extra_state, length)
 
         Q_ts = self.q_target(state2)
         if self.aux is not None:
@@ -329,7 +325,7 @@ class DQN(object):
         q_loss = q_loss.mean()
 
         if self.aux is not None:
-            compare_to = best_action if self.aux == 'action' else extra_state
+            compare_to = extra_state
             aux_loss = self.aux_loss(predicted, compare_to)
             aux_losses.append(aux_loss.item())
 
@@ -379,10 +375,10 @@ class DQN(object):
         return q_loss.item(), a_ret, Q_now.mean().item(), Q_now.max().item()
 
     def test(self, replay_buffer, args):
-            [x, _, _, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
+            [x, _, _, _, _, extra_state, _] = replay_buffer.sample(args.batch_size)
             length = len(x)
 
-            state, action, extra_state = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
+            state, action, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
 
             _, predict = self.q(state)
             if self.aux == 'action':
@@ -416,8 +412,10 @@ class DDQN(DQN):
             qt.load_state_dict(q.state_dict())
 
         if self.opt_type == 'adam':
+            print "opt = Adam"
             self.opts = [torch.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
         elif self.opt_type == 'sgd':
+            print "opt = SGD"
             self.opts = [torch.optim.SGD(q.parameters(), lr=self.lr) for q in self.qs]
         else:
             raise ValueError('Unknown optimizer')
@@ -442,19 +440,19 @@ class DDQN(DQN):
                 enumerate(zip(self.qs, self.qts, self.opts)):
 
             # Get samples
-            [x, y, u, r, d, best_action, extra_state, indices] = \
-                replay_buffer.sample(args.batch_size, beta=beta, num=num)
+            data = replay_buffer.sample(args.batch_size, beta=beta, num=num)
+            [x, y, u, r, d, extra_state, indices] = data
             length = len(u)
 
-            state, state2, action, reward, done, best_action, extra_state = \
-                self._copy_sample_to_dev(x, y, u, r, d, best_action, extra_state, length)
+            state, state2, action, reward, done, extra_state = \
+                self._copy_sample_to_dev(x, y, u, r, d, extra_state, length)
 
             if self.aux is not None:
                 if self.freeze:
                     update_q.freeze_some(False)
 
                 _, predicted = update_q(state)
-                compare_to = best_action if self.aux == 'action' else extra_state
+                compare_to = extra_state
                 aux_loss = self.aux_loss(predicted, compare_to)
                 aux_losses.append(aux_loss.item())
 
@@ -509,11 +507,11 @@ class DDQN(DQN):
         return np.mean(q_losses), aux_ret, np.mean(Q_mean), np.max(Q_max)
 
     def test(self, replay_buffer, args):
-            [x, _, u, _, _, best_action, extra_state, _] = replay_buffer.sample(args.batch_size)
+            [x, _, u, _, _, extra_state, _] = replay_buffer.sample(args.batch_size)
 
             length = len(u)
 
-            state, action, extra_state = self._copy_sample_to_dev_small(x, best_action, extra_state, length)
+            state, action, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
 
             _, predict = self.qs[0](state)
             if self.aux == 'action':

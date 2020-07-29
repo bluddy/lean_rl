@@ -741,7 +741,6 @@ class Environment(common_env.CommonEnv):
 
         extra = {"action": action_orig, "save_mode":self.get_save_mode(), "success":success}
 
-        extra["best_action"] = self._get_best_action()
         extra["extra_state"] = self._get_extra_state()
 
         return (cur_state, reward, done, extra)

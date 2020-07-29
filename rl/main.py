@@ -298,7 +298,9 @@ def run(args):
 
     action_steps = dummy_env.action_steps
     action_dim = dummy_env.action_dim
-    extra_state_dim = dummy_env.extra_state_dim
+    extra_state_dim = 0
+    if args.aux is not None:
+        extra_state_dim = dummy_env.extra_state_dim
 
     img_depth = args.img_depth
     if args.depthmap_mode:
@@ -421,7 +423,7 @@ def run(args):
     terminate = False
 
     # Termporary storage for data
-    w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
+    w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs = [],[],[],[],[],[],[]
 
     while g.step < args.max_timesteps and not terminate:
 
@@ -493,10 +495,7 @@ def run(args):
                     w_r.append(reward)
                     w_d.append(done)
                     w_a.append(action)
-                    ba = d["best_action"]
-                    es = d["extra_state"]
-                    w_ba.append(ba)
-                    w_es.append(es)
+                    w_es.append(d["extra_state"] if "extra_state" in d else None)
                     w_procs.append(env.server_num)
 
                 if done:
@@ -534,9 +533,12 @@ def run(args):
                 '''
 
             # Feed into the replay buffer
-            for s1, s2, a, r, d, ba, es, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs):
-                replay_buffer.add([s1, s2, a, r, d, ba, es], num=p)
-            w_s1, w_s2, w_a, w_r, w_d, w_ba, w_es, w_procs = [],[],[],[],[],[],[],[]
+            for s1, s2, a, r, d, es, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs):
+                data = [s1, s2, a, r, d]
+                if es is not None:
+                    data.append(es)
+                replay_buffer.add(data, num=p)
+            w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs = [],[],[],[],[],[],[]
 
         env_time += time.time() - env_measure_time
         if acted:
@@ -719,20 +721,13 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
             csv_aux.writerow(x) # debug, takes up a lot of space
             csv_aux.writerow(pred_x)
         #print action, predicted_action, '\n'
-        if args.aux == 'action':
-            correct += (x == pred_x).sum()
-            total += len(action)
-        elif args.aux == 'state':
+        if args.aux == 'state':
             loss = (x - pred_x)
             loss = loss * loss
             loss = np.mean(loss)
             test_loss.append(loss)
 
-    if args.aux == 'action':
-        measure = correct / float(total)
-        s = "Eval Accuracy: {:.3f}".format(measure)
-        label = 'Accuracy'
-    elif args.aux == 'state':
+    if args.aux == 'state':
         measure = np.mean(test_loss)
         s = "Eval L2: {:.3f}".format(measure)
         label = 'L2 Dist'
@@ -987,7 +982,7 @@ if __name__ == "__main__":
         help="Depth of image (1 for grey, 3 for RGB)")
 
     parser.add_argument("--aux", default=None, type=str,
-        help="Auxiliary loss: [state|action]")
+        help="Auxiliary loss: [state]")
     parser.add_argument("--aux-collect", default=False, action='store_true',
         help="Collect data for auxiliary loss")
     parser.add_argument("--reduced-dim", default = 100, type=int,
