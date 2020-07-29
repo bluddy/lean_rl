@@ -18,3 +18,5 @@ python -m rl.main --env sim --procs 4 --lr 1e-3 --capacity 5e4 --task suture --m
 # Suture graph
 ../../../rl/graph.py ../sut_bad_mi_3.csv ../sut_good_s_2.csv ../sut_good_st_1.csv --labels "Mono Image+State" "Stereo Image+State" "State" --div 10 --tmax 2000000
 
+# Graph with info
+../../../rl/graph.py --info make.csv --div 50 --tmax 2000000
