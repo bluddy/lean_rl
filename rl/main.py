@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 import csv
 from joblib import Parallel, delayed
 import json
-from json import JSONEncoder
+from json import JSONEncoder, JSONDecoder
 
 cur_dir= os.path.dirname(abspath(__file__))
 
@@ -28,23 +28,27 @@ from env_wrapper import EnvWrapper
 
 class GlobalState(object):
     ''' Easy to serialize global state for runs '''
-    def __init__(self):
-        self.step = 0    # total steps
-        self.play_steps = 0  # number of playback steps
-        self.best_reward = -1e5
-        self.last_train_step = 0
-        self.last_eval_step = 0
-        self.last_stat_step = 0
-        self.total_reloads = 0
-        self.consec_reloads = 0
-        self.runtime = 0 # total runtime
-        self.warmup_steps = 0
-        self.reload_since_eval = False
+    def __init__(self, step=0, play_steps=0, best_reward=-1e5, last_train_step=0,
+                last_eval_step=0, last_stat_step=0, total_reloads=0,
+                consec_reloads=0, runtime=0, warmup_steps=0, reload_since_eval=False, **kwargs):
+        self.step = step    # total steps
+        self.play_steps = play_steps  # number of playback steps
+        self.best_reward = best_reward
+        self.last_train_step = last_train_step
+        self.last_eval_step = last_eval_step
+        self.last_stat_step = last_stat_step
+        self.total_reloads = total_reloads
+        self.consec_reloads = consec_reloads
+        self.runtime = runtime # total runtime
+        self.warmup_steps = warmup_steps
+        self.reload_since_eval = reload_since_eval
 
 class GlobalStateEncoder(JSONEncoder):
     def default(self, o):
         return o.__dict__
 
+def decode_globalstate(dct):
+    return GlobalState(**dct)
 
 def run(args):
     # Total counts
@@ -357,11 +361,11 @@ def run(args):
         data_file = pjoin(model_dir, 'data.json')
         if os.path.exists(data_file):
             with open(data_file, 'r') as f:
-                g = json.load(data_file)
+                g = json.load(f, object_hook=decode_globalstate)
         policy.load(model_dir)
         # Same csv file for best and last
         csv_file = pjoin(logbase, last_dir, 'log.csv')
-        with open(last_csv_file) as csvfile:
+        with open(csv_file) as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             t = 0
             # load data and rewrite csv
@@ -951,7 +955,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--buffer", default = 'replay', # 'priority'
         help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
-    parser.add_argument("--capacity", default=1e5, type=float,
+    parser.add_argument("--capacity", default=5e4, type=float,
         help='Size of replay buffer (bigger is better)')
     parser.add_argument("--compressed", default=False,
         action='store_true', dest='compressed',
@@ -983,6 +987,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--aux", default=None, type=str,
         help="Auxiliary loss: [state]")
+    parser.add_argument("--no-aux", default=False, action='store_true',
+        help="No auxiliary loss")
     parser.add_argument("--aux-collect", default=False, action='store_true',
         help="Collect data for auxiliary loss")
     parser.add_argument("--reduced-dim", default = 100, type=int,
@@ -1025,7 +1031,7 @@ if __name__ == "__main__":
         help="If load-last is selected, continue from last best saved model")
     #---
 
-    parser.add_argument("--policy", default="dqn", type=str,
+    parser.add_argument("--policy", default="ddqn", type=str,
             help="Policy type. dummy|ddpg|td3|dqn|ddqn|bdqn")
     parser.add_argument("--n-samples", default=100, type=int,
             help="Number of samples for Batch DQN")
@@ -1099,6 +1105,9 @@ if __name__ == "__main__":
 
     if args.env == 'sim' and args.task == 'reach':
         args.random_env = True
+
+    if args.env == 'sim' and args.mode != 'state' and not args.no_aux:
+        args.aux = 'state'
 
     assert not (args.depthmap_mode and args.stereo_mode)
     assert (args.mode in ['image', 'mixed', 'state'])

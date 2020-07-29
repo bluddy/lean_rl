@@ -438,9 +438,9 @@ class QMixed2OutsFreeze(BaseImage):
     '''
     def __init__(self, state_dim, action_dim, aux_size,
             drop=False, reduced_dim=10, **kwargs):
-        super(QMixed2Outs, self).__init__(drop=drop, **kwargs)
+        super(QMixed2OutsFreeze, self).__init__(drop=drop, **kwargs)
 
-        print "QMixed2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop)
+        print "QMixed2OutsFreeze: reduced_dim={}, drop={}".format(reduced_dim, drop)
 
         bn=True
         d = reduced_dim

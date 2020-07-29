@@ -13,8 +13,22 @@ import utils
 
 ''' Create graphs from experiment csv data '''
 
+def load_info_file(file):
+    files, labels = [], []
+    with open(file, 'r') as f:
+        csv_f = csv.reader(f, delimiter=',')
+        for line in csv_f:
+            if len(line) == 0:
+                break
+            files.append(line[0])
+            labels.append(line[1])
+    return files, labels
+
 # CSV: t, r, q_avg, q_max, loss_avg, best_avg_r, last_learn_t, last_eval_t, succ1_pct, succ2_pct
-def load_files(files, labels=None, tmax=None, div=50):
+def load_files(files, labels=None, tmax=None, div=50, info_file=None):
+    if info_file is not None:
+        files, labels = load_info_file(info_file)
+
     # Load files
     data = []
     # Get lowest max t among files
@@ -60,7 +74,7 @@ def load_files(files, labels=None, tmax=None, div=50):
             "s2_high":s2_high,
         })
 
-    if not labels:
+    if labels is None:
         labels = [str(x) for x in range(len(files))]
     use_legend = len(files) > 1
 
@@ -77,6 +91,7 @@ def load_files(files, labels=None, tmax=None, div=50):
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
     plt.xlabel('steps')
     plt.ylabel('reward')
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     if use_legend:
         plt.legend(frameon=True)
     plt.savefig('rewards_avg.png')
@@ -88,6 +103,7 @@ def load_files(files, labels=None, tmax=None, div=50):
         #plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
     plt.xlabel('steps')
     plt.ylabel('reward')
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     if use_legend:
         plt.legend(frameon=True)
     plt.savefig('rewards.png')
@@ -98,6 +114,7 @@ def load_files(files, labels=None, tmax=None, div=50):
         plt.plot(d["t"], d["s1"] + d["s2"], label=label)
     plt.xlabel('steps')
     plt.ylabel('% success')
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     plt.legend(frameon=True)
     plt.savefig('success1.png')
 
@@ -108,6 +125,7 @@ def load_files(files, labels=None, tmax=None, div=50):
         plt.plot(d["t"][:length], d["s1_avg"] + d["s2_avg"], label=label)
     plt.xlabel('steps')
     plt.ylabel('% success')
+    plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     plt.legend(frameon=True)
     plt.savefig('success1_avg.png')
 
@@ -119,6 +137,7 @@ def load_files(files, labels=None, tmax=None, div=50):
             plt.plot(d["t"], d["s2"], label=label)
         plt.xlabel('steps')
         plt.ylabel('% success')
+        plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
         plt.legend(frameon=True)
         plt.savefig('success2.png')
 
@@ -129,16 +148,18 @@ def load_files(files, labels=None, tmax=None, div=50):
             plt.plot(d["t"][:length], d["s2_avg"], label=label)
         plt.xlabel('steps')
         plt.ylabel('% success')
+        plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
         plt.legend(frameon=True)
         plt.savefig('success2_avg.png')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('files', nargs='+', help='CSV files')
+    parser.add_argument('files', nargs='*', help='CSV files')
     parser.add_argument('--labels', nargs='+', help='Labels for files')
+    parser.add_argument('--info', default=None, help='Info for labels, files')
     parser.add_argument('--tmax', default=None, type=int, help='Max time')
     parser.add_argument('--div', default=10, type=int, help='Mean points in graph')
     args = parser.parse_args()
 
-    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels)
+    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels, info_file=args.info)
 

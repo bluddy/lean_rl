@@ -11,6 +11,12 @@ python -m rl.main --env sim --procs 8 --lr 5e-5 --capacity 5e4 --task reach --na
 # suture task, mixed, 2r2p, stereo
 python -m rl.main --env sim --procs 4 --lr 5e-5 --capacity 5e4 --task suture --mode mixed --policy ddqn --name 2r2p_nofreeze_dim20 --stereo --playback 2 --ou-sigma 0.5 --aux state --no-freeze --reduced-dim 20
 
+# Suture state SGD
+python -m rl.main --env sim --procs 4 --lr 1e-3 --capacity 5e4 --task suture --mode state --policy ddqn --playback 1 --batch-size 64 --play-rate 80 --opt sgd --name p80_sgd_lr1e3 --load-last
+
+
 # Suture graph
 ../../../rl/graph.py ../sut_bad_mi_3.csv ../sut_good_s_2.csv ../sut_good_st_1.csv --labels "Mono Image+State" "Stereo Image+State" "State" --div 10 --tmax 2000000
 
+# Graph with info
+../../../rl/graph.py --info make.csv --div 50 --tmax 2000000
