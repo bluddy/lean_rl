@@ -4,8 +4,7 @@ import torch.nn as nn
 import os, sys, math
 import torch.nn.functional as F
 from os.path import join as pjoin
-from models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QMixed2OutsFreeze, QImage2OutsFreeze
-import matplotlib.pyplot as plt
+from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QMixed2OutsFreeze, QImage2OutsFreeze
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -56,7 +55,7 @@ class DQN(object):
         if self.amp:
             import amp
 
-        print "LR=", lr, "freeze=", freeze
+        print("LR=", lr, "freeze=", freeze)
 
     def set_eval(self):
         self.q.eval()
@@ -95,7 +94,7 @@ class DQN(object):
             n = QState(state_dim=self.state_dim, action_dim=self.total_steps,
                     bn=self.bn, drop=self.dropout).to(device)
         elif self.mode == 'mixed':
-            print "Mixed network"
+            print("Mixed network")
             if self.network == 'simple':
                 if self.aux is None:
                     n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
@@ -103,7 +102,7 @@ class DQN(object):
                         img_dim=self.img_dim, drop=self.dropout).to(device)
                 else:
                     if self.aux == 'state':
-                        print "Aux state"
+                        print("Aux state")
                         aux_size = self.aux_size
                     else:
                         raise InvalidArgument()
@@ -152,13 +151,13 @@ class DQN(object):
             discrete = np.expand_dims(discrete, -1)
         assert(discrete.ndim == 2)
         cont = []
-        for dim_size, step_size in reversed(zip(
-                self.action_steps, self.step_sizes)):
+        for dim_size, step_size in reversed(list(zip(
+                self.action_steps, self.step_sizes))):
             num = (discrete % dim_size).astype(np.float32)
             num *= step_size
             num -= 1.
             cont = [np.transpose(num)] + cont
-            discrete /= dim_size
+            discrete //= dim_size
 
         cont = np.concatenate(cont)
         cont = np.transpose(cont)
@@ -170,8 +169,8 @@ class DQN(object):
         discrete values representing those continuous values.
         We leave them as floats here -- they'll be turned into longs later'''
 
-        #print "cont =", cont # debug
-        #print "shape =", cont.shape, "step_size =", self.step_sizes, "action_steps", self.action_steps # debug
+        #print( "cont =", cont) # debug
+        #print("shape =", cont.shape, "step_size =", self.step_sizes, "action_steps", self.action_steps) # debug
 
         # Continuous dimensions: (batch, action_dim)
         assert(cont.ndim == 2)

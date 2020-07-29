@@ -93,7 +93,7 @@ class CommonEnv(object):
             save_name = self._gen_save_name(sim_save=True, use_t=False) + '.data'
             save_path = pjoin(self._sm.path, save_name)
 
-            #print "Searching for ", save_path # debug
+            #print("Searching for ", save_path) # debug
 
             if os.path.exists(save_path):
 
@@ -107,7 +107,7 @@ class CommonEnv(object):
                 if len(self._sm.states) > 1:
                     return True
 
-            #print save_path, "not found"
+            #print(save_path, "not found")
 
     def _dump_sim_ep_states(self):
         ''' Save episode state from memory for future replay '''
@@ -140,8 +140,8 @@ class CommonEnv(object):
         #last_save_mode = self._sm.mode
         self._sm.mode = save_mode
 
-        #print "[{:02d}] save mode: {}, cur: {}, last: {} ".format(self.server_num,
-        #    v, self._sm.mode, last_save_mode) # debug
+        #print("[{:02d}] save mode: {}, cur: {}, last: {} ".format(self.server_num,
+        #    v, self._sm.mode, last_save_mode)) # debug
 
 
         if self._sm.mode == 'record':
@@ -176,9 +176,9 @@ class CommonEnv(object):
             if len(self._sm.images) == len(self._sm.states):
                 good = True
             else:
-                print "[{}] Mismatch! save mode images:{} states:{} epsiode:{}".format(
+                print("[{}] Mismatch! save mode images:{} states:{} epsiode:{}".format(
                     self.server_num, len(self._sm.images),
-                    len(self._sm.states), self._sm.ep)
+                    len(self._sm.states), self._sm.ep))
 
         self.state = self._sm.states[0]
         self.image = self._sm.images[0]
@@ -232,7 +232,7 @@ class CommonEnv(object):
             for f in filelist:
                 os.remove(f)
         else:
-            print "convert_to_video: No files found for ", pattern
+            print("convert_to_video: No files found for ", pattern)
 
     def get_save_mode(self):
         return self._sm.mode

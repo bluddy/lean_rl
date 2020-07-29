@@ -71,8 +71,8 @@ class Reward_reach_v0(object):
         y_needle = s.needle_tip_pos[1]
         z_needle = s.needle_tip_pos[2]
         if y_needle <= y_tissue:
-            #print "low needle: needle y:{} z:{} < tissue y: {}. target y:{}, z:{} ".format(
-            #        y_needle, z_needle, y_tissue, y_target, z_target)
+            #print("low needle: needle y:{} z:{} < tissue y: {}. target y:{}, z:{} ".format(
+            #        y_needle, z_needle, y_tissue, y_target, z_target))
             if not done:
                 reward -= 5.
                 reward_txt = "Bump into tissue!"
@@ -114,7 +114,7 @@ class Reward_reach_v0(object):
 
         if not s.needle_grasped:
             reward_txt = "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
-            print reward_txt
+            print(reward_txt)
             done = True
             reward -= 5.
 
@@ -196,7 +196,7 @@ class Reward_suture_simple(object):
             done = True
 
         if not ss.needle_grasped:
-            print "[{:02d}] XXX Needle dropped!".format(self.env.server_num)
+            print("[{:02d}] XXX Needle dropped!".format(self.env.server_num))
             reward_txt = "Needle dropped!"
             done = True
             reward -= 2.
@@ -206,7 +206,7 @@ class Reward_suture_simple(object):
             txt = "[{:02d}] Mismatch ns:{}, ts:{}, lns:{}, lts:{}".format(
                     self.env.server_num, nstatus, tstatus,
                     ls.needle_insert_status if ls else -1, ls.target_insert_status if ls else -1)
-            print txt
+            print(txt)
             reward_txt = txt
             done = True
             reward -= 2.
@@ -277,7 +277,7 @@ class Reward_suture_simple(object):
                         else:
                             self.success_count -= 1
 
-                    #print "ts>ls, r={}".format(reward) #debug
+                    #print("ts>ls, r={}".format(reward)) #debug
                 elif tstatus == last_tstatus:
                     # Check for change of dist
                     d = self.last_dist - dist
@@ -289,13 +289,13 @@ class Reward_suture_simple(object):
                     else:
                         reward += d * 100 # was 10
                     reward_txt += "delta: {:.5f}".format(d)
-                    #print "ts=ls, r={}, d={}".format(reward, dist) #debug
+                    #print("ts=ls, r={}, d={}".format(reward, dist)) #debug
                 else:
                     # regression. no good
                     reward_txt = "Regression!"
                     reward -= 8.
                     done = True
-                    #print "ts=ls, r={}".format(reward) #debug
+                    #print("ts=ls, r={}".format(reward)) #debug
 
                 self.last_dist = dist
 
@@ -392,7 +392,7 @@ class Reward_suture_v1(Reward_suture_simple):
                     ok = False
                     text = "[{}] Error: tstatus 1 but all submerged, {}".format(
                             self.env.server_num, self._submerged_s(submerged))
-                    print text
+                    print(text)
                     self.env.render(text=text)
                     return 0., False
 
@@ -409,7 +409,7 @@ class Reward_suture_v1(Reward_suture_simple):
 
                     text = "[{}] Error: tstatus 1: found submerged " \
                         "in wrong place: {}".format(self.env.server_num, self._submerged_s(submerged))
-                    print text
+                    print(text)
                     self.env.render(text=text)
 
                 # Relevant dist is to entry point
@@ -427,7 +427,7 @@ class Reward_suture_v1(Reward_suture_simple):
                     ok = False
                     text = "[{}] Error: tstatus {} but no submerged points: ".format(
                             self.env.server_num, tstatus, self._submerged_s(submerged))
-                    print text
+                    print(text)
                     self.env.render(text=text)
 
                 first_sub = idxs[0]
@@ -436,7 +436,7 @@ class Reward_suture_v1(Reward_suture_simple):
                 dist += extra_dist
             else:
                 ok = False
-                print "Error: tstatus 4 not yet supported"
+                print("Error: tstatus 4 not yet supported")
 
         return dist, ok
 

@@ -65,10 +65,10 @@ def train(args):
             'encoder_{}{}.pth'.format(args.img_dim,
                 '_bn' if args.batchnorm else '')))
 
-    for iter in xrange(max_iter):
+    for iter in range(max_iter):
         images, states = [], []
         iter_mult = iter * args.batch_size
-        for j in xrange(args.batch_size):
+        for j in range(args.batch_size):
             i, s = env.reset(random_needle=True)
             if (iter_mult + j) % render_freq == 0:
                 env.render(save_image=True, save_path='./out_img/')

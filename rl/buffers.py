@@ -94,19 +94,15 @@ class ReplayBuffer(object):
 
     def _process_samples(self, data):
         # list of lists of state, next_state etc
-        batch = zip(*data)
+        batch = list(zip(*data))
 
         if self.mode == 'mixed':
             # Swap it so tuple is on the outside, batch is on inside
             s1 = [np.concatenate(b) for b in zip(*batch[0])]
             s2 = [np.concatenate(b) for b in zip(*batch[1])]
         else:
-            try:
-                s1 = np.concatenate(batch[0])
-                s2 = np.concatenate(batch[1])
-            except:
-                import pdb
-                pdb.set_trace()
+            s1 = np.concatenate(batch[0])
+            s2 = np.concatenate(batch[1])
 
         a = np.array(batch[2], copy=False)
         r = np.array(batch[3], copy=False).reshape(-1, 1)
@@ -128,7 +124,7 @@ class ReplayBuffer(object):
         return len(self.buffer)
 
     def display(self):
-        print "buffer len: ", len(self)
+        print("buffer len: ", len(self))
 
     def save_to_disk(self, file):
         if self.mode == 'image':
@@ -319,7 +315,7 @@ class TieredBuffer(ReplayBuffer):
         self.proc_buffers[proc].append(data)
         r = data[3]
         self.proc_rewards[proc] += r
-        #print "proc_buf len: ", len(self.proc_buffers[proc]) # debug
+        #print("proc_buf len: ", len(self.proc_buffers[proc])) # debug
 
         # Check if we're done. If so, move to permanent buffer
         done = data[4]
@@ -371,12 +367,12 @@ class TieredBuffer(ReplayBuffer):
         self.buffers[self.last_tier].update_priorities(x,y)
 
     def display(self):
-        print "max_R: {:.2f} up_R: {:.2f}, low_R: {:.2f}, clipped {}".format(
+        print("max_R: {:.2f} up_R: {:.2f}, low_R: {:.2f}, clipped {}".format(
                 self.stats.max(), self.stats.upper(), self.stats.median(),
-                self.clip_count),
+                self.clip_count),end='')
         for i, buf in enumerate(self.buffers):
-            print "{}:{}, ".format(i, len(buf)),
-        print ""
+            print("{}:{}, ".format(i, len(buf)),end='')
+        print("")
 
 class MultiBuffer(ReplayBuffer):
     ''' Buffer that contains other buffers
@@ -399,13 +395,13 @@ class MultiBuffer(ReplayBuffer):
         ''' In compressed mode, the states must be pre-compressed '''
         target = num % self.count
 
-        #print "Adding to ", target # debug
+        #print("Adding to ", target) # debug
         self.buffers[target].add(data, **kwargs)
 
     def sample(self, batch_size, num=None, **kwargs):
         target = num % self.count
 
-        #print "Sampling from ", target # debug
+        #print("Sampling from ", target) # debug
         assert(len(self.buffers[target]) > 0)
 
         return self.buffers[target].sample(batch_size, **kwargs)

@@ -20,11 +20,13 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import datetime
-import utils
-from buffers import *
+
+import rl.utils as utils
+from .buffers import *
+from .env_wrapper import EnvWrapper
+
 import scipy.misc
 from multiprocessing import Process, Pipe
-from env_wrapper import EnvWrapper
 
 class GlobalState(object):
     ''' Easy to serialize global state for runs '''
@@ -135,7 +137,7 @@ def run(args):
     else:
         raise ValueError("Unrecognized environment " + args.env)
 
-    print "save_mode_path: ", save_mode_path
+    print("save_mode_path: ", save_mode_path)
 
     now = datetime.datetime.now()
     time_s = now.strftime('%y%m%d_%H%M')
@@ -323,14 +325,14 @@ def run(args):
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'dqn':
-        from policy.DQN import DQN
+        from rl.policy.DQN import DQN
         policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
             reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze, opt=args.opt)
     elif args.policy == 'ddqn':
-        from policy.DQN import DDQN
+        from rl.policy.DQN import DDQN
         policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
@@ -338,7 +340,7 @@ def run(args):
             reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode,
             freeze=args.freeze, opt=args.opt)
     elif args.policy == 'bdqn':
-        from policy.DQN import BatchDQN
+        from rl.policy.DQN import BatchDQN
         policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
             action_steps=action_steps, stack_size=args.stack_size,
             mode=args.mode,
@@ -387,7 +389,7 @@ def run(args):
                 total_success2.append(succ2_pct)
                 csv_wr.writerow(line)
             csv_f.flush()
-        print 'model_dir is {}, t={}'.format(model_dir, g.step)
+        print('model_dir is {}, t={}'.format(model_dir, g.step))
 
     if args.buffer == 'replay':
         replay_buffer = ReplayBuffer(args.mode, args.capacity,
@@ -462,14 +464,14 @@ def run(args):
         actions = np.clip(actions2 + noises, -1., 1.)
 
         # Debug stuff
-        #print "action2 proc std: ", np.std(actions2, axis=0)
-        #print "actions2.shape: ", actions2.shape
-        #print "actions: ", actions, " actions2: ", actions2 # debug
+        #print("action2 proc std: ", np.std(actions2, axis=0))
+        #print("actions2.shape: ", actions2.shape)
+        #print("actions: ", actions, " actions2: ", actions2) # debug
 
         # for dqn, we need to quantize the actions
         if args.policy == 'dqn':
             actions2 = policy.quantize_continuous(actions)
-            #print "actions: ", actions, " actions2: ", actions2 # debug
+            #print("actions: ", actions, " actions2: ", actions2) # debug
             actions = actions2
 
         acted = False
@@ -479,7 +481,7 @@ def run(args):
         # Send non-blocking actions on ready envs
         for env, action in zip(envs, actions):
             if env.is_ready():
-                #print "XXX train action: ", action # debug
+                #print("XXX train action: ", action) # debug
                 env.step(action)
 
         if target_sleep_time > 0:
@@ -546,7 +548,7 @@ def run(args):
 
         env_time += time.time() - env_measure_time
         if acted:
-            #print "Env time: ", env_elapsed_time # debug
+            #print("Env time: ", env_elapsed_time) # debug
             sys.stdout.write('.')
             sys.stdout.flush()
             env_time = 0.
@@ -557,7 +559,7 @@ def run(args):
             g.last_eval_step = g.step
 
             print('\n---------------------------------------')
-            print 'Evaluating policy for ', logdir
+            print('Evaluating policy for ', logdir)
             replay_buffer.display() # debug
             if args.ep_greedy:
                 print("Greedy={}, std={}".format(epsilon_greedy, noise_std))
@@ -598,7 +600,7 @@ def run(args):
             best_path = pjoin(model_path, 'best')
             if new_reward > g.best_reward or not os.path.exists(best_path):
                 g.best_reward = new_reward
-                print "Saving best reward model: R={}".format(g.best_reward)
+                print("Saving best reward model: R={}".format(g.best_reward))
                 save_policy(best_path)
 
             # Check if we regressed by more than X% from max.
@@ -680,14 +682,14 @@ def run(args):
                     play_cnt, rec_cnt, sim_cnt
                     )
                 s2 = ' AL:{:.5f}'.format(actor_loss) if actor_loss else ''
-                print s + s2,
+                print(s + s2, end='')
                 proc_std = []
 
                 log_f.write(s + s2 + '\n')
 
             policy.set_eval()
 
-        # print "Training done" # debug
+        # print("Training done") # debug
         states = new_states
         states_nd = dummy_env.combine_states(states)
 
@@ -703,7 +705,7 @@ def run(args):
             std = np.std(data, axis=0)
 
             s = '\nData mean:{}\n Data stdev:{}\n'.format(avg, std)
-            print s
+            print(s)
             log_f.write(s)
 
 
@@ -713,9 +715,9 @@ def run(args):
 
 def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer, eval_loops, log_f,
         g, csv_aux, args):
-    print 'Evaluating CNN for ', logdir
+    print('Evaluating CNN for ', logdir)
     test_loss, correct, total = [], 0, 0
-    for _ in xrange(eval_loops):
+    for _ in range(eval_loops):
 
         #import pdb
         #pdb.set_trace()
@@ -724,7 +726,7 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         if csv_aux is not None:
             csv_aux.writerow(x) # debug, takes up a lot of space
             csv_aux.writerow(pred_x)
-        #print action, predicted_action, '\n'
+        #print(action, predicted_action, '\n')
         if args.aux == 'state':
             loss = (x - pred_x)
             loss = loss * loss
@@ -735,7 +737,7 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         measure = np.mean(test_loss)
         s = "Eval L2: {:.3f}".format(measure)
         label = 'L2 Dist'
-    print s
+    print(s)
     log_f.write(s + '\n')
 
     total_measure.append(measure)
@@ -876,7 +878,7 @@ def evaluate_policy(
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
       env.episode, avg_reward, r_avg[-1], g.best_reward, avg_action, std_action,
       min_action, max_action, q_avg, q_max, loss_avg)
-    print s
+    print(s)
     log_f.write(s + '\n')
     # TODO: remove last_learn_t, last_eval_t, g.best_reward
     csv_wr.writerow([
