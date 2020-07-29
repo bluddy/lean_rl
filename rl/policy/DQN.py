@@ -511,14 +511,13 @@ class DDQN(DQN):
 
             length = len(u)
 
-            state, action, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
+            state, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
 
             _, predict = self.qs[0](state)
-            if self.aux == 'action':
-                predict = F.softmax(predict, dim=-1).argmax(dim=-1)
-                y = action.cpu().data.numpy()
-            elif self.aux == 'state':
+            if self.aux == 'state':
                 y = extra_state.cpu().data.numpy()
+            else:
+                raise ValueError('Unknown aux')
 
             predict = predict.cpu().data.numpy()
 
