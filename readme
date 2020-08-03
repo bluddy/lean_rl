@@ -5,3 +5,11 @@ Lean Reinforcement Learning
   - pygame
   - scipy
   - numpy
+  - torch
+  - torchvision
+  - tensorboard
+  - joblib
+  - matplotlib
+  - imageio
+  - posix_ipc
+  - scikit-image

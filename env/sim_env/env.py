@@ -15,6 +15,7 @@ from ctypes import c_uint8, c_int, c_float, POINTER
 import numpy as np
 
 import scipy, scipy.misc
+import skimage.transform as transform
 import pygame # for writing on surface
 
 import psutil # Install via pip
@@ -517,7 +518,7 @@ class Environment(common_env.CommonEnv):
         image = image[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
         w, h = self._get_width_height(hires=True, stereo=True, depth=False)
-        self.image = scipy.misc.imresize(image, (h,w))
+        self.image = transform.resize(image, (h,w), anti_aliasing=True)
 
         if self.depthmap_mode:
             # Crop depth to just the left image
@@ -527,7 +528,7 @@ class Environment(common_env.CommonEnv):
 
             # no interpolation on depth
             w, h = self._get_width_height(hires=True, stereo=False, depth=False)
-            depth = scipy.misc.imresize(depth, (h,w), interp='nearest')
+            depth = transform.resize(depth, (h,w), anti_aliasing=False)
 
             self.image = np.concatenate([self.image, depth], axis=1)
 
@@ -577,7 +578,7 @@ class Environment(common_env.CommonEnv):
             nt -= np.array([-0.12, -0.73, -10.53])
             nt /= np.array([0.06, 0.04, 0.06])
             if tar.dtype == 'int64':
-                print 'Error in tar: got int64: ', tar
+                print ('Error in tar: got int64: ', tar)
                 tar = np.array([0., 0., 0.], dtype=np.float32)
             else:
                 tar -= np.array([-0.08, -0.69, -10.53])
@@ -593,7 +594,7 @@ class Environment(common_env.CommonEnv):
         image = self.image
         # Resize to non-hires
         w, h = self._get_width_height(hires=False, stereo=True, depth=self.depthmap_mode)
-        image = scipy.misc.imresize(self.image, (h, w), interp='nearest')
+        image = transform.resize(self.image, (h,w), anti_aliasing=True)
         if self.depthmap_mode:
             # Process depthmap_mode into 6 layers
             # We'll later stitch it into 4
