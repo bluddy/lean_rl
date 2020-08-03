@@ -72,18 +72,18 @@ class DQN(object):
                         drop=self.dropout).to(device)
                 else:
                     if self.aux == 'state':
-                        print "Aux state"
+                        print("Aux state")
                         aux_size = self.aux_size
                     else:
                         raise InvalidArgument()
 
                     if self.freeze:
-                        print "Freeze"
+                        print("Freeze")
                         n = QImage2OutsFreeze(action_dim=self.total_steps, img_stack=self.total_stack,
                             bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
                             aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
                     else:
-                        print "NoFreeze"
+                        print("NoFreeze")
                         n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
                             bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
                             aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
@@ -108,13 +108,13 @@ class DQN(object):
                         raise InvalidArgument()
 
                     if self.freeze:
-                        print "Freeze"
+                        print("Freeze")
                         n = QMixed2OutsFreeze(state_dim=self.state_dim, action_dim=self.total_steps,
                             img_stack=self.total_stack,
                             bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
                             aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
                     else:
-                        print "NoFreeze"
+                        print("NoFreeze")
                         n = QMixed2Outs(state_dim=self.state_dim, action_dim=self.total_steps,
                             img_stack=self.total_stack,
                             bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
@@ -132,10 +132,10 @@ class DQN(object):
 
         self.q_target.load_state_dict(self.q.state_dict())
         if self.opt_type == 'adam':
-            print "opt = Adam"
+            print("opt = Adam")
             self.q_optimizer = torch.optim.Adam(self.q.parameters(), lr=self.lr)
         elif self.opt_type == 'sgd':
-            print "opt = SGD"
+            print("opt = SGD")
             self.q_optimizer = torch.optim.SGD(self.q.parameters(), lr=self.lr)
         else:
             raise ValueError('Unknown optimizer type')
@@ -411,10 +411,10 @@ class DDQN(DQN):
             qt.load_state_dict(q.state_dict())
 
         if self.opt_type == 'adam':
-            print "opt = Adam"
+            print("opt = Adam")
             self.opts = [torch.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
         elif self.opt_type == 'sgd':
-            print "opt = SGD"
+            print("opt = SGD")
             self.opts = [torch.optim.SGD(q.parameters(), lr=self.lr) for q in self.qs]
         else:
             raise ValueError('Unknown optimizer')
