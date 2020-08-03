@@ -13,3 +13,4 @@ Lean Reinforcement Learning
   - imageio
   - posix_ipc
   - scikit-image
+  - shapely
