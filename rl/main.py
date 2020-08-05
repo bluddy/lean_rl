@@ -763,26 +763,20 @@ def evaluate_policy(
     actions = []
     success_1 = []
     success_2 = []
-    num_done = 0
     for env in envs:
         env.set_save_mode('eval') # Stop recording
         if not env.is_ready(): # Flush old messages
             env.get()
         env.reset()
     states = [env.get()[0] for env in envs]
-    succ_temp = [0 for _ in range(5)]
-    while num_done < args.procs:
+    running = True
+    while running:
+        running = False
         acted = False
         # Send action
         for i, env in enumerate(envs):
-            if env.done:
-                # If done, add success value
-                if env.success < 0:
-                    env.success = 0
-                if env.success > 2:
-                    env.success = 2
-                succ_temp[env.success] += 1
-            else:
+            if not env.done:
+                running = True
                 if env.is_ready():
                     action = policy.select_action(states[i]).squeeze(0)
                     actions.append(action)
@@ -790,14 +784,20 @@ def evaluate_policy(
                     acted = True
                 elif env.poll():
                     state, reward, done, _ = env.get()
-                    if done:
-                        num_done += 1
                     states[i] = state
                     rewards[i] += reward
                     env.render(save_path=test_path)
         if acted:
             sys.stdout.write('.')
             sys.stdout.flush()
+
+    succ_temp = [0 for _ in range(3)] # All ending states
+    for i, env in enumerate(envs):
+        if env.success < 0:
+            env.success = 0
+        elif env.success > 2:
+            env.success = 2
+        succ_temp[env.success] += 1
 
     #Get average % for success states 1 and 2
     succ_sum = sum(succ_temp)
