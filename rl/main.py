@@ -746,6 +746,7 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
     plt.plot(total_measure, label=label)
     plt.savefig(pjoin(logdir, 'acc.png'))
     tb_writer.add_figure('acc', fig, global_step=g.step)
+    plt.close()
 
 def evaluate_policy(
         csv_wr, csv_f, log_f, tb_writer, logdir,
@@ -847,6 +848,7 @@ def evaluate_policy(
     plt.plot(total_times_nd, total_q_max, label='Max Q')
     plt.savefig(pjoin(logdir, 'q_avg_max.png'))
     tb_writer.add_figure('q_avg_max', fig, global_step=g.step)
+    plt.close()
     #--
 
     ## Plot loss
@@ -854,6 +856,7 @@ def evaluate_policy(
     plt.plot(total_times_nd, total_loss, label='Loss')
     plt.savefig(pjoin(logdir, 'loss_avg.png'))
     tb_writer.add_figure('loss_avg', fig, global_step=g.step)
+    plt.close()
 
     ## Plot rewards
     fig = plt.figure()
@@ -862,6 +865,7 @@ def evaluate_policy(
     plt.fill_between(total_times_nd[:length], r_low, r_high, alpha=0.4)
     plt.savefig(pjoin(logdir, 'rewards.png'))
     tb_writer.add_figure('rewards', fig, global_step=g.step)
+    plt.close()
 
     ## Plot success
     fig = plt.figure()
@@ -872,6 +876,7 @@ def evaluate_policy(
     else:
         plt.plot(total_times_nd[:length], succ1_avg, label='Success')
     plt.savefig(pjoin(logdir, 'success.png'))
+    plt.close()
 
     s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
