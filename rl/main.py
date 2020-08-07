@@ -122,10 +122,8 @@ def run(args):
         suffix = '_'
         if args.random_env:
             suffix += 'r'
-        # We always save with _hs, but don't always train/test with it
-        suffix += 'hs'
-        if args.depthmap_mode:
-            suffix += 'd'
+        # We always save with _hsd, but don't always train/test with it
+        suffix += 'hsd'
 
         save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
                 args.env, args.task, suffix))

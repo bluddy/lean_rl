@@ -593,7 +593,7 @@ class Environment(common_env.CommonEnv):
     def _get_env_state(self):
         image = self.image
         # Resize to non-hires
-        w, h = self._get_width_height(hires=False, stereo=True, depth=self.depthmap_mode)
+        w, h = self._get_width_height(hires=False, stereo=True, depth=True)
         image = transform.resize(self.image, (h,w), anti_aliasing=True)
         if self.depthmap_mode:
             # Process depthmap_mode into 6 layers
@@ -806,7 +806,7 @@ class Environment(common_env.CommonEnv):
         self.last_state = None
         self.image = None
 
-        w, h = self._get_width_height(hires=True, stereo=True, depth=self.depthmap_mode)
+        w, h = self._get_width_height(hires=True, stereo=True, depth=True)
         if not self._reset_try_play(w, h):
             self._reset_real()
 
