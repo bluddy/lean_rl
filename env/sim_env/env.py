@@ -21,6 +21,7 @@ import pygame # for writing on surface
 import psutil # Install via pip
 import getpass
 
+import traceback
 
 # Import reward functions
 
@@ -191,6 +192,7 @@ class Environment(common_env.CommonEnv):
         self.env_port = start_env_port + random_num + self.server_num * 2
         self.msg_id = 0
         self.rcv_msg_id = -1
+        self.change = False
         print("XXX port=", self.port, " env_port=", self.env_port) # debug
 
         # For shared memory support
@@ -278,12 +280,15 @@ class Environment(common_env.CommonEnv):
             self.clean_up_env()  # Remove zombies
 
     def _kill_sim(self):
+        print(self.server_num, " env::_kill_sim")
+        traceback.print_stack()
         self.sim_connection = None
         if self.sim_pid is not None:
             os.kill(self.sim_pid, signal.SIGTERM)
 
     # Kill sim on exit
     def __del__(self):
+        print(self.server_num, " env::__del__")
         self._kill_sim()
 
     def _callAndCheckAction(self, name, data=[]):
@@ -297,6 +302,7 @@ class Environment(common_env.CommonEnv):
 
         self.ready_flag_old = self.shared_vars[0]
         self.msg_id += 1
+        self.change = True
         #print("sending msg_id ", self.msg_id) #debug
 
         # List of items -> list of strings
@@ -370,7 +376,11 @@ class Environment(common_env.CommonEnv):
         # Save event
         event = event.getContentText()
         event = ast.literal_eval(event)
-        self.rcv_msg_id = event[0]
+        rcv_msg_id = event[0]
+        print("{} callback rcv_msg_id {}".format(self.server_num, rcv_msg_id))
+        if self.rcv_msg_id != rcv_msg_id:
+            self.change = True
+            self.rcv_msg_id = rcv_msg_id
         self.last_event = event
 
         # If first time for callback, open shared mem
@@ -378,6 +388,7 @@ class Environment(common_env.CommonEnv):
             self._init_shared_mem()
 
     def _connect_to_sim(self):
+        print(self.server_num, ": connect_to_sim, connection:", self.sim_connection) # debug
         if self.sim_connection is not None:
             return True
         self.program = 'runner'
@@ -491,18 +502,16 @@ class Environment(common_env.CommonEnv):
         else:
             print("convert_to_video: No files found for ", pattern)
 
-    def _wait_for_sim(self):
+    def _wait_for_sim(self, debug=False):
         # Wait for reply: both the packet and the shared mem
-        # debug
-        #print("rcv_msg_id is {}, ready_flag is {}".format(
-        #    self.rcv_msg_id, self.shared_vars[0]))
 
         while (self.rcv_msg_id < self.msg_id or
                self.ready_flag_old == self.shared_vars[0]):
-            # debug
-            #print("rcv_msg_id is {}, ready_flag is {}".format(
-            #    self.rcv_msg_id, self.shared_vars[0]))
-            time.sleep(0.04)
+            if debug and self.change:
+                print("{}, rcv_msg_id: {}, msg_id: {}, ready_old: {}, ready: {}".format(
+                  self.server_num, self.rcv_msg_id, self.msg_id, self.ready_flag_old, self.shared_vars[0]))
+                self.change = False
+            time.sleep(0.1)
 
     def _update_sim_state(self, action=None):
 
@@ -746,7 +755,9 @@ class Environment(common_env.CommonEnv):
 
         return (cur_state, reward, done, extra)
 
-    def _reset_real(self):
+    def _reset_real(self, debug=False):
+        if debug:
+            print(self.server_num, "reset_real")
         self._connect_to_sim()
 
         if self.episode % self.reboot_eps == 0:
@@ -763,11 +774,21 @@ class Environment(common_env.CommonEnv):
         good = False
         while not good:
             if self.error_ctr > 5:
+                if debug:
+                    print(self.server_num, "reboot_until_up")
                 self._reboot_until_up()
+                if debug:
+                    print(self.server_num, "reboot_until_up_done")
                 self.error_ctr = 0
 
+
+            if debug:
+                print(self.server_num, "sim_load_state_cmd")
             # Load the state
-            self.sim_load_state_cmd('reset_{}'.format(self.task), use_file=True)
+            self.sim_load_state_cmd('reset_{}'.format(self.task), use_file=True, debug=debug)
+            # Never gets here
+            if debug:
+                print(self.server_num, "sim_load_state_cmd_done")
 
             self._update_sim_state(action=None)
 
@@ -777,6 +798,9 @@ class Environment(common_env.CommonEnv):
             if self.state.needle_insert_status != 0:
                 good = False
             self.error_ctr += 1
+
+        if debug:
+            print(self.server_num, "reset_real_end")
 
     def _get_width_height(self, hires=False, stereo=False, depth=False):
         img_dim = self.img_dim * 2 if hires else self.img_dim
@@ -788,7 +812,7 @@ class Environment(common_env.CommonEnv):
         h = img_dim
         return w, h
 
-    def reset(self, render_ep_path=None):
+    def reset(self, render_ep_path=None, debug=False):
 
         # Check if last episode was a record. If so, convert
         if self.render_ep_path is not None:
@@ -807,8 +831,8 @@ class Environment(common_env.CommonEnv):
         self.image = None
 
         w, h = self._get_width_height(hires=True, stereo=True, depth=self.depthmap_mode)
-        if not self._reset_try_play(w, h):
-            self._reset_real()
+        if not self._reset_try_play(w, h, debug):
+            self._reset_real(debug)
 
         self._reset_record()
 
@@ -849,9 +873,16 @@ class Environment(common_env.CommonEnv):
         self._callAndCheckAction('saveState', state)
         self._wait_for_sim()
 
-    def sim_load_state_cmd(self, state='0', use_file=True):
+    def sim_load_state_cmd(self, state='0', use_file=True, debug=False):
+        if debug:
+            print(self.server_num, "callAndCheckAction")
         self._callAndCheckAction('loadState', [state, use_file, self.random_target])
-        self._wait_for_sim()
+        if debug:
+            print(self.server_num, "waitForSim")
+        self._wait_for_sim(debug=debug)
+        # Never get here
+        if debug:
+            print(self.server_num, "waitForSim_done")
 
 if __name__ == '__main__':
     import argparse

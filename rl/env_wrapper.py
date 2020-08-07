@@ -23,8 +23,15 @@ class EnvReceiver:
                 self.pipe.send(data)
 
             elif v[0] == RESET:
-                data = self.env.reset(render_ep_path=v[1])
+                debug = v[2]
+                if debug:
+                    print("rcvr {}, received. doing reset".format(self.env.server_num))
+                data = self.env.reset(render_ep_path=v[1], debug=True)
+                if debug:
+                    print("rcvr {}, sending data".format(self.env.server_num))
                 self.pipe.send(data)
+                if debug:
+                    print("rcvr {}, sent data".format(self.env.server_num))
 
             elif v[0] == QUIT:
                 running = False
@@ -70,12 +77,12 @@ class EnvWrapper:
         self.ready = False
         self.t += 1
 
-    def reset(self, render_ep_path=None):
+    def reset(self, render_ep_path=None, debug=False):
         self.done = False
         self.t = 0
         self.total_reward = 0.
         self.episode += 1
-        self.pipe.send((RESET, render_ep_path))
+        self.pipe.send((RESET, render_ep_path, debug))
         self.ready = False
 
     def reset_block(self):
@@ -100,8 +107,8 @@ class EnvWrapper:
     def is_ready(self):
         return self.ready
 
-    def poll(self):
-        return self.pipe.poll()
+    def poll(self, timeout=0):
+        return self.pipe.poll(timeout)
 
     def render(self, save_path):
         self.pipe.send((RENDER, save_path))

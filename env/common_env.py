@@ -163,10 +163,12 @@ class CommonEnv(object):
         elif self._sm.mode == 'play':
             self._read_save_info_file()
 
-    def _reset_play(self, img_width, img_height):
+    def _reset_play(self, img_width, img_height, debug=False):
         ''' Load up an episode for playback
             Assumption: save_mode = 'play'
         '''
+        if debug:
+            print(self.server_num, "reset_play")
         good = False
         while not good:
             self._load_sim_ep_states()
@@ -182,9 +184,11 @@ class CommonEnv(object):
 
         self.state = self._sm.states[0]
         self.image = self._sm.images[0]
+        if debug:
+            print(self.server_num, "reset_play_end")
         return True
 
-    def _reset_try_play(self, img_width, img_height):
+    def _reset_try_play(self, img_width, img_height, debug=False):
         if self._sm.play_ratio > 0:
             if self._sm.mode == 'play':
                 self._sm.resets += 1
@@ -198,7 +202,7 @@ class CommonEnv(object):
                     self.set_save_mode('play')
 
         if self._sm.mode == 'play':
-            self._reset_play(img_width, img_height)
+            self._reset_play(img_width, img_height, debug)
             return True
         else:
             return False

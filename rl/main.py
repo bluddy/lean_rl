@@ -764,12 +764,34 @@ def evaluate_policy(
     actions = []
     success_1 = []
     success_2 = []
-    for env in envs:
+    print("before flush") # debug
+    for i, env in enumerate(envs):
+        print("env ", i)
         env.set_save_mode('eval') # Stop recording
+        print("set_save_mode")
         if not env.is_ready(): # Flush old messages
+            print("getting")
             env.get()
-        env.reset()
-    states = [env.get()[0] for env in envs]
+        print("gotten")
+        env.reset(debug=True)
+        print("post-reset")
+
+    states = []
+    for i, env in enumerate(envs):
+        received = False
+        counter = 20
+        while not received and counter > 0:
+            received = env.poll(1)
+            print("poll:", i, received, "is_ready: ", env.is_ready())
+            counter -= 1
+        if not received:
+            from rl.utils import ForkablePdb
+            ForkablePdb().set_trace()
+        states.append(env.get()[0])
+        print("got ", i)
+
+    #states = [env.get()[0] for env in envs]
+    print("after flush") # debug
     running = True
     while running:
         running = False
