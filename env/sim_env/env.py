@@ -95,7 +95,7 @@ class State(object):
         ''' Interpret incoming data '''
 
         index = 1 # Skip msg_id
-        self.error = data[index]; index += 1
+        self.error = bool(data[index]); index += 1
 
         # TODO: for some reason, we're only getting one arm data
         # The other arm is zeroed out
@@ -108,7 +108,7 @@ class State(object):
         index += arm_size
 
         # 2 jaws
-        self.jaw = data[index:index + arm_dims[0]]
+        self.jaw = np.array(data[index:index + arm_dims[0]], dtype=np.float32)
         index += arm_dims[0]
 
         # World coordinates of jaw tips
@@ -126,49 +126,46 @@ class State(object):
         index += needle_size
 
         # Get 10 (or more) points of needle. First one is tip
-        num_points = data[index]; index += 1
+        num_points = int(data[index]); index += 1
         self.needle_points_pos = np.array(data[index:index + num_points * 3],
             dtype=np.float32).reshape((num_points, 3))
         index += num_points * 3
         self.needle_tip_pos = self.needle_points_pos[0]
 
         ## From NeedleDriving.py ##
-        self.curvature_radius = data[index]; index += 1
-        self.needle_grasped = data[index]; index += 1
-        self.needle_insert_status = data[index]; index += 1
-        self.num_targets = data[index];    index += 1
-        self.cur_target = data[index]; index += 1
+        self.curvature_radius = float(data[index]); index += 1
+        self.needle_grasped = bool(data[index]); index += 1
+        self.needle_insert_status = int(data[index]); index += 1
+        self.num_targets = int(data[index]); index += 1
+        self.cur_target = int(data[index]); index += 1
         # 0 = new throw, 1 = inserted, not exited
         # 2 = inserted, exited, 3 = post 2, needle removed from entrance target
-        self.target_insert_status = data[index]; index += 1
+        self.target_insert_status = int(data[index]); index += 1
 
         # Next target location
-        self.cur_target_pos = np.array(data[index: index + 3]);  index += 3
-        self.next_target_pos = np.array(data[index: index + 3]); index += 3
+        self.cur_target_pos = np.array(data[index: index + 3], dtype=np.float32);  index += 3
+        self.next_target_pos = np.array(data[index: index + 3], dtype=np.float32); index += 3
 
-        self.tools_out_of_view = data[index]; index += 1
-        self.instr_collisions = data[index]; index += 1
-        self.instr_endo_collisions = data[index]; index += 1
-        self.endo_env_collisions = data[index]; index += 1
-        self.total_motion = data[index]; index += 1
-        self.excessive_force = data[index]; index += 1
-        self.excessive_needle_pierces = data[index]; index += 1
-        self.excessive_insert_needle_pierces = data[index]; index += 1
-        self.excessive_exit_needle_pierces = data[index]; index += 1
-        self.excessive_needle_tissue_force = data[index]; index += 1
-        self.needle_tip_grabbed = data[index]; index += 1
-        self.incorrect_needle_throws = data[index]; index += 1
+        self.tools_out_of_view = int(data[index]); index += 1
+        self.instr_collisions = int(data[index]); index += 1
+        self.instr_endo_collisions = int(data[index]); index += 1
+        self.endo_env_collisions = int(data[index]); index += 1
+        self.total_motion = float(data[index]); index += 1
+        self.excessive_force = float(data[index]); index += 1
+        self.excessive_needle_pierces = int(data[index]); index += 1
+        self.excessive_insert_needle_pierces = int(data[index]); index += 1
+        self.excessive_exit_needle_pierces = int(data[index]); index += 1
+        self.excessive_needle_tissue_force = int(data[index]); index += 1
+        self.needle_tip_grabbed = bool(data[index]); index += 1
+        self.incorrect_needle_throws = int(data[index]); index += 1
 
-        # Handle older data
-        if len(data) > index:
-            self.tissue_corners = []
-            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
-            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
-            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
+        self.tissue_corners = []
+        self.tissue_corners.append(np.array(data[index:index+3], dtype=np.float32)); index += 3
+        self.tissue_corners.append(np.array(data[index:index+3], dtype=np.float32)); index += 3
+        self.tissue_corners.append(np.array(data[index:index+3], dtype=np.float32)); index += 3
 
-        if len(data) > index:
-            self.outside_insert_radius = data[index]; index += 1
-            self.outside_exit_radius = data[index]; index += 1
+        self.outside_insert_radius = bool(data[index]); index += 1
+        self.outside_exit_radius = bool(data[index]); index += 1
 
 class Environment(common_env.CommonEnv):
 
@@ -374,9 +371,10 @@ class Environment(common_env.CommonEnv):
 
     def _callback(self, event):
         # Save event
-        event = event.getContentText()
-        event = ast.literal_eval(event)
-        rcv_msg_id = event[0]
+        event_s = event.getContentText()
+        event = event_s[1:-1].split(',')
+        #event = ast.literal_eval(event)
+        rcv_msg_id = int(event[0])
         print("{} callback rcv_msg_id {}".format(self.server_num, rcv_msg_id))
         if self.rcv_msg_id != rcv_msg_id:
             self.change = True
