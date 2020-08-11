@@ -217,6 +217,7 @@ def run(args):
                 scale_rewards=args.scale_rewards,
                 action_steps=args.action_steps,
                 server_num=server_num,
+                add_delay=args.add_delay,
                 save_mode_path=save_mode_path,
                 save_mode='',
                 )
@@ -1090,6 +1091,8 @@ if __name__ == "__main__":
     parser.add_argument('--play-rate', default=0., type=float,
             help='Dynamic % playing to aim for')
 
+    parser.add_argument('--add-delay', default=0., type=float,
+            help='Add delay to fast environments')
 
     args = parser.parse_args()
 

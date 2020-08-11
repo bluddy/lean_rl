@@ -44,6 +44,7 @@ class Environment(common_env.CommonEnv):
             random_env=True, random_needle=True,
             min_gates=3, max_gates=3,
             scale_rewards=False,
+            add_delay=0.,
             **kwargs):
 
         super(Environment, self).__init__(**kwargs)
@@ -60,6 +61,7 @@ class Environment(common_env.CommonEnv):
         self.episode = 0
         self.total_time = 0
         self.render_ep_path = None
+        self.add_delay = add_delay
 
         """ create image stack """
         self.stack_size = stack_size
@@ -99,6 +101,10 @@ class Environment(common_env.CommonEnv):
         return action
 
     def _reset_real(self):
+
+        if self.add_delay > 0.:
+            time.sleep(self.add_delay)
+
         # Modify state
         self.state.ngates = 0
         self.state.gates = []
@@ -395,6 +401,10 @@ class Environment(common_env.CommonEnv):
         return s
 
     def _step_real(self, action_orig):
+
+        if self.add_delay > 0.:
+            time.sleep(self.add_delay)
+
         action = np.copy(action_orig)
         action *= 0.25 * math.pi
         self.state.action = action_orig
