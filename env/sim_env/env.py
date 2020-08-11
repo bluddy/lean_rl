@@ -276,15 +276,12 @@ class Environment(common_env.CommonEnv):
         ''' Reboot the sim and reconnect to it '''
         good = False
         while not good:
-            print('[{}] Rebooting'.format(self.server_num))
             self._kill_sim()
             time.sleep(6)
             good = self._connect_to_sim()
             self.clean_up_env()  # Remove zombies
 
     def _kill_sim(self):
-        print(self.server_num, " env::_kill_sim")
-        traceback.print_stack()
         if self.sim_pid is not None:
             os.kill(self.sim_pid, signal.SIGTERM)
             self.sim_pid = None
