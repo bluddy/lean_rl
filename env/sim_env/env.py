@@ -447,7 +447,9 @@ class Environment(common_env.CommonEnv):
 
         # Write reward on image
         # pygame is (x,y) while our array is (y,x)
-        surface = pygame.surfarray.make_surface(self.image.transpose((1,0,2)))
+        img = self.image.transpose((1,0,2)) * 255.0
+        img = img.astype(np.uint8)
+        surface = pygame.surfarray.make_surface(img)
 
         if not sim_save:
             n = self.state.needle_tip_pos
