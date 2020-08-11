@@ -263,8 +263,13 @@ class Environment(common_env.CommonEnv):
         self.extra_state_dim = 6
         self.render_ep_path = None
 
+
         if full_init:
-            if not self._connect_to_sim():
+            # Create sim_connection
+            self.sim_connection = SimulatorConnection.SimulatorConnection(
+                'localhost', self.port, via_daemon=False)
+
+            if not self._is_running():
                 self._reboot_until_up()
 
     def _reboot_until_up(self):
@@ -278,13 +283,16 @@ class Environment(common_env.CommonEnv):
             self.clean_up_env()  # Remove zombies
 
     def _kill_sim(self):
-        self.sim_connection = None
+        print(self.server_num, " env::_kill_sim")
+        traceback.print_stack()
         if self.sim_pid is not None:
             os.kill(self.sim_pid, signal.SIGTERM)
+            self.sim_pid = None
 
     # Kill sim on exit
     def __del__(self):
         self._kill_sim()
+        self.sim_connection = None
 
     def _callAndCheckAction(self, name, data=[]):
         # Make space-separated lists
@@ -377,9 +385,10 @@ class Environment(common_env.CommonEnv):
         if self.shared_mem is None:
             self._init_shared_mem()
 
+    def _is_running(self):
+        return self.sim_pid is not None
+
     def _connect_to_sim(self):
-        if self.sim_connection is not None:
-            return True
         self.program = 'runner'
 
         # Launch sim
@@ -391,18 +400,20 @@ class Environment(common_env.CommonEnv):
 
         time.sleep(6)
 
+        # Create sim_connection
+        #self.sim_connection = SimulatorConnection.SimulatorConnection(
+        #    'localhost', self.port, via_daemon=False)
+
         # Loop until sim is up
-        while self.sim_connection is None:
-            # Create sim_connection
-            self.sim_connection = SimulatorConnection.SimulatorConnection(
-                'localhost', self.port, via_daemon=False)
+        success = False
+        while not success:
 
             # Get the simulation version string
             result = self.sim_connection.call(Action('getAPIName'))
             if result.isSuccess():
+                success = True
                 apiName = result.getContentText()
             else:
-                self.sim_connection = None
                 print('Could not connect to network API.')
                 self.error_ctr += 1
                 if self.error_ctr > self.max_error_ctr:
@@ -661,7 +672,7 @@ class Environment(common_env.CommonEnv):
     def _step_real_sim(self, a_orig):
         ''' Take a real step in the sim '''
 
-        if not self._connect_to_sim():
+        if not self._is_running():
             self._reboot_until_up()
 
         # Real sim
@@ -747,7 +758,6 @@ class Environment(common_env.CommonEnv):
         return (cur_state, reward, done, extra)
 
     def _reset_real(self):
-        self._connect_to_sim()
 
         if self.episode % self.reboot_eps == 0:
             print("Episode is ", self.episode)
