@@ -53,7 +53,7 @@ class DQN(object):
         self._create_models()
 
         if self.amp:
-            import amp
+            import apex.amp as amp
 
         print("LR=", lr, "freeze=", freeze)
 
@@ -332,8 +332,13 @@ class DQN(object):
                 self.q.freeze_some(False)
 
             self.q_optimizer.zero_grad()
-            aux_loss.backward()
-            self.q_optimizer.step()
+
+            if self.amp:
+                with amp.scale_loss(aux_loss, self.q_optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                aux_loss.backward()
+                self.q_optimizer.step()
 
             if self.freeze:
                 self.q.freeze_some(True) # Only backprop last layers
@@ -419,6 +424,15 @@ class DDQN(DQN):
         else:
             raise ValueError('Unknown optimizer')
 
+        if self.amp:
+            qs, opts = [], []
+            for q, opt in zip(self.qs, self.opts):
+                q, opt = amp.initialize(q, opt, opt_level='O1')
+                qs.append(q)
+                opts.append(opt)
+            self.qs = qs
+            self.opts = opts
+
     def select_action(self, state):
 
         state = self._process_state(state)
@@ -456,8 +470,12 @@ class DDQN(DQN):
                 aux_losses.append(aux_loss.item())
 
                 opt.zero_grad()
-                aux_loss.backward()
-                opt.step()
+                if self.amp:
+                    with amp.scale_loss(aux_loss, opt) as scaled_loss:
+                        scaled_loss.backward()
+                else:
+                    aux_loss.backward()
+                    opt.step()
 
                 if self.freeze:
                     update_q.freeze_some(True) # Only backprop last layers
@@ -487,9 +505,12 @@ class DDQN(DQN):
 
             # Optimize the model
             opt.zero_grad()
-            q_loss.backward()
-
-            opt.step()
+            if self.amp:
+                with amp.scale_loss(q_loss, opt) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                q_loss.backward()
+                opt.step()
 
             # Update the frozen target models
             for p, pt in zip(update_q.parameters(), update_qt.parameters()):
