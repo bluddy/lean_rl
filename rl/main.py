@@ -114,6 +114,10 @@ def run(args):
             basename += '_aux' + args.aux
         if args.stereo_mode:
             basename += '_s'
+        elif args.depthmap_mode:
+            basename += '_d'
+        if args.amp:
+            basename += '_amp'
         basename += '_' + args.mode[:2]
         if args.dropout:
             basename += '_drop'
@@ -182,9 +186,6 @@ def run(args):
     if torch.cuda.is_available() and not args.disable_cuda:
         args.device = torch.device('cuda')
         torch.cuda.manual_seed(random.randint(1, 10000))
-        # Disable nondeterministic ops (not sure if critical but better
-        # safe than sorry)
-        #torch.backends.cudnn.enabled = False
     else:
         args.device = torch.device('cpu')
 
