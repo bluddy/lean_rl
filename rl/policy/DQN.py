@@ -8,6 +8,11 @@ from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixe
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+try:
+    import apex.amp as amp
+except ImportError:
+    pass
+
 # DQN
 
 e24 = pow(2,24)
@@ -51,9 +56,6 @@ class DQN(object):
         self.aux_size = aux_size
 
         self._create_models()
-
-        if self.amp:
-            import apex.amp as amp
 
         print("LR=", lr, "freeze=", freeze)
 
@@ -396,12 +398,23 @@ class DQN(object):
             return y, predict
 
     def save(self, path):
-        torch.save(self.q.state_dict(), os.path.join(path, 'q.pth'))
-        torch.save(self.q_target.state_dict(), os.path.join(path, 'q_target.pth'))
+        checkpoint = {
+            'q': self.q.state_dict(),
+            'q_target': self.q_target.state_dict(),
+            'opt': self.q_optimizer.state_dict()
+        }
+        if self.amp:
+            checkpoint['amp'] = amp.state_dict()
+        torch.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
 
     def load(self, path):
-        self.q.load_state_dict(torch.load(os.path.join(path, 'q.pth')))
-        self.q_target.load_state_dict(torch.load(os.path.join(path, 'q_target.pth')))
+        checkpoint = torch.load(os.path.join(path, 'checkpoint.pth'))
+
+        self.q.load_state_dict(checkpoint['q'])
+        self.q_target.load_state_dict(checkpoint['q_target'])
+        self.q_optimizer.load_state_dict(checkpoint['opt'])
+        if self.amp:
+            amp.load_state_dict(checkpoint['amp'])
 
 class DDQN(DQN):
     def __init__(self, *args, **kwargs):
@@ -552,12 +565,23 @@ class DDQN(DQN):
             q.train()
 
     def save(self, path):
-        for i, (q, qt) in enumerate(zip(self.qs, self.qts)):
-            torch.save(q.state_dict(), pjoin(path, 'q{}.pth'.format(i)))
-            torch.save(qt.state_dict(), pjoin(path, 'qt{}.pth'.format(i)))
+        checkpoint = {}
+        for i, (q, qt, opt) in enumerate(zip(self.qs, self.qts, self.opts)):
+            checkpoint['q' + str(i)] = q.state_dict()
+            checkpoint['qt' + str(i)] = qt.state_dict()
+            checkpoint['opt' + str(i)] = opt.state_dict()
+        if self.amp:
+            checkpoint['amp'] = amp.state_dict()
+
+        torch.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
 
     def load(self, path):
-        for i, (q, qt) in enumerate(zip(self.qs, self.qts)):
-            q.load_state_dict(torch.load(pjoin(path, 'q{}.pth'.format(i))))
-            qt.load_state_dict(torch.load(pjoin(path, 'qt{}.pth'.format(i))))
+        checkpoint = torch.load(os.path.join(path, 'checkpoint.pth'))
+
+        for i, (q, qt, opt) in enumerate(zip(self.qs, self.qts, self.opts)):
+            q.load_state_dict(checkpoint['q' + str(i)])
+            qt.load_state_dict(checkpoint['qt' + str(i)])
+            opt.load_state_dict(checkpoint['opt' + str(i)])
+        if self.amp:
+            amp.load_state_dict(checkpoint['amp'])
 
