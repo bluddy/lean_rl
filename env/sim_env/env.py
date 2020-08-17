@@ -142,8 +142,8 @@ class State(object):
         self.target_insert_status = data[index]; index += 1
 
         # Next target location
-        self.cur_target_pos = np.array(data[index: index + 3]);  index += 3
-        self.next_target_pos = np.array(data[index: index + 3]); index += 3
+        self.cur_target_pos = np.array(data[index: index + 3], dtype=np.float32);  index += 3
+        self.next_target_pos = np.array(data[index: index + 3], dtype=np.float32); index += 3
 
         self.tools_out_of_view = data[index]; index += 1
         self.instr_collisions = data[index]; index += 1
@@ -161,9 +161,9 @@ class State(object):
         # Handle older data
         if len(data) > index:
             self.tissue_corners = []
-            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
-            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
-            self.tissue_corners.append(np.array(data[index:index+3])); index += 3
+            self.tissue_corners.append(np.array(data[index:index+3], dtype=np.float32)); index += 3
+            self.tissue_corners.append(np.array(data[index:index+3], dtype=np.float32)); index += 3
+            self.tissue_corners.append(np.array(data[index:index+3], dtype=np.float32)); index += 3
 
         if len(data) > index:
             self.outside_insert_radius = data[index]; index += 1
@@ -338,22 +338,17 @@ class Environment(common_env.CommonEnv):
         rgb = np.ctypeslib.as_array(self.shared_rgb)
         rgb = np.reshape(rgb, (height, width, 3))
         rgb = np.flipud(rgb)
+        # Depth is expressed as a float
         depth = np.ctypeslib.as_array(self.shared_depth)
         depth = np.reshape(depth, (height, width))
         depth = np.flipud(depth)
-        depth *= e24
-        depth = depth.astype(int)
-        depth2 = np.zeros((height, width, 3), dtype=np.uint8)
-        depth2[:,:,0] = depth[:, :] & 0xFF
-        depth2[:,:,1] = (depth[:, :] >> 8) & 0xFF
-        depth2[:,:,2] = (depth[:, :] >> 16) & 0xFF
 
         if save_img:
             scipy.misc.imsave('./img{}_{}.png'.format(
               self.server_num, self.img_count), arr)
             self.img_count += 1
 
-        return rgb, depth2
+        return rgb, depth
 
     def _init_shared_mem(self):
         # open shared mem
@@ -528,7 +523,10 @@ class Environment(common_env.CommonEnv):
         image = image[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
         w, h = self._get_width_height(hires=True, stereo=True, depth=False)
+        # Transform Converts to float64 and 0 to 1.0
         self.image = transform.resize(image, (h,w), anti_aliasing=True)
+        self.image *= 255.0
+        self.image = self.image.astype(np.uint8)
 
         if self.depthmap_mode:
             # Crop depth to just the left image
@@ -538,9 +536,17 @@ class Environment(common_env.CommonEnv):
 
             # no interpolation on depth
             w, h = self._get_width_height(hires=True, stereo=False, depth=False)
-            depth = transform.resize(depth, (h,w), anti_aliasing=False)
+            # Transform converts to float64
+            depth = transform.resize(depth, (h,w), anti_aliasing=True)
+            depth *= e24 # max value
+            # Separate out components
+            depth = depth.astype(int)
+            depth2 = np.zeros((height, width, 3), dtype=np.uint8)
+            depth2[:,:,0] = depth[:, :] & 0xFF
+            depth2[:,:,1] = (depth[:, :] >> 8) & 0xFF
+            depth2[:,:,2] = (depth[:, :] >> 16) & 0xFF
 
-            self.image = np.concatenate([self.image, depth], axis=1)
+            self.image = np.concatenate([self.image, depth2], axis=1)
 
         event = self.last_event
         self.last_event = None
@@ -604,7 +610,9 @@ class Environment(common_env.CommonEnv):
         image = self.image
         # Resize to non-hires
         w, h = self._get_width_height(hires=False, stereo=True, depth=True)
-        image = transform.resize(self.image, (h,w), anti_aliasing=True)
+        image = transform.resize(self.image, (h,w), anti_aliasing=True, preserve_range=True)
+        image = image.astype(np.uint8)
+
         if self.depthmap_mode:
             # Process depthmap_mode into 6 layers
             # We'll later stitch it into 4
