@@ -17,25 +17,16 @@ except ImportError:
 
 e24 = pow(2,24)
 
-class DQN(object):
-    def __init__(self, state_dim, action_dim, action_steps, stack_size,
-            mode, network, lr=1e-4, img_depth=3, img_dim=224,
-            amp=False, dropout=False, aux=None, aux_size=6, reduced_dim=10,
+class OffPolicyAgent(object):
+    def __init__(self, state_dim, action_dim, stack_size,
+            mode, network:str, lr=1e-4, img_depth=3, img_dim=224,
+            amp=False, dropout=False, aux:bool=False, aux_size=6, reduced_dim=10,
             depthmap_mode=False, freeze=False, opt='adam'):
-        '''@aux: None/'action'/state' '''
 
         self.state_dim = state_dim
         self.env_action_dim = action_dim
-        self.action_steps = action_steps
         self.dropout = dropout
         self.depthmap_mode = depthmap_mode
-
-        # odd dims should be centered at 0
-        odd_dims = action_steps % 2 == 1
-        # full range is 2: -1 to 1
-        self.step_sizes = 2. / action_steps
-        self.step_sizes[odd_dims] = 2. / (action_steps[odd_dims] - 1)
-        self.total_steps = np.prod(action_steps)
 
         self.total_stack = stack_size * img_depth
         self.mode = mode
@@ -49,11 +40,93 @@ class DQN(object):
         self.opt_type = opt
 
         self.aux = aux
-        if self.aux == 'action':
-            self.aux_loss = nn.CrossEntropyLoss()
-        elif self.aux == 'state':
+        if self.aux:
             self.aux_loss = nn.MSELoss()
         self.aux_size = aux_size
+
+    def _copy_sample_to_dev(self, x, y, u, r, d, extra_state, batch_size):
+        x = self._process_state(x)
+        y = self._process_state(y)
+        u = self._copy_action_to_dev(u)
+        r = torch.FloatTensor(r).to(device)
+        d = torch.FloatTensor(1 - d).to(device)
+        if extra_state is not None:
+            extra_state = extra_state.reshape((batch_size, -1))
+            extra_state = torch.FloatTensor(extra_state).to(device)
+        return x, y, u, r, d, extra_state
+
+    def _copy_sample_to_dev_small(self, x, extra_state, batch_size):
+        x = self._process_state(x)
+        extra_state = extra_state.reshape((batch_size, -1))
+        extra_state = torch.FloatTensor(extra_state).to(device)
+        return x, extra_state
+
+    def _process_state(self, state):
+
+        def handle_img(img):
+
+            if img.ndim < 4:
+                img = np.expand_dims(img, 0)
+            if self.depthmap_mode:
+
+                # unswizzle depth
+                shape = img.shape
+                depth = np.zeros((shape[0], 3, shape[2], shape[3]), dtype=np.int32)
+                depth[:,0,:,:] = img[:,3,:,:]
+                depth[:,1,:,:] = img[:,4,:,:]
+                depth[:,2,:,:] = img[:,5,:,:]
+                depth[:,0,:,:] |= depth[:,1,:,:] << 8
+                depth[:,0,:,:] |= depth[:,2,:,:] << 16
+                depth = depth[:,0,:,:]
+                depth = np.expand_dims(depth, 1)
+                depth = depth.astype(np.float32)
+                depth /= e24
+
+                # debug
+                #plt.imsave('./depth_test.png', depth.squeeze()) # debug
+                #debug_img = img[0, :3, :, :].transpose((1,2,0))
+                #plt.imsave('./img_test.png', debug_img)
+
+                depth = torch.from_numpy(depth).to(device)
+                # Add onto state
+                img = img[:,:4,:,:] # Only 4 dims
+                img = torch.from_numpy(img).to(device).float()
+                img /= 255.0
+
+                #depth[0,0,0,0] = 0. #debug vs broadcasting
+                img[:,3,:,:] = depth[:,0,:,:] # Overwrite with depth
+            else:
+                img = torch.from_numpy(img).to(device).float()
+                img /= 255.0
+            return img
+
+        # Copy as uint8
+        if self.mode == 'image':
+            state = handle_img(state)
+        elif self.mode == 'state':
+            state = torch.from_numpy(state).to(device).float()
+        elif self.mode == 'mixed':
+            img = state[0]
+            img = handle_img(img)
+            state2 = torch.from_numpy(state[1]).to(device).float()
+            state = (img, state2)
+        else:
+            raise ValueError('Unrecognized mode ' + mode)
+        return state
+
+class DQN(OffPolicyAgent):
+    def __init__(self, *args, action_steps:int=None, **kwargs):
+
+        super().__init__(*args, **kwargs)
+
+        # odd dims should be centered at 0
+        odd_dims = action_steps % 2 == 1
+        # full range is 2: -1 to 1
+        self.step_sizes = 2. / action_steps
+        self.step_sizes[odd_dims] = 2. / (action_steps[odd_dims] - 1)
+        self.total_steps = np.prod(action_steps)
+
+        self.action_steps = action_steps
 
         self._create_models()
 
@@ -98,16 +171,13 @@ class DQN(object):
         elif self.mode == 'mixed':
             print("Mixed network")
             if self.network == 'simple':
-                if self.aux is None:
+                if not self.aux:
                     n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
                         img_stack=self.total_stack, bn=self.bn,
                         img_dim=self.img_dim, drop=self.dropout).to(device)
                 else:
-                    if self.aux == 'state':
-                        print("Aux state")
-                        aux_size = self.aux_size
-                    else:
-                        raise InvalidArgument()
+                    print("Aux state")
+                    aux_size = self.aux_size
 
                     if self.freeze:
                         print("Freeze")
@@ -130,21 +200,21 @@ class DQN(object):
 
     def _create_models(self):
         self.q = self._create_model()
-        self.q_target = self._create_model()
+        self.q_t = self._create_model()
 
-        self.q_target.load_state_dict(self.q.state_dict())
+        self.q_t.load_state_dict(self.q.state_dict())
         if self.opt_type == 'adam':
             print("opt = Adam")
-            self.q_optimizer = torch.optim.Adam(self.q.parameters(), lr=self.lr)
+            self.q_opt = torch.optim.Adam(self.q.parameters(), lr=self.lr)
         elif self.opt_type == 'sgd':
             print("opt = SGD")
-            self.q_optimizer = torch.optim.SGD(self.q.parameters(), lr=self.lr)
+            self.q_opt = torch.optim.SGD(self.q.parameters(), lr=self.lr)
         else:
             raise ValueError('Unknown optimizer type')
 
         if self.amp:
-            self.q, self.q_optimizer = amp.initialize(
-                    self.q, self.q_optimizer, opt_level='O1')
+            self.q, self.q_opt = amp.initialize(
+                self.q, self.q_opt, opt_level='O1')
 
     def _discrete_to_cont(self, discrete):
         ''' @discrete: (procs, 1) '''
@@ -171,9 +241,6 @@ class DQN(object):
         discrete values representing those continuous values.
         We leave them as floats here -- they'll be turned into longs later'''
 
-        #print( "cont =", cont) # debug
-        #print("shape =", cont.shape, "step_size =", self.step_sizes, "action_steps", self.action_steps) # debug
-
         # Continuous dimensions: (batch, action_dim)
         assert(cont.ndim == 2)
         total = np.zeros((cont.shape[0],), dtype=np.int64)
@@ -196,92 +263,26 @@ class DQN(object):
             so we don't have the noise process produce something we can't
             reproduce
         '''
-        cont2 = np.array(cont)
-        discrete = self._cont_to_discrete(cont2)
-        cont3 = self._discrete_to_cont(discrete)
-        return cont3
+        cont = np.array(cont)
+        discrete = self._cont_to_discrete(cont)
+        cont = self._discrete_to_cont(discrete)
+        return cont
 
-    def _process_state(self, state):
-
-        def handle_img(img):
-
-            if img.ndim < 4:
-                img = np.expand_dims(img, 0)
-            if self.depthmap_mode:
-
-                # unswizzle depth
-                shape = img.shape
-                depth = np.zeros((shape[0], 3, shape[2], shape[3]), dtype=np.int32)
-                depth[:,0,:,:] = img[:,3,:,:]
-                depth[:,1,:,:] = img[:,4,:,:]
-                depth[:,2,:,:] = img[:,5,:,:]
-                depth[:,0,:,:] |= depth[:,1,:,:] << 8
-                depth[:,0,:,:] |= depth[:,2,:,:] << 16
-                depth = depth[:,0,:,:]
-                depth = np.expand_dims(depth, 1)
-                depth = depth.astype(np.float32)
-                depth /= e24
-
-                # debug
-                #plt.imsave('./depth_test.png', depth.squeeze()) # debug
-                #debug_img = img[0, :3, :, :].transpose((1,2,0))
-                #plt.imsave('./img_test.png', debug_img)
-
-                depth = torch.from_numpy(depth).to(device)
-                # Add onto state
-                img = img[:,:4,:,:] # Only 4 dims
-                img = torch.from_numpy(img).to(device).float()
-                img /= 255.0
-
-                #depth[0,0,0,0] = 0. #debug vs broadcasting
-                img[:,3,:,:] = depth[:,0,:,:] # Overwrite with depth
-
-
-            else:
-                img = torch.from_numpy(img).to(device).float()
-                img /= 255.0
-            return img
-
-        # Copy as uint8
-        if self.mode == 'image':
-            state = handle_img(state)
-        elif self.mode == 'state':
-            state = torch.from_numpy(state).to(device).float()
-        elif self.mode == 'mixed':
-            img = state[0]
-            img = handle_img(img)
-            state2 = torch.from_numpy(state[1]).to(device).float()
-            state = (img, state2)
-        else:
-            raise ValueError('Unrecognized mode ' + mode)
-
-        return state
-
-    def _copy_sample_to_dev(self, x, y, u, r, d, extra_state, batch_size):
-        x = self._process_state(x)
-        y = self._process_state(y)
+    def _copy_action_to_dev(self, u):
         # u is the actions: still as ndarrays
         u = u.reshape((batch_size, self.env_action_dim))
         # Convert continuous action to discrete
         u = self._cont_to_discrete(u).reshape((batch_size, -1))
         u = torch.LongTensor(u).to(device)
-        r = torch.FloatTensor(r).to(device)
-        d = torch.FloatTensor(1 - d).to(device)
-        if extra_state is not None:
-            extra_state = extra_state.reshape((batch_size, -1))
-            extra_state = torch.FloatTensor(extra_state).to(device)
-        return x, y, u, r, d, extra_state
+        return u
 
-    def _copy_sample_to_dev_small(self, x, extra_state, batch_size):
-        x = self._process_state(x)
-        extra_state = extra_state.reshape((batch_size, -1))
-        extra_state = torch.FloatTensor(extra_state).to(device)
-        return x, extra_state
+    def _get_q(self):
+        return self.q
 
     def select_action(self, state):
 
         state = self._process_state(state)
-        q = self.q(state)
+        q = self._get_q()(state)
 
         if self.aux is not None:
             q = q[0]
@@ -303,7 +304,7 @@ class DQN(object):
         state, state2, action, reward, done, extra_state = \
             self._copy_sample_to_dev(x, y, u, r, d, extra_state, length)
 
-        Q_ts = self.q_target(state2)
+        Q_ts = self.q_t(state2)
         if self.aux is not None:
             Q_ts = Q_ts[0]
         Q_t = torch.max(Q_ts, dim=-1, keepdim=True)[0]
@@ -333,14 +334,14 @@ class DQN(object):
             if self.freeze:
                 self.q.freeze_some(False)
 
-            self.q_optimizer.zero_grad()
+            self.q_opt.zero_grad()
 
             if self.amp:
-                with amp.scale_loss(aux_loss, self.q_optimizer) as scaled_loss:
+                with amp.scale_loss(aux_loss, self.q_opt) as scaled_loss:
                     scaled_loss.backward()
             else:
                 aux_loss.backward()
-                self.q_optimizer.step()
+                self.q_opt.step()
 
             if self.freeze:
                 self.q.freeze_some(True) # Only backprop last layers
@@ -355,10 +356,10 @@ class DQN(object):
         '''
 
         # Optimize the model
-        self.q_optimizer.zero_grad()
+        self.q_opt.zero_grad()
 
         if self.amp:
-            with amp.scale_loss(q_loss, self.q_optimizer) as scaled_loss:
+            with amp.scale_loss(q_loss, self.q_opt) as scaled_loss:
                 scaled_loss.backward()
         else:
             q_loss.backward()
@@ -366,12 +367,12 @@ class DQN(object):
         if args.clip_grad is not None:
             nn.utils.clip_grad_value_(self.q.parameters(), args.clip_grad)
 
-        self.q_optimizer.step()
+        self.q_opt.step()
 
         replay_buffer.update_priorities(indices, prios)
 
         # Update the frozen target models
-        for p, p_t in zip(self.q.parameters(), self.q_target.parameters()):
+        for p, p_t in zip(self.q.parameters(), self.q_t.parameters()):
             p_t.data.copy_(args.tau * p.data + (1 - args.tau) * p_t.data)
 
         a_ret = None
@@ -381,17 +382,16 @@ class DQN(object):
         return q_loss.item(), a_ret, Q_now.mean().item(), Q_now.max().item()
 
     def test(self, replay_buffer, args):
-            [x, _, _, _, _, extra_state, _] = replay_buffer.sample(args.batch_size)
-            length = len(x)
+            [x, _, u, _, _, extra_state, _] = replay_buffer.sample(args.batch_size)
+            length = len(u)
 
-            state, action, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
+            state, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
 
-            _, predict = self.q(state)
-            if self.aux == 'action':
-                predict = F.softmax(predict, dim=-1).argmax(dim=-1)
-                y = action.cpu().data.numpy()
-            elif self.aux == 'state':
+            _, predict = self._get_q()(state)
+            if self.aux:
                 y = extra_state.cpu().data.numpy()
+            else:
+                y = None
 
             predict = predict.cpu().data.numpy()
 
@@ -400,8 +400,8 @@ class DQN(object):
     def save(self, path):
         checkpoint = {
             'q': self.q.state_dict(),
-            'q_target': self.q_target.state_dict(),
-            'opt': self.q_optimizer.state_dict()
+            'q_t': self.q_t.state_dict(),
+            'opt': self.q_opt.state_dict()
         }
         if self.amp:
             checkpoint['amp'] = amp.state_dict()
@@ -411,8 +411,8 @@ class DQN(object):
         checkpoint = torch.load(os.path.join(path, 'checkpoint.pth'))
 
         self.q.load_state_dict(checkpoint['q'])
-        self.q_target.load_state_dict(checkpoint['q_target'])
-        self.q_optimizer.load_state_dict(checkpoint['opt'])
+        self.q_t.load_state_dict(checkpoint['q_t'])
+        self.q_opt.load_state_dict(checkpoint['opt'])
         if self.amp:
             amp.load_state_dict(checkpoint['amp'])
 
@@ -446,17 +446,8 @@ class DDQN(DQN):
             self.qs = qs
             self.opts = opts
 
-    def select_action(self, state):
-
-        state = self._process_state(state)
-        q = self.qs[0](state)
-        if self.aux is not None:
-            q = q[0]
-
-        max_action = torch.argmax(q, -1).cpu().data.numpy()
-
-        action = self._discrete_to_cont(max_action)
-        return action
+    def _get_q(self):
+        return self.qs[0]
 
     def train(self, replay_buffer, timesteps, beta, args):
 
@@ -538,23 +529,6 @@ class DDQN(DQN):
             aux_ret = np.mean(aux_losses)
 
         return np.mean(q_losses), aux_ret, np.mean(Q_mean), np.max(Q_max)
-
-    def test(self, replay_buffer, args):
-            [x, _, u, _, _, extra_state, _] = replay_buffer.sample(args.batch_size)
-
-            length = len(u)
-
-            state, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
-
-            _, predict = self.qs[0](state)
-            if self.aux == 'state':
-                y = extra_state.cpu().data.numpy()
-            else:
-                raise ValueError('Unknown aux')
-
-            predict = predict.cpu().data.numpy()
-
-            return y, predict
 
     def set_eval(self):
         for q in self.qs:
