@@ -1,11 +1,10 @@
 import numpy as np
-import torch
+import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 from models import ActorImage, CriticImage, ActorState, CriticState
 from os.path import join as pjoin
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
 # Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
 # Paper: https://arxiv.org/abs/1802.09477
@@ -15,7 +14,8 @@ def avg(l):
 
 class TD3(object):
     def __init__(self, state_dim, action_dim, stack_size,
-            mode, lr=1e-4, img_depth=3, bn=True, actor_lr=None, lr2=None,
+            mode, network, lr=1e-4, img_depth=3, img_dim=224,
+            amp=False, dropout=False, aux=None, bn=True, actor_lr=None, lr2=None,
             img_dim=224):
 
         self.state_dim = state_dim
@@ -72,7 +72,7 @@ class TD3(object):
         self.actor_t = self._create_actor()
         self.actor_t.load_state_dict(self.actor.state_dict())
 
-        self.opt_a = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+        self.opt_a = th.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
 
         self.critics = [self._create_critic() for _ in range(2)]
         self.critics_t = [self._create_critic() for _ in range(2)]
@@ -81,24 +81,24 @@ class TD3(object):
 
         self.opts_c = []
         for critic in self.critics:
-            self.opts_c.append(torch.optim.Adam(critic.parameters(), lr=self.lr))
+            self.opts_c.append(th.optim.Adam(critic.parameters(), lr=self.lr))
 
     def _process_state(self, state):
         # Copy as uint8
         if self.mode == 'image':
             if state.ndim < 4:
                 state = np.expand_dims(state, 0)
-            state = torch.from_numpy(state).to(device).float()
+            state = th.from_numpy(state).to(device).float()
             state /= 255.0
         elif self.mode == 'state':
-            state = torch.from_numpy(state).to(device).float()
+            state = th.from_numpy(state).to(device).float()
         elif self.mode == 'mixed':
             img = state[0]
             if img.ndim < 4:
                 img = np.expand_dims(img, 0)
-            img = torch.from_numpy(img).to(device).float()
+            img = th.from_numpy(img).to(device).float()
             img /= 255.0
-            state2 = torch.from_numpy(state[1]).to(device).float()
+            state2 = th.from_numpy(state[1]).to(device).float()
             state = (img, state2)
         else:
             raise ValueError('Unrecognized mode ' + mode)
@@ -107,15 +107,15 @@ class TD3(object):
     def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
         x = self._process_state(x)
         y = self._process_state(y)
-        u = torch.FloatTensor(u).to(device) # actions
-        r = torch.FloatTensor(r).to(device)
-        d = torch.FloatTensor(1 - d).to(device)
+        u = th.FloatTensor(u).to(device) # actions
+        r = th.FloatTensor(r).to(device)
+        d = th.FloatTensor(1 - d).to(device)
         if qorig is not None:
             qorig = qorig.reshape((batch_size, -1))
-            qorig = torch.FloatTensor(qorig).to(device)
+            qorig = th.FloatTensor(qorig).to(device)
         if w is not None:
             w = w.reshape((batch_size, -1))
-            w = torch.FloatTensor(w).to(device)
+            w = th.FloatTensor(w).to(device)
         return x, y, u, r, d, qorig, w
 
     def select_action(self, state):
@@ -123,20 +123,6 @@ class TD3(object):
         state = self._process_state(state)
         action = self.actor(state).cpu().data.numpy()
         return action
-
-    def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
-        x = self._process_state(x)
-        y = self._process_state(y)
-        u = torch.FloatTensor(u).to(device) # actions
-        r = torch.FloatTensor(r).to(device)
-        d = torch.FloatTensor(1 - d).to(device)
-        if qorig is not None:
-            qorig = qorig.reshape((batch_size, -1))
-            qorig = torch.FloatTensor(qorig).to(device)
-        if w is not None:
-            w = w.reshape((batch_size, -1))
-            w = torch.FloatTensor(w).to(device)
-        return x, y, u, r, d, qorig, w
 
     def select_action(self, state):
         # Copy as uint8
@@ -154,15 +140,15 @@ class TD3(object):
                 self._copy_sample_to_dev(x, y, u, r, d, qorig, w, len(u))
 
         # Add noise to action to add resilience
-        noise = torch.FloatTensor(u).data.normal_(0, args.policy_noise).to(device)
+        noise = th.FloatTensor(u).data.normal_(0, args.policy_noise).to(device)
         noise = noise.clamp(-args.noise_clip, args.noise_clip)
 
-        with torch.no_grad():
+        with th.no_grad():
             action2 = self.actor_t(state2) + noise
 
             # Compute the target Q value
             Qs_t = [c_t(state2, action2) for c_t in self.critics_t]
-            Q_t = torch.min(*Qs_t)
+            Q_t = th.min(*Qs_t)
             Q_t = reward + (done * args.discount * Q_t)
 
         # Get current Q estimates
@@ -215,19 +201,19 @@ class TD3(object):
         return loss_c_mean, ret_loss_a, Q_mean, Q_max
 
     def save(self, path):
-        torch.save(self.actor.state_dict(), pjoin(path, 'actor.pth'))
-        torch.save(self.actor_t.state_dict(), pjoin(path, 'actor_t.pth'))
+        th.save(self.actor.state_dict(), pjoin(path, 'actor.pth'))
+        th.save(self.actor_t.state_dict(), pjoin(path, 'actor_t.pth'))
         for i, (critic, critic_t) in enumerate(zip(self.critics, self.critics_t)):
-            torch.save(critic.state_dict(),
+            th.save(critic.state_dict(),
                 pjoin(path, 'critic{}.pth'.format(i)))
-            torch.save(critic_t.state_dict(),
+            th.save(critic_t.state_dict(),
                 pjoin(path, 'critic{}_t.pth'.format(i)))
 
     def load(self, path):
-        self.actor.load_state_dict(torch.load(pjoin(path, 'actor.pth')))
-        self.actor_t.load_state_dict(torch.load(pjoin(path, 'actor_t.pth')))
+        self.actor.load_state_dict(th.load(pjoin(path, 'actor.pth')))
+        self.actor_t.load_state_dict(th.load(pjoin(path, 'actor_t.pth')))
         for i, (critic, critic_t) in enumerate(zip(self.critics, self.critics_t)):
-            critic.load_state_dic(torch.load(
+            critic.load_state_dic(th.load(
                 pjoin(path, 'critic{}.pth'.format(i))))
-            critic_t.load_state_dic(torch.load(
+            critic_t.load_state_dic(th.load(
                 pjoin(path, 'critic{}_t.pth'.format(i))))

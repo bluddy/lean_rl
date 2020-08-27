@@ -1,7 +1,6 @@
 import numpy as np
 import torch.nn as nn
-import torch
-import torchvision
+import torch as th
 import torchvision.models as tmodels
 import torch.nn.functional as F
 
@@ -123,8 +122,8 @@ class ActorImage(BaseImage):
         x = self.features(x)
         x = self.linear(x)
         x = self.out_angular(x)
-        #x = torch.clamp(x, min=-1., max=1.)
-        x = torch.tanh(x)
+        #x = th.clamp(x, min=-1., max=1.)
+        x = th.tanh(x)
         return x
 
 class CriticImage(BaseImage):
@@ -139,7 +138,7 @@ class CriticImage(BaseImage):
 
     def forward(self, x, u):
         x = self.features(x)
-        x = torch.cat([x, u], 1)
+        x = th.cat([x, u], 1)
         x = self.linear(x)
         return x
 
@@ -260,7 +259,7 @@ class QImageDenseNet(nn.Module):
 
         x = F.relu(self.features(x), inplace=True)
         x = F.adaptive_avg_pool2d(x, (1,1))
-        x = torch.flatten(x, 1)
+        x = th.flatten(x, 1)
         x = self.classifier(x)
         return x
 
@@ -293,7 +292,7 @@ class QMixedDenseNet(QImageDenseNet):
         x = self.model(img)
         x = self.linear1(x)
         y = self.linear2(state)
-        z = self.linear3(torch.cat((x, y), dim=-1))
+        z = self.linear3(th.cat((x, y), dim=-1))
         return z
 
 class ActorState(nn.Module):
@@ -313,8 +312,8 @@ class ActorState(nn.Module):
 
     def forward(self, x):
         x = self.linear(x)
-        #x = torch.clamp(x, min=-1., max=1.)
-        x = torch.tanh(x)
+        #x = th.clamp(x, min=-1., max=1.)
+        x = th.tanh(x)
         return x
 
 
@@ -333,7 +332,7 @@ class CriticState(nn.Module):
         self.linear = nn.Sequential(*ll)
 
     def forward(self, x, u):
-        x = torch.cat([x, u], 1)
+        x = th.cat([x, u], 1)
         x = self.linear(x)
         return x
 
@@ -381,7 +380,7 @@ class QMixed(BaseImage):
         x = self.features(img)
         x = self.linear1(x)
         y = self.linear2(state)
-        x = self.linear3(torch.cat((x, y), dim=-1))
+        x = self.linear3(th.cat((x, y), dim=-1))
         return x
 
 class QMixed2Outs(BaseImage):
@@ -425,7 +424,7 @@ class QMixed2Outs(BaseImage):
         # Features to state
         x = self.features(img)
         x = self.linear(x)
-        x = self.linear1(torch.cat((x, state), dim=-1)) # RL output
+        x = self.linear1(th.cat((x, state), dim=-1)) # RL output
         y = self.linear2(x) # RL output
         z = self.linear3(x) # Aux output
         return y,z
@@ -473,7 +472,7 @@ class QMixed2OutsFreeze(BaseImage):
         # Features to state
         x = self.features(img)
         x = self.linear(x)
-        y = self.linear1(torch.cat((x, state), dim=-1)) # RL output
+        y = self.linear1(th.cat((x, state), dim=-1)) # RL output
         z = self.linear2(x) # Aux output
         return y,z
 
@@ -537,7 +536,7 @@ class QMixed2(nn.Module):
         x = self.features(img)
         x = self.linear1(x)
         y = self.linear2(state)
-        x = self.linear3(torch.cat((x, y), dim=-1))
+        x = self.linear3(th.cat((x, y), dim=-1))
         return x
 
 class QImageSoftMax(BaseImage):

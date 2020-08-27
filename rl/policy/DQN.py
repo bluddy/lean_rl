@@ -1,13 +1,11 @@
 import numpy as np
-import torch
-import torch.nn as nn
+import torch as th
 import os, sys, math
-import torch.nn.functional as F
 from os.path import join as pjoin
 from .offpolicy import OffPolicyAgent
 from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QMixed2OutsFreeze, QImage2OutsFreeze
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
 try:
     import apex.amp as amp
@@ -15,8 +13,6 @@ except ImportError:
     pass
 
 # DQN
-
-e24 = pow(2,24)
 
 class DQN(OffPolicyAgent):
     def __init__(self, *args, action_steps:int=None, **kwargs):
@@ -109,10 +105,10 @@ class DQN(OffPolicyAgent):
         self.q_t.load_state_dict(self.q.state_dict())
         if self.opt_type == 'adam':
             print("opt = Adam")
-            self.q_opt = torch.optim.Adam(self.q.parameters(), lr=self.lr)
+            self.q_opt = th.optim.Adam(self.q.parameters(), lr=self.lr)
         elif self.opt_type == 'sgd':
             print("opt = SGD")
-            self.q_opt = torch.optim.SGD(self.q.parameters(), lr=self.lr)
+            self.q_opt = th.optim.SGD(self.q.parameters(), lr=self.lr)
         else:
             raise ValueError('Unknown optimizer type')
 
@@ -177,7 +173,7 @@ class DQN(OffPolicyAgent):
         u = u.reshape((batch_size, self.env_action_dim))
         # Convert continuous action to discrete
         u = self._cont_to_discrete(u).reshape((batch_size, -1))
-        u = torch.LongTensor(u).to(device)
+        u = th.LongTensor(u).to(device)
         return u
 
     def _get_q(self):
@@ -192,7 +188,7 @@ class DQN(OffPolicyAgent):
             q = q[0]
 
         # Argmax along action dimension (not batch dim)
-        max_action = torch.argmax(q, -1).cpu().data.numpy()
+        max_action = th.argmax(q, -1).cpu().data.numpy()
 
         # Translate action choice to continous domain
         action = self._discrete_to_cont(max_action)
@@ -211,7 +207,7 @@ class DQN(OffPolicyAgent):
         Q_ts = self.q_t(state2)
         if self.aux is not None:
             Q_ts = Q_ts[0]
-        Q_t = torch.max(Q_ts, dim=-1, keepdim=True)[0]
+        Q_t = th.max(Q_ts, dim=-1, keepdim=True)[0]
 
         # Compute the target Q value
         # done: We use reverse of done to not consider future rewards
@@ -222,7 +218,7 @@ class DQN(OffPolicyAgent):
         Q_now = self.q(state)
         if self.aux is not None:
             Q_now, predicted = Q_now
-        Q_now = torch.gather(Q_now, -1, action)
+        Q_now = th.gather(Q_now, -1, action)
 
         # Compute Q loss
         q_loss = (Q_now - Q_t).pow(2)
@@ -252,8 +248,8 @@ class DQN(OffPolicyAgent):
 
         # debug graph
         '''
-        import torchviz
-        dot = torchviz.make_dot(q_loss, params=dict(self.q.named_parameters()))
+        import thviz
+        dot = thviz.make_dot(q_loss, params=dict(self.q.named_parameters()))
         dot.format = 'png'
         dot.render('graph')
         sys.exit(1)
@@ -267,9 +263,6 @@ class DQN(OffPolicyAgent):
                 scaled_loss.backward()
         else:
             q_loss.backward()
-
-        if args.clip_grad is not None:
-            nn.utils.clip_grad_value_(self.q.parameters(), args.clip_grad)
 
         self.q_opt.step()
 
@@ -309,10 +302,10 @@ class DQN(OffPolicyAgent):
         }
         if self.amp:
             checkpoint['amp'] = amp.state_dict()
-        torch.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
+        th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
 
     def load(self, path):
-        checkpoint = torch.load(os.path.join(path, 'checkpoint.pth'))
+        checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
 
         self.q.load_state_dict(checkpoint['q'])
         self.q_t.load_state_dict(checkpoint['q_t'])
@@ -334,10 +327,10 @@ class DDQN(DQN):
 
         if self.opt_type == 'adam':
             print("opt = Adam")
-            self.opts = [torch.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
+            self.opts = [th.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
         elif self.opt_type == 'sgd':
             print("opt = SGD")
-            self.opts = [torch.optim.SGD(q.parameters(), lr=self.lr) for q in self.qs]
+            self.opts = [th.optim.SGD(q.parameters(), lr=self.lr) for q in self.qs]
         else:
             raise ValueError('Unknown optimizer')
 
@@ -392,9 +385,9 @@ class DDQN(DQN):
             Qt = [qt(state2) for qt in self.qts]
             if self.aux is not None:
                 Qt = [q[0] for q in Qt]
-            Qt = torch.min(*Qt)
+            Qt = th.min(*Qt)
 
-            Qt_max, _ = torch.max(Qt, dim=-1, keepdim=True)
+            Qt_max, _ = th.max(Qt, dim=-1, keepdim=True)
 
             y = reward + (done * args.discount * Qt_max).detach()
 
@@ -402,7 +395,7 @@ class DDQN(DQN):
             Q_now = update_q(state)
             if self.aux is not None:
                 Q_now, _ = Q_now
-            Q_now = torch.gather(Q_now, -1, action)
+            Q_now = th.gather(Q_now, -1, action)
 
             # Compute loss
             q_loss = (Q_now - y).pow(2)
@@ -451,10 +444,10 @@ class DDQN(DQN):
         if self.amp:
             checkpoint['amp'] = amp.state_dict()
 
-        torch.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
+        th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
 
     def load(self, path):
-        checkpoint = torch.load(os.path.join(path, 'checkpoint.pth'))
+        checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
 
         for i, (q, qt, opt) in enumerate(zip(self.qs, self.qts, self.opts)):
             q.load_state_dict(checkpoint['q' + str(i)])

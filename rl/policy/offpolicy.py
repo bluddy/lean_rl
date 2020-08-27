@@ -1,17 +1,15 @@
 import numpy as np
-import torch
+import torch as th
 import torch.nn as nn
 import os, sys, math
 from os.path import join as pjoin
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
 try:
     import apex.amp as amp
 except ImportError:
     pass
-
-# DQN
 
 e24 = pow(2,24)
 
@@ -46,17 +44,17 @@ class OffPolicyAgent(object):
         x = self._process_state(x)
         y = self._process_state(y)
         u = self._copy_action_to_dev(u)
-        r = torch.FloatTensor(r).to(device)
-        d = torch.FloatTensor(1 - d).to(device)
+        r = th.FloatTensor(r).to(device)
+        d = th.FloatTensor(1 - d).to(device)
         if extra_state is not None:
             extra_state = extra_state.reshape((batch_size, -1))
-            extra_state = torch.FloatTensor(extra_state).to(device)
+            extra_state = th.FloatTensor(extra_state).to(device)
         return x, y, u, r, d, extra_state
 
     def _copy_sample_to_dev_small(self, x, extra_state, batch_size):
         x = self._process_state(x)
         extra_state = extra_state.reshape((batch_size, -1))
-        extra_state = torch.FloatTensor(extra_state).to(device)
+        extra_state = th.FloatTensor(extra_state).to(device)
         return x, extra_state
 
     def _process_state(self, state):
@@ -85,16 +83,16 @@ class OffPolicyAgent(object):
                 #debug_img = img[0, :3, :, :].transpose((1,2,0))
                 #plt.imsave('./img_test.png', debug_img)
 
-                depth = torch.from_numpy(depth).to(device)
+                depth = th.from_numpy(depth).to(device)
                 # Add onto state
                 img = img[:,:4,:,:] # Only 4 dims
-                img = torch.from_numpy(img).to(device).float()
+                img = th.from_numpy(img).to(device).float()
                 img /= 255.0
 
                 #depth[0,0,0,0] = 0. #debug vs broadcasting
                 img[:,3,:,:] = depth[:,0,:,:] # Overwrite with depth
             else:
-                img = torch.from_numpy(img).to(device).float()
+                img = th.from_numpy(img).to(device).float()
                 img /= 255.0
             return img
 
@@ -102,11 +100,11 @@ class OffPolicyAgent(object):
         if self.mode == 'image':
             state = handle_img(state)
         elif self.mode == 'state':
-            state = torch.from_numpy(state).to(device).float()
+            state = th.from_numpy(state).to(device).float()
         elif self.mode == 'mixed':
             img = state[0]
             img = handle_img(img)
-            state2 = torch.from_numpy(state[1]).to(device).float()
+            state2 = th.from_numpy(state[1]).to(device).float()
             state = (img, state2)
         else:
             raise ValueError('Unrecognized mode ' + mode)
