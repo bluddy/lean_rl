@@ -20,7 +20,7 @@ class OffPolicyAgent(object):
             depthmap_mode=False, freeze=False, opt='adam'):
 
         self.state_dim = state_dim
-        self.env_action_dim = action_dim
+        self.action_dim = action_dim
         self.dropout = dropout
         self.depthmap_mode = depthmap_mode
 
@@ -40,6 +40,26 @@ class OffPolicyAgent(object):
             self.aux_loss = nn.MSELoss()
         self.aux_size = aux_size
 
+        self.to_save = []
+
+    def _create_opt(self, model, lr):
+        if self.opt_type == 'adam':
+            print("opt = Adam")
+            opt = th.optim.Adam(model.parameters(), lr=lr)
+        elif self.opt_type == 'sgd':
+            print("opt = SGD")
+            opt = th.optim.SGD(model.parameters(), lr=lr)
+        else:
+            raise ValueError('Unknown optimizer type')
+
+        if self.amp:
+            model, opt = amp.initialize(model, opt, opt_level='O1')
+
+        return model, opt
+
+    def _copy_action_to_dev(self, u):
+        return th.FloatTensor(u).to(device)
+
     def _copy_sample_to_dev(self, x, y, u, r, d, extra_state, batch_size):
         x = self._process_state(x)
         y = self._process_state(y)
@@ -51,6 +71,16 @@ class OffPolicyAgent(object):
             extra_state = th.FloatTensor(extra_state).to(device)
         return x, y, u, r, d, extra_state
 
+    def _sample_to_dev(self, *args, **kwargs):
+        data = replay_buffer.sample(args.batch_size, beta=beta, num=num)
+        [x, y, u, r, d, extra_state, indices] = data
+        length = len(u)
+
+        state, state2, action, reward, done, extra_state = \
+            self._copy_sample_to_dev(x, y, u, r, d, extra_state, length)
+
+        return state, state2, action, reward, done, extra_state, indices
+
     def _copy_sample_to_dev_small(self, x, extra_state, batch_size):
         x = self._process_state(x)
         extra_state = extra_state.reshape((batch_size, -1))
@@ -58,9 +88,7 @@ class OffPolicyAgent(object):
         return x, extra_state
 
     def _process_state(self, state):
-
         def handle_img(img):
-
             if img.ndim < 4:
                 img = np.expand_dims(img, 0)
             if self.depthmap_mode:
@@ -109,3 +137,29 @@ class OffPolicyAgent(object):
         else:
             raise ValueError('Unrecognized mode ' + mode)
         return state
+
+    def save(self, path):
+        checkpoint = {}
+        for s in self.to_save:
+            obj = self.__dict__[s]
+            if isintance(obj, list):
+                checkpoint[s] = [o.state_dict() for o in obj]
+            else:
+                checkpoint[s] = obj.state_dict()
+
+        if self.amp:
+            checkpoint['amp'] = amp.state_dict()
+
+        th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
+
+    def load(self, path)
+        checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
+
+        for s in self.to_save:
+            if isintance(self.__dict__[s], list):
+                for obj, robj in zip(self.__dict__[s], checkpoint[s]):
+                    obj.load_state_dict(robj)
+            else:
+                self.__dict__[s].load_state_dict(checkpoint[s])
+        if self.amp:
+            amp.load_state_dict(checkpoint['amp'])

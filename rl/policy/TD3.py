@@ -3,6 +3,7 @@ import torch as th
 import torch.nn as nn
 from models import ActorImage, CriticImage, ActorState, CriticState
 from os.path import join as pjoin
+from .offpolicy import OffPolicyAgent
 
 device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
@@ -12,28 +13,18 @@ device = th.device("cuda" if th.cuda.is_available() else "cpu")
 def avg(l):
     return sum(l)/float(len(l))
 
-class TD3(object):
-    def __init__(self, state_dim, action_dim, stack_size,
-            mode, network, lr=1e-4, img_depth=3, img_dim=224,
-            amp=False, dropout=False, aux=None, bn=True, actor_lr=None, lr2=None,
-            img_dim=224):
+class TD3(OffPolicyAgent):
+    def __init__(self, *args, actor_lr:float=None, lr2:float=None, **kwargs):
 
-        self.state_dim = state_dim
-        self.action_dim = action_dim
-
-        self.total_stack = stack_size * img_depth
-        self.mode = mode
-
-        self.lr = lr
-        self.bn = bn
-        self.img_dim = img_dim
+        super().__init__(*args, **kwargs)
 
         self.lr2 = lr if lr2 is None else lr2
         self.actor_lr = lr if actor_lr is None else actor_lr
 
         self._create_models()
+        self.to_save = ['critics', 'actor', 'opt_a', 'opt_c']
 
-        print "LR={}, actor_LR={}, LR2={}".format(lr, actor_lr, lr2)
+        print "TD3. LR={}, actor_LR={}, LR2={}".format(lr, actor_lr, lr2)
 
     def set_eval(self):
         self.actor.eval()
@@ -53,7 +44,7 @@ class TD3(object):
             n = CriticState(state_dim=self.state_dim, action_dim=self.action_dim,
                     bn=self.bn).to(device)
         else:
-            raise ValueError('Unrecognized mode ' + mode)
+            raise ValueError('Unrecognized mode ' + self.mode)
         return n
 
     def _create_actor(self):
@@ -64,7 +55,7 @@ class TD3(object):
             n = ActorState(state_dim=self.state_dim, action_dim=self.action_dim,
                     bn=self.bn).to(device)
         else:
-            raise ValueError('Unrecognized mode ' + mode)
+            raise ValueError('Unrecognized mode ' + self.mode)
         return n
 
     def _create_models(self):
@@ -72,57 +63,16 @@ class TD3(object):
         self.actor_t = self._create_actor()
         self.actor_t.load_state_dict(self.actor.state_dict())
 
-        self.opt_a = th.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
+        self.actor, self.opt_a = self._create_opt(self.actor, self.actor_lr)
 
         self.critics = [self._create_critic() for _ in range(2)]
-        self.critics_t = [self._create_critic() for _ in range(2)]
-        for critic, critic_t in zip(self.critics, self.critics_t):
-            critic_t.load_state_dict(critic.state_dict())
-
-        self.opts_c = []
+        self.critics_t = []
         for critic in self.critics:
-            self.opts_c.append(th.optim.Adam(critic.parameters(), lr=self.lr))
+            critic_t = self._create_critic()
+            critic_t.load_state_dict(critic.state_dict())
+            self.critics_t.append(critic_t)
 
-    def _process_state(self, state):
-        # Copy as uint8
-        if self.mode == 'image':
-            if state.ndim < 4:
-                state = np.expand_dims(state, 0)
-            state = th.from_numpy(state).to(device).float()
-            state /= 255.0
-        elif self.mode == 'state':
-            state = th.from_numpy(state).to(device).float()
-        elif self.mode == 'mixed':
-            img = state[0]
-            if img.ndim < 4:
-                img = np.expand_dims(img, 0)
-            img = th.from_numpy(img).to(device).float()
-            img /= 255.0
-            state2 = th.from_numpy(state[1]).to(device).float()
-            state = (img, state2)
-        else:
-            raise ValueError('Unrecognized mode ' + mode)
-        return state
-
-    def _copy_sample_to_dev(self, x, y, u, r, d, qorig, w, batch_size):
-        x = self._process_state(x)
-        y = self._process_state(y)
-        u = th.FloatTensor(u).to(device) # actions
-        r = th.FloatTensor(r).to(device)
-        d = th.FloatTensor(1 - d).to(device)
-        if qorig is not None:
-            qorig = qorig.reshape((batch_size, -1))
-            qorig = th.FloatTensor(qorig).to(device)
-        if w is not None:
-            w = w.reshape((batch_size, -1))
-            w = th.FloatTensor(w).to(device)
-        return x, y, u, r, d, qorig, w
-
-    def select_action(self, state):
-        # Copy as uint8
-        state = self._process_state(state)
-        action = self.actor(state).cpu().data.numpy()
-        return action
+        self.critics, self.opts_c = list(zip(*[self._create_opt(c, self.lr)] for c in self.critics]))
 
     def select_action(self, state):
         # Copy as uint8
@@ -133,11 +83,8 @@ class TD3(object):
     def train(self, replay_buffer, timesteps, beta, args):
 
         # Sample replay buffer
-        [x, y, u, r, d, qorig, indices, w], qorig_prob = \
-                replay_buffer.sample(args.batch_size, beta=beta)
-
-        state, state2, action, reward, done, qorig, weights = \
-                self._copy_sample_to_dev(x, y, u, r, d, qorig, w, len(u))
+        state, state2, action, reward, done, extra_state, indices = \
+            self._sample_to_dev(args.batch_size, beta=beta, num=num)
 
         # Add noise to action to add resilience
         noise = th.FloatTensor(u).data.normal_(0, args.policy_noise).to(device)
@@ -199,21 +146,3 @@ class TD3(object):
             ret_loss_a = loss_a.item()
 
         return loss_c_mean, ret_loss_a, Q_mean, Q_max
-
-    def save(self, path):
-        th.save(self.actor.state_dict(), pjoin(path, 'actor.pth'))
-        th.save(self.actor_t.state_dict(), pjoin(path, 'actor_t.pth'))
-        for i, (critic, critic_t) in enumerate(zip(self.critics, self.critics_t)):
-            th.save(critic.state_dict(),
-                pjoin(path, 'critic{}.pth'.format(i)))
-            th.save(critic_t.state_dict(),
-                pjoin(path, 'critic{}_t.pth'.format(i)))
-
-    def load(self, path):
-        self.actor.load_state_dict(th.load(pjoin(path, 'actor.pth')))
-        self.actor_t.load_state_dict(th.load(pjoin(path, 'actor_t.pth')))
-        for i, (critic, critic_t) in enumerate(zip(self.critics, self.critics_t)):
-            critic.load_state_dic(th.load(
-                pjoin(path, 'critic{}.pth'.format(i))))
-            critic_t.load_state_dic(th.load(
-                pjoin(path, 'critic{}_t.pth'.format(i))))

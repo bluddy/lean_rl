@@ -27,10 +27,11 @@ class DQN(OffPolicyAgent):
         self.total_steps = np.prod(action_steps)
 
         self.action_steps = action_steps
+        self.to_save = ['q', 'q_t', 'q_opt']
 
         self._create_models()
 
-        print("LR=", lr, "freeze=", freeze)
+        print("DQN. LR=", lr, "freeze=", freeze)
 
     def set_eval(self):
         self.q.eval()
@@ -103,18 +104,8 @@ class DQN(OffPolicyAgent):
         self.q_t = self._create_model()
 
         self.q_t.load_state_dict(self.q.state_dict())
-        if self.opt_type == 'adam':
-            print("opt = Adam")
-            self.q_opt = th.optim.Adam(self.q.parameters(), lr=self.lr)
-        elif self.opt_type == 'sgd':
-            print("opt = SGD")
-            self.q_opt = th.optim.SGD(self.q.parameters(), lr=self.lr)
-        else:
-            raise ValueError('Unknown optimizer type')
 
-        if self.amp:
-            self.q, self.q_opt = amp.initialize(
-                self.q, self.q_opt, opt_level='O1')
+        self.q, self.q_opt = self._create_opt(self.q, self.lr)
 
     def _discrete_to_cont(self, discrete):
         ''' @discrete: (procs, 1) '''
@@ -170,7 +161,7 @@ class DQN(OffPolicyAgent):
 
     def _copy_action_to_dev(self, u):
         # u is the actions: still as ndarrays
-        u = u.reshape((batch_size, self.env_action_dim))
+        u = u.reshape((batch_size, self.action_dim))
         # Convert continuous action to discrete
         u = self._cont_to_discrete(u).reshape((batch_size, -1))
         u = th.LongTensor(u).to(device)
@@ -197,12 +188,8 @@ class DQN(OffPolicyAgent):
     def train(self, replay_buffer, timesteps, beta, args):
 
         # Sample replay buffer
-        data = replay_buffer.sample(args.batch_size, beta=beta)
-        [x, y, u, r, d, extra_state, indices] = data
-        length = len(u)
-
-        state, state2, action, reward, done, extra_state = \
-            self._copy_sample_to_dev(x, y, u, r, d, extra_state, length)
+        state, state2, action, reward, done, extra_state, indices = \
+            self._sample_to_dev(args.batch_size, beta=beta, num=num)
 
         Q_ts = self.q_t(state2)
         if self.aux is not None:
@@ -294,28 +281,10 @@ class DQN(OffPolicyAgent):
 
             return y, predict
 
-    def save(self, path):
-        checkpoint = {
-            'q': self.q.state_dict(),
-            'q_t': self.q_t.state_dict(),
-            'opt': self.q_opt.state_dict()
-        }
-        if self.amp:
-            checkpoint['amp'] = amp.state_dict()
-        th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
-
-    def load(self, path):
-        checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
-
-        self.q.load_state_dict(checkpoint['q'])
-        self.q_t.load_state_dict(checkpoint['q_t'])
-        self.q_opt.load_state_dict(checkpoint['opt'])
-        if self.amp:
-            amp.load_state_dict(checkpoint['amp'])
-
 class DDQN(DQN):
     def __init__(self, *args, **kwargs):
         super(DDQN, self).__init__(*args, **kwargs)
+        self.to_save = ['qs', 'qts', 'opts']
 
     def _create_models(self):
         # q is now 2 networks
@@ -325,23 +294,7 @@ class DDQN(DQN):
         for q, qt in zip(self.qs, self.qts):
             qt.load_state_dict(q.state_dict())
 
-        if self.opt_type == 'adam':
-            print("opt = Adam")
-            self.opts = [th.optim.Adam(q.parameters(), lr=self.lr) for q in self.qs]
-        elif self.opt_type == 'sgd':
-            print("opt = SGD")
-            self.opts = [th.optim.SGD(q.parameters(), lr=self.lr) for q in self.qs]
-        else:
-            raise ValueError('Unknown optimizer')
-
-        if self.amp:
-            qs, opts = [], []
-            for q, opt in zip(self.qs, self.opts):
-                q, opt = amp.initialize(q, opt, opt_level='O1')
-                qs.append(q)
-                opts.append(opt)
-            self.qs = qs
-            self.opts = opts
+        self.qs, self.opts = list(zip(*[self._create_opt(q, self.lr) for q in self.qs]))
 
     def _get_q(self):
         return self.qs[0]
@@ -354,12 +307,8 @@ class DDQN(DQN):
                 enumerate(zip(self.qs, self.qts, self.opts)):
 
             # Get samples
-            data = replay_buffer.sample(args.batch_size, beta=beta, num=num)
-            [x, y, u, r, d, extra_state, indices] = data
-            length = len(u)
-
-            state, state2, action, reward, done, extra_state = \
-                self._copy_sample_to_dev(x, y, u, r, d, extra_state, length)
+            state, state2, action, reward, done, extra_state, indices = \
+                self._sample_to_dev(args.batch_size, beta=beta, num=num)
 
             if self.aux is not None:
                 if self.freeze:
@@ -434,25 +383,3 @@ class DDQN(DQN):
     def set_train(self):
         for q in self.qs:
             q.train()
-
-    def save(self, path):
-        checkpoint = {}
-        for i, (q, qt, opt) in enumerate(zip(self.qs, self.qts, self.opts)):
-            checkpoint['q' + str(i)] = q.state_dict()
-            checkpoint['qt' + str(i)] = qt.state_dict()
-            checkpoint['opt' + str(i)] = opt.state_dict()
-        if self.amp:
-            checkpoint['amp'] = amp.state_dict()
-
-        th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
-
-    def load(self, path):
-        checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
-
-        for i, (q, qt, opt) in enumerate(zip(self.qs, self.qts, self.opts)):
-            q.load_state_dict(checkpoint['q' + str(i)])
-            qt.load_state_dict(checkpoint['qt' + str(i)])
-            opt.load_state_dict(checkpoint['opt' + str(i)])
-        if self.amp:
-            amp.load_state_dict(checkpoint['amp'])
-
