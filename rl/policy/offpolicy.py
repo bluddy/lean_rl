@@ -42,13 +42,13 @@ class OffPolicyAgent(object):
 
         self.to_save = []
 
-    def _create_opt(self, model, lr):
+    def _create_opt(self, params, lr):
         if self.opt_type == 'adam':
             print("opt = Adam")
-            opt = th.optim.Adam(model.parameters(), lr=lr)
+            opt = th.optim.Adam(params, lr=lr)
         elif self.opt_type == 'sgd':
             print("opt = SGD")
-            opt = th.optim.SGD(model.parameters(), lr=lr)
+            opt = th.optim.SGD(params, lr=lr)
         else:
             raise ValueError('Unknown optimizer type')
 

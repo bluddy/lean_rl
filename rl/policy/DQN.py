@@ -4,6 +4,7 @@ import os, sys, math
 from os.path import join as pjoin
 from .offpolicy import OffPolicyAgent
 from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QMixed2OutsFreeze, QImage2OutsFreeze
+from .utils import polyak_update
 
 device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
@@ -256,8 +257,7 @@ class DQN(OffPolicyAgent):
         replay_buffer.update_priorities(indices, prios)
 
         # Update the frozen target models
-        for p, p_t in zip(self.q.parameters(), self.q_t.parameters()):
-            p_t.data.copy_(args.tau * p.data + (1 - args.tau) * p_t.data)
+        polyak_update(self.q.parameters(), self.q_t.parameters(), args.tau)
 
         a_ret = None
         if self.aux is not None:
@@ -363,8 +363,7 @@ class DDQN(DQN):
                 opt.step()
 
             # Update the frozen target models
-            for p, pt in zip(update_q.parameters(), update_qt.parameters()):
-                pt.data.copy_(args.tau * p.data + (1 - args.tau) * pt.data)
+            polyak_update(update_q.parameters(), update_qt.parameters(), args.tau)
 
             q_losses.append(q_loss.item())
             Q_mean.append(Q_now.mean().item())
