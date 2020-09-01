@@ -186,11 +186,11 @@ class DQN(OffPolicyAgent):
         action = self._discrete_to_cont(max_action)
         return action
 
-    def train(self, replay_buffer, timesteps, beta, args):
+    def train(self, replay_buffer, timesteps, batch_size, discount, tau, beta):
 
         # Sample replay buffer
         state, state2, action, reward, done, extra_state, indices = \
-            self._sample_to_dev(args.batch_size, beta=beta, num=num)
+            self._sample_to_dev(batch_size, beta=beta, num=num)
 
         Q_ts = self.q_t(state2)
         if self.aux is not None:
@@ -200,7 +200,7 @@ class DQN(OffPolicyAgent):
         # Compute the target Q value
         # done: We use reverse of done to not consider future rewards
 
-        Q_t = reward + (done * args.discount * Q_t).detach()
+        Q_t = reward + (done * discount * Q_t).detach()
 
         # Get current Q estimate
         Q_now = self.q(state)
@@ -257,7 +257,7 @@ class DQN(OffPolicyAgent):
         replay_buffer.update_priorities(indices, prios)
 
         # Update the frozen target models
-        polyak_update(self.q.parameters(), self.q_t.parameters(), args.tau)
+        polyak_update(self.q.parameters(), self.q_t.parameters(), tau)
 
         a_ret = None
         if self.aux is not None:
@@ -265,8 +265,8 @@ class DQN(OffPolicyAgent):
 
         return q_loss.item(), a_ret, Q_now.mean().item(), Q_now.max().item()
 
-    def test(self, replay_buffer, args):
-            [x, _, u, _, _, extra_state, _] = replay_buffer.sample(args.batch_size)
+    def test(self, replay_buffer, batch_size):
+            [x, _, u, _, _, extra_state, _] = replay_buffer.sample(batch_size)
             length = len(u)
 
             state, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
@@ -299,7 +299,7 @@ class DDQN(DQN):
     def _get_q(self):
         return self.qs[0]
 
-    def train(self, replay_buffer, timesteps, beta, args):
+    def train(self, replay_buffer, timesteps, batch_size, discount, tau, beta):
 
         q_losses, aux_losses, Q_max, Q_mean = [], [], [], []
 
@@ -308,7 +308,7 @@ class DDQN(DQN):
 
             # Get samples
             state, state2, action, reward, done, extra_state, indices = \
-                self._sample_to_dev(args.batch_size, beta=beta, num=num)
+                self._sample_to_dev(batch_size, beta=beta, num=num)
 
             if self.aux is not None:
                 if self.freeze:
@@ -338,7 +338,7 @@ class DDQN(DQN):
 
             Qt_max, _ = th.max(Qt, dim=-1, keepdim=True)
 
-            y = reward + (done * args.discount * Qt_max).detach()
+            y = reward + (done * discount * Qt_max).detach()
 
             # Get current Q estimate
             Q_now = update_q(state)
@@ -363,7 +363,7 @@ class DDQN(DQN):
                 opt.step()
 
             # Update the frozen target models
-            polyak_update(update_q.parameters(), update_qt.parameters(), args.tau)
+            polyak_update(update_q.parameters(), update_qt.parameters(), tau)
 
             q_losses.append(q_loss.item())
             Q_mean.append(Q_now.mean().item())

@@ -25,7 +25,7 @@ class TD3(OffPolicyAgent):
         self._create_models()
         self.to_save = ['critics', 'actor', 'opt_a', 'opt_c']
 
-        print "TD3. LR={}, actor_LR={}, LR2={}".format(lr, actor_lr, lr2)
+        print "TD3"
 
     def set_eval(self):
         self.actor.eval()
@@ -95,18 +95,18 @@ class TD3(OffPolicyAgent):
             action2 = self.actor_t(state2) + noise
 
             # Compute the target Q value: min over all critic targets
-            Qs_t = [c_t(state2, action2) for c_t in self.critics_t]
+            Qs_t = (c_t(state2, action2) for c_t in self.critics_t)
             Q_t = th.min(*Qs_t)
             Q_t = reward + done * args.discount * Q_t
 
         # Get current Q estimates
-        Qs_now = [crit(state, action) for crit in self.critics]
+        Qs_now = (crit(state, action) for crit in self.critics)
 
         # Compute critic loss
-        losses_c = [(Q_now - Q_t).pow(2) for Q_now, Q_t in zip(Qs_now, Qs_t)]
+        losses_c = ((Q_now - Q_t).pow(2) for Q_now, Q_t in zip(Qs_now, Qs_t))
         prios = ((sum(losses_c)/2.) + 1e-5).data.cpu().numpy()
         if weights is not None:
-            losses_c = [loss * weights for loss in losses_c]
+            losses_c = (loss * weights for loss in losses_c)
         loss_c = sum((loss_c.mean() for loss_c in losses_c))
 
         # Optimize the critics
@@ -118,8 +118,8 @@ class TD3(OffPolicyAgent):
 
         # Compute mean values for returning
         loss_c_mean = loss_c.item()
-        Q_mean = avg([Q_now.mean().item() for Q_now in Qs_now])
-        Q_max = max([Q_now.max().item() for Q_now in Qs_now])
+        Q_mean = avg((Q_now.mean().item() for Q_now in Qs_now))
+        Q_max = max((Q_now.max().item() for Q_now in Qs_now))
         ret_loss_a = 0.
 
         # Policy updates
