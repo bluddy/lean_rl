@@ -21,21 +21,6 @@ def make_linear(in_size, out_size, bn=False, drop=False, relu=True):
         l.append(nn.Dropout(p=0.1))
     return l
 
-def hidden_init(layer):
-    fan_in = layer.weight.data.size()[0]
-    lim = 1. / np.sqrt(fan_in)
-    return (-lim, lim)
-
-def init_layers(layers):
-    for layer in layers:
-        if isinstance(layer, nn.Linear):
-            layer.weight.data.uniform_(*hidden_init(layer))
-    #layers[-1].data.uniform_(-3e-3, 3e-3)
-
-class Flatten(nn.Module):
-    def forward(self, x):
-        return x.view(x.size(0), -1)
-
 def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False, drop=False):
     l = []
     l.append(nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding))
@@ -104,7 +89,7 @@ class BaseImage(nn.Module):
         else:
             raise ValueError(str(img_dim) + " is not a valid img-dim")
 
-        ll.extend([Flatten()])
+        ll.extend([nn.Flatten()])
         self.features = nn.Sequential(*ll)
 
 class ActorImage(BaseImage):
@@ -305,9 +290,6 @@ class ActorState(nn.Module):
         ll.extend(make_linear(300, 100, bn=bn))
         ll.extend(make_linear(100, action_dim, bn=False, drop=False, relu=False))
 
-        # init
-        init_layers(ll)
-
         self.linear = nn.Sequential(*ll)
 
     def forward(self, x):
@@ -327,8 +309,6 @@ class CriticState(nn.Module):
         ll.extend(make_linear(300, 100, bn=bn))
         ll.extend(make_linear(100, 1, bn=False, drop=False, relu=False))
 
-        init_layers(ll)
-
         self.linear = nn.Sequential(*ll)
 
     def forward(self, x, u):
@@ -344,8 +324,6 @@ class QState(nn.Module):
         ll.extend(make_linear(state_dim, 100, bn=bn, drop=drop))
         ll.extend(make_linear(100, 50, bn=bn, drop=drop))
         ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
-
-        #init_layers(ll)
 
         self.linear = nn.Sequential(*ll)
 
@@ -486,6 +464,7 @@ class QMixed2(nn.Module):
 
         ll = []
         in_f = calc_features(img_stack)
+        #[4, (3, 2), (3, 1), (3, 2), (3, 1), (3, 2), (3, 1), (3, 2), (3, 1), (3, 2), (3, 1)]
         if img_dim == 224:
             d = 4; l = img_dim
             ll.extend(make_conv(in_f, d,  1, 1, 1, bn=bn, drop=drop)) # flatten colors, 224
@@ -514,7 +493,7 @@ class QMixed2(nn.Module):
         else:
             raise ValueError(str(img_dim) + " is not a valid img_dim")
 
-        ll.extend([Flatten()])
+        ll.extend([nn.Flatten()])
         self.features = nn.Sequential(*ll)
 
         ll = []
