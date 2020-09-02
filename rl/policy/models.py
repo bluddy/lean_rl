@@ -31,8 +31,15 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
     return l
 
 class BaseImage(nn.Module):
-    def __init__(self, img_stack, drop=False, img_dim=224, **kwargs):
-        super(BaseImage, self).__init__()
+    def __init__(self, img_stack, drop=False, net_arch=(16,[],[]), img_dim=224, **kwargs):
+        super().__init__()
+
+        if net_arch[1] == []:
+            net_start_f = 8
+            net_filters = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+            net_strides = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 2, 2]
+        else:
+            net_start_f, net_filters, net_strides = net_arch
 
         ## input size:[img_stack, 224, 224]
         print("BaseImage. drop:{}".format(drop))
@@ -40,54 +47,29 @@ class BaseImage(nn.Module):
 
         ll = []
         in_f = calc_features(img_stack)
-        if img_dim == 224:
-            d = 16
-            ll.extend(make_conv(in_f, d,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 32
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 112
-            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
-            d = 64
-            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 56
-            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 128
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 28
-            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
-            d = 256
-            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 14
-            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 512
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 7
-            d = 1024
-            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 4
-            d2 = 2048
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 2
 
-            self.latent_dim = 2 * 2 * 2048
-        elif img_dim == 64:
-            d = 16
-            ll.extend(make_conv(in_f, d,  3, 1, 1, bn=bn, drop=drop))
-            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 32
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 64
-            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
-            d = 64
-            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 32
-            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 128
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 16
-            ll.extend(make_conv(d2,  d2,  3, 1, 1, bn=bn, drop=drop))
-            d = 256
-            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 8
-            ll.extend(make_conv(d,    d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 512
-            ll.extend(make_conv(d,   d2,  3, 2, 1, bn=bn, drop=drop)) # 4
-            d = 1024
-            ll.extend(make_conv(d2,   d,  3, 2, 1, bn=bn, drop=drop)) # 2
+        last_f = in_f
+        f = net_start_f
+        l = img_dim
 
-            self.latent_dim = 2 * 2 * 1024
-        else:
-            raise ValueError(str(img_dim) + " is not a valid img-dim")
+        # Build up CNN
+        for filter, stride in zip(net_filters, net_strides):
+            if filter == 3:
+                pad = 1
+            elif filter == 5:
+                pad = 2
+
+            last_f = f
+            if stride == 2:
+                f *= 2
+                l /= 2
+            elif stride == 4:
+                f *= 4
+                l /= 4
+
+            ll.extend(make_conv(last_f, f, filter, stride, pad, bn=bn, drop=drop))
+
+        self.latent_dim = l * l * f
 
         ll.extend([nn.Flatten()])
         self.features = nn.Sequential(*ll)
