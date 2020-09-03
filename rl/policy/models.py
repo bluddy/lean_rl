@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch as th
 import torchvision.models as tmodels
 import torch.nn.functional as F
+from typing import List, Dict, Type, Tuple
 
 feat_size = 7
 
@@ -30,8 +31,16 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
         l.append(nn.Dropout2d(0.2))
     return l
 
-class BaseImage(nn.Module):
-    def __init__(self, img_stack, drop=False, net_arch=(16,[],[]), img_dim=224, **kwargs):
+def create_mlp(start: int, net_arch: List[int], bn=True, drop=False):
+    ll = []
+    last_units = start
+    for units in net_arch:
+        ll.extend(make_linear(last_units, units, bn=bn, drop=drop)
+        last_unit = units
+    self.linear = nn.Sequential(*ll)
+
+class CNN(nn.Module):
+    def __init__(self, img_stack, drop=False, net_arch=(8,[],[]), img_dim=224, **kwargs):
         super().__init__()
 
         if net_arch[1] == []:
@@ -73,6 +82,36 @@ class BaseImage(nn.Module):
 
         ll.extend([nn.Flatten()])
         self.features = nn.Sequential(*ll)
+
+
+class MuxIn(nn.Module):
+    '''
+    Class to combine inputs from 2 incoming networks
+    '''
+    def __init__(self, net1: nn.Module, net2: nn.Module, net_arch: List[int], bn=True, drop=False):
+        super().__init()
+
+        self.linear = create_mlp(net1.latent_dim + net2.latent_dim, net_arch=net_arch, bn=bn, drop=drop)
+
+    def forward(self, x1: th.Tensor, x2:th.Tensor) -> th.Tensor:
+        x = th.cat([x1, x2], dim=1)
+        x = self.linear(x)
+        return x
+
+class MuxOut(nn.Module):
+    '''
+    Class to split output to 2 networks 
+    '''
+    def __init__(self, net: nn.Module, net_arch: Tuple[List[int]], bn=True, drop=False):
+        super().__init()
+
+        self.linear1 = create_mlp(net.latent_dim, net_arch=net_arch[0], bn=bn, drop=drop)
+        self.linear2 = create_mlp(net.latent_dim, net_arch=net_arch[1], bn=bn, drop=drop)
+
+    def forward(self, x: th.Tensor) -> Tuple[th.Tensor]:
+        x = self.linear1(x)
+        y = self.linear2(x)
+        return (x,y)
 
 class ActorImage(BaseImage):
     def __init__(self, action_dim, bn=False, **kwargs):
