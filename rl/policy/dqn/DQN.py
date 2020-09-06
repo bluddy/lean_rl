@@ -3,7 +3,7 @@ import torch as th
 import os, sys, math
 from os.path import join as pjoin
 from .offpolicy import OffPolicyAgent
-from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QMixed2OutsFreeze, QImage2OutsFreeze
+from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QImage2OutsFreeze
 from .utils import polyak_update
 
 device = th.device("cuda" if th.cuda.is_available() else "cpu")

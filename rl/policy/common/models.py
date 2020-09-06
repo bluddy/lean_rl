@@ -108,6 +108,18 @@ class CNN(nn.Module):
         ll.append(nn.Flatten())
         self.features = nn.Sequential(*ll)
 
+class Linear(nn.Module):
+    def __init__(self, prev, net_arch:List[int], last=False, **kwargs):
+        super().__init__()
+
+        self.net = prev
+        self.linear = create_mlp(prev.out_size, net_arch=net_arch, last=True, **kwargs)
+
+    def forward(self, x):
+        x = self.net(x)
+        x = self.linear(x)
+        return x
+
 class MuxIn(nn.Module):
     '''
     Class to combine inputs from 2 incoming networks
@@ -141,7 +153,7 @@ class MuxIn(nn.Module):
 
 class MuxOut(nn.Module):
     '''
-    Class to split output to 2 networks 
+    Class to split output to 2 networks
     '''
     def __init__(self, net: nn.Module,
             net_arch: Tuple[List[int], List[int], List[int]], last=False, **kwargs):
@@ -169,279 +181,3 @@ class MuxOut(nn.Module):
         xs = [linear(x) for linear in self.linears]
         return xs
 
-'''
-class ActorImage(BaseImage):
-    def __init__(self, action_dim, bn=False, **kwargs):
-        super(ActorImage, self).__init__(bn=bn, **kwargs)
-
-        ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn))
-        ll.extend(make_linear(400, 100, bn=bn))
-        self.linear = nn.Sequential(*ll)
-
-        self.out_angular = nn.Linear(100, action_dim)
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        x = self.out_angular(x)
-        #x = th.clamp(x, min=-1., max=1.)
-        x = th.tanh(x)
-        return x
-
-class CriticImage(BaseImage):
-    def __init__(self, action_dim, bn=False, **kwargs):
-        super(CriticImage, self).__init__(bn=bn, **kwargs)
-
-        ll = []
-        ll.extend(make_linear(self.latent_dim + action_dim, 400, bn=bn))
-        ll.extend(make_linear(400, 100, bn=bn))
-        ll.extend(make_linear(100, 1, bn=False, relu=False))
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x, u):
-        x = self.features(x)
-        x = th.cat([x, u], 1)
-        x = self.linear(x)
-        return x
-
-class QImage(BaseImage):
-    def __init__(self, action_dim, bn=True, drop=False, **kwargs):
-        super(QImage, self).__init__(bn=bn, drop=drop, **kwargs)
-
-        ll = []
-        #ll.extend(make_linear(self.latent_dim, action_dim, bn=bn, drop=drop))
-        ll.extend(make_linear(self.latent_dim, action_dim, bn=False, drop=False, relu=False))
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        return x
-
-class QImage2Outs(BaseImage):
-    ''' QImage with two outputs coming out of the featres
-        Use state shape of QState
-    '''
-    def __init__(self, action_dim, aux_size, drop=False, reduced_dim=10, **kwargs):
-        super(QImage2Outs, self).__init__(drop=drop, **kwargs)
-
-        print("QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop))
-
-        bn=True
-        d = reduced_dim
-
-        # Map features to small state space
-        ll = []
-        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
-        ll.extend(make_linear(d, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
-        self.linear = nn.Sequential(*ll)
-
-        # RL part
-        ll = []
-        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
-        self.linear1 = nn.Sequential(*ll)
-
-        # Aux part
-        ll = []
-        ll.extend(make_linear(50, aux_size, bn=False, drop=False, relu=False))
-        self.linear2 = nn.Sequential(*ll)
-
-    def freeze_some(self, frozen):
-        raise ValueError("Freezing not supported in QImage2Outs")
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        y = self.linear1(x)
-        z = self.linear2(x)
-        return y,z
-
-class QImageDenseNet(nn.Module):
-    def __init__(self, action_dim, img_stack, pretrained=False):
-        super(QImageDenseNet, self).__init__()
-
-        print("QImageDenseNet. action_dim:{}, img_stack:{}".format(action_dim, img_stack))
-
-        model = tmodels.densenet121(pretrained=False)
-        layers = list(model.features.children())
-        if img_stack != 3:
-            layers[0] = nn.Conv2d(img_stack, 64, 7, stride=2, padding=3, bias=False)
-
-        self.features = nn.Sequential(*layers)
-        self.classifier = nn.Linear(1024, action_dim)
-
-    def forward(self, x):
-        #import pdb
-        #pdb.set_trace()
-
-        x = F.relu(self.features(x), inplace=True)
-        x = F.adaptive_avg_pool2d(x, (1,1))
-        x = th.flatten(x, 1)
-        x = self.classifier(x)
-        return x
-
-class QMixedDenseNet(QImageDenseNet):
-    def __init__(self, action_dim, state_dim, img_stack):
-        self.latent_dim = 100
-        super(QMixedDenseNet, self).__init__(action_dim=self.latent_dim, img_stack=img_stack)
-
-        print("QMixedDenseNet. action_dim:{}, img_stack:{}, state_dim:{}".format(action_dim, img_stack, state_dim))
-
-        bn = True
-        drop = False
-
-        ll = []
-        ll.extend(make_linear(self.latent_dim, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 100, bn=bn, drop=drop))
-        self.linear1 = nn.Sequential(*ll)
-
-        ll = []
-        ll.extend(make_linear(state_dim, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 100, bn=bn, drop=drop))
-        self.linear2 = nn.Sequential(*ll)
-
-        ll = []
-        ll.extend(make_linear(200, action_dim, bn=False, drop=False, relu=False))
-        self.linear3 = nn.Sequential(*ll)
-
-    def forward(self, x):
-        img, state = x
-        x = self.model(img)
-        x = self.linear1(x)
-        y = self.linear2(state)
-        z = self.linear3(th.cat((x, y), dim=-1))
-        return z
-
-class ActorState(nn.Module):
-    def __init__(self, state_dim, action_dim, bn=False):
-        super(ActorState, self).__init__()
-
-        ll = []
-        ll.extend(make_linear(state_dim, 400, bn=bn))
-        ll.extend(make_linear(400, 300, bn=bn))
-        ll.extend(make_linear(300, 100, bn=bn))
-        ll.extend(make_linear(100, action_dim, bn=False, drop=False, relu=False))
-
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x):
-        x = self.linear(x)
-        #x = th.clamp(x, min=-1., max=1.)
-        x = th.tanh(x)
-        return x
-
-
-class CriticState(nn.Module):
-    def __init__(self, state_dim, action_dim, bn=False):
-        super(CriticState, self).__init__()
-
-        ll = []
-        ll.extend(make_linear(state_dim + action_dim, 400, bn=bn))
-        ll.extend(make_linear(400, 300, bn=bn))
-        ll.extend(make_linear(300, 100, bn=bn))
-        ll.extend(make_linear(100, 1, bn=False, drop=False, relu=False))
-
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x, u):
-        x = th.cat([x, u], 1)
-        x = self.linear(x)
-        return x
-
-class QState(nn.Module):
-    def __init__(self, state_dim, action_dim, bn=True, drop=False, **kwargs):
-        super(QState, self).__init__()
-
-        ll = []
-        ll.extend(make_linear(state_dim, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
-        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
-
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x):
-        x = self.linear(x)
-        return x
-
-
-class QMixed2(nn.Module):
-    def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
-        super(QMixed2, self).__init__()
-
-        ## input size:[img_stack, 224, 224]
-        print("QMixed2. drop:{}, deep:{}, bn:{}".format(drop, deep, bn))
-
-        ll = []
-        in_f = calc_features(img_stack)
-        #[4, (3, 2), (3, 1), (3, 2), (3, 1), (3, 2), (3, 1), (3, 2), (3, 1), (3, 2), (3, 1)]
-        if img_dim == 224:
-            d = 4; l = img_dim
-            ll.extend(make_conv(in_f, d,  1, 1, 1, bn=bn, drop=drop)) # flatten colors, 224
-            d2 = 8; l = l / 2
-            ll.extend(make_conv(d, d2, 3, 2, 1, bn=bn, drop=drop)) # 112
-            if deep:
-                ll.extend(make_conv(d2, d2, 3, 1, 1, bn=bn, drop=drop))
-            d = 16; l = l / 2
-            ll.extend(make_conv(d2, d,  3, 2, 1, bn=bn, drop=drop)) # 56
-            if deep:
-                ll.extend(make_conv(d, d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 32; l = l / 2
-            ll.extend(make_conv(d,  d2,  3, 2, 1, bn=bn, drop=drop)) # 28
-            if deep:
-                ll.extend(make_conv(d2, d2,  3, 1, 1, bn=bn, drop=drop))
-            d = 64; l = l / 2
-            ll.extend(make_conv(d2,  d,  3, 2, 1, bn=bn, drop=drop)) # 14
-            if deep:
-                ll.extend(make_conv(d, d,  3, 1, 1, bn=bn, drop=drop))
-            d2 = 128; l = l / 2
-            ll.extend(make_conv(d, d2,  3, 2, 1, bn=bn, drop=drop)) # 7
-            if deep:
-                ll.extend(make_conv(d2, d2,  3, 1, 1, bn=bn, drop=drop))
-            d = d2
-            self.latent_dim = l * l * d
-        else:
-            raise ValueError(str(img_dim) + " is not a valid img_dim")
-
-        ll.extend([nn.Flatten()])
-        self.features = nn.Sequential(*ll)
-
-        ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, 100, bn=bn, drop=drop))
-        self.linear1 = nn.Sequential(*ll)
-
-        ll = []
-        ll.extend(make_linear(state_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, 100, bn=bn, drop=drop))
-        self.linear2 = nn.Sequential(*ll)
-
-        ll = []
-        ll.extend(make_linear(200, action_dim, bn=False, drop=False, relu=False))
-        self.linear3 = nn.Sequential(*ll)
-
-    def forward(self, x):
-        img, state = x
-        x = self.features(img)
-        x = self.linear1(x)
-        y = self.linear2(state)
-        x = self.linear3(th.cat((x, y), dim=-1))
-        return x
-
-class QImageSoftMax(BaseImage):
-    ''' Image network with softmax '''
-    def __init__(self, action_dim, bn=True, drop=False, **kwargs):
-        super(QImageSoftMax, self).__init__(bn=bn, drop=drop, **kwargs)
-
-        ll = []
-        ll.extend(make_linear(self.latent_dim, 400, bn=bn, drop=drop))
-        ll.extend(make_linear(400, action_dim, bn=False, drop=False, relu=False))
-        ll.extend([nn.LogSoftmax(dim=-1)])
-        self.linear = nn.Sequential(*ll)
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        return x
-'''
