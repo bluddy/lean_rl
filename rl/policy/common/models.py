@@ -118,31 +118,23 @@ class MuxIn(nn.Module):
 
         self.nets = [net1, net2]
         # Create linear layers if needed
-        width = 0
         self.linears = []
         for arch, net in zip(net_arch[:-1], self.nets):
-            if len(arch) > 0:
-                width += arch[-1]
-                self.linears.append(create_mlp(net.out_size, net_arch=arch, **kwargs))
-            else:
-                width += net.out_size
-                self.linears.append(Dummy(net.out_size))
+            self.linears.append(create_mlp(net.out_size, net_arch=arch, **kwargs))
+
+        width = sum((x.out_size for x in self.linears))
 
         # Pass the last only if needed here
-        if len(net_arch[3] > 0):
-            self.linear_out = create_mlp(width, net_arch=net_arch[2], last=last, **kwargs)
-            self.out_size = net_arch[2][-1]
-        else:
-            self.linear_out = Dummy(width)
-            self.out_size = width
+        self.linear_out = create_mlp(width, net_arch=net_arch[2], last=last, **kwargs)
+        self.out_size = self.linear_out.out_size
 
     def freeze(self, idx:int, frozen:bool):
         for p in self.linears[idx].parameters():
             p.requires_grad = not frozen
 
     def forward(self, xs: Tuple[th.Tensor, th.Tensor]) -> th.Tensor:
-        xs = [self.nets[x] for x in xs]
-        xs = [self.linears[x] for x in xs]
+        xs = [net(x) for x, net in zip(xs, self.nets)]
+        xs = [linear(x) for x, linear in zip(xs, self.linears)]
         x = th.cat(xs, dim=1)
         x = self.linear_out(x)
         return x
@@ -156,41 +148,26 @@ class MuxOut(nn.Module):
         super().__init()
 
         self.net = net
-        width = 0
 
         # Create input linear layer if needed
-        if len(net_arch[0]) > 0:
-            width += net_arch[0][-1]
-            self.linear_in = create_mlp(net.out_size, net_arch=arch, **kwargs)
-        else:
-            width += net.out_size
-            self.linear_in = Dummy(net.out_size)
+        self.linear_in = create_mlp(net.out_size, net_arch=arch, **kwargs)
 
         # Create output linear layers if needed
-        out_width = 0
         self.linears = []
         for arch in net_arch[1:]:
-            if len(arch) > 0:
-                out_width += arch[-1]
-                self.linears.append(create_mlp(width, net_arch=arch, last=last, **kwargs))
-            else:
-                out_width += net.out_size
-                self.linears.append(Dummy(net.out_size))
+            self.linears.append(create_mlp(width, net_arch=arch, last=last, **kwargs))
 
+        self.out_size = sum((x.out_size for x in self.linears))
 
-        self.linear1 = create_mlp(net.latent_dim, net_arch=net_arch[0], bn=bn, drop=drop)
-        self.linear2 = create_mlp(net.latent_dim, net_arch=net_arch[1], bn=bn, drop=drop)
-
-    def freeze(self, first:bool, frozen:bool):
-        target = self.net1 if first else self.net2
-        for p in target.parameters():
+    def freeze(self, idx:int, frozen:bool):
+        for p in self.linears[idx].parameters():
             p.requires_grad = not frozen
 
     def forward(self, x: th.Tensor) -> Tuple[th.Tensor]:
         x = self.net(x)
-        x = self.linear1(x)
-        y = self.linear2(x)
-        return (x,y)
+        x = self.linear_in(x)
+        xs = [linear(x) for linear in self.linears]
+        return xs
 
 '''
 class ActorImage(BaseImage):
