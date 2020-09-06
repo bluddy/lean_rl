@@ -22,7 +22,7 @@ class QState(nn.Module):
     def forward(self, x):
         return self.linear(x)
 
-def QImage(nn.Module):
+class QImage(nn.Module):
     def __init__(self, action_dim, net_arch=None, **kwargs):
         super().__init__()
 
@@ -34,19 +34,6 @@ def QImage(nn.Module):
 
     def forward(self, x):
         return self.model(x)
-
-def QImageAux(nn.Module):
-    def __init__(self, action_dim, aux_size, net_arch=None, **kwargs):
-        super().__init__()
-
-        if net_arch is None:
-            net_arch = ([20], [100, 50, action_dim], [100, 50, aux_size])
-
-        cnn = CNN(**kwargs)
-        self.mux_out = MuxOut(cnn, net_arch=net_arch, last=True, **kwargs)
-
-    def forward(self, x):
-        return self.mux_out(x)
 
 class QMixed(nn.Module):
     def __init__(self, state_dim, action_dim, net_arch=None, **kwargs):
@@ -61,6 +48,20 @@ class QMixed(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+class QImageAux(nn.Module):
+    def __init__(self, action_dim, aux_size, net_arch=None, **kwargs):
+        super().__init__()
+
+        if net_arch is None:
+            net_arch = ([20], [100, 50, action_dim], [100, 50, aux_size])
+
+        cnn = CNN(**kwargs)
+        self.mux_out = MuxOut(cnn, net_arch=net_arch, last=True, **kwargs)
+
+    def forward(self, x):
+        return self.mux_out(x)
+
 
 class QMixedAux(nn.Module):
     ''' QMixed with auxiliary output coming out of the features
