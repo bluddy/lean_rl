@@ -31,13 +31,38 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
         l.append(nn.Dropout2d(0.2))
     return l
 
-def create_mlp(start: int, net_arch: List[int], bn=True, drop=False):
+def create_mlp(start: int, net_arch: List[int], bn=True, drop=False, last=False) -> nn.Module:
+    '''
+    Create an MLP based on the net_arch
+    :last: Should we add relu/bn/drop to last layer
+    '''
+    bn, drop, relu = bn, drop, True
+
     ll = []
     last_units = start
-    for units in net_arch:
-        ll.extend(make_linear(last_units, units, bn=bn, drop=drop)
+    for i, units in enumerate(net_arch):
+
+        if last and i == len(net_arch) - 1:
+            bn, drop, relu = False, False, False
+
+        ll.extend(make_linear(last_units, units, bn=bn, drop=drop, relu=relu))
         last_unit = units
-    self.linear = nn.Sequential(*ll)
+
+    x = nn.Sequential(*ll)
+    x.out_size = net_arch[-1] if net_arch else start
+    return x
+
+class Dummy(nn.Module):
+    '''
+    Placeholder for input
+    '''
+    def __init__(self):
+        super().__init__(size)
+
+        self.out_size = size
+
+    def forward(self, x:th.Tensor):
+        return x
 
 class CNN(nn.Module):
     def __init__(self, img_stack, drop=False, net_arch=(8,[],[]), img_dim=224, **kwargs):
@@ -78,41 +103,96 @@ class CNN(nn.Module):
 
             ll.extend(make_conv(last_f, f, filter, stride, pad, bn=bn, drop=drop))
 
-        self.latent_dim = l * l * f
+        self.out_size = l * l * f
 
-        ll.extend([nn.Flatten()])
+        ll.append(nn.Flatten())
         self.features = nn.Sequential(*ll)
-
 
 class MuxIn(nn.Module):
     '''
     Class to combine inputs from 2 incoming networks
     '''
-    def __init__(self, net1: nn.Module, net2: nn.Module, net_arch: List[int], bn=True, drop=False):
+    def __init__(self, net1: nn.Module, net2: nn.Module,
+            net_arch: Tuple[List[int], List[int], List[int]), last=False, **kwargs)
         super().__init()
 
-        self.linear = create_mlp(net1.latent_dim + net2.latent_dim, net_arch=net_arch, bn=bn, drop=drop)
+        self.nets = [net1, net2]
+        # Create linear layers if needed
+        width = 0
+        self.linears = []
+        for arch, net in zip(net_arch[:-1], self.nets):
+            if len(arch) > 0:
+                width += arch[-1]
+                self.linears.append(create_mlp(net.out_size, net_arch=arch, **kwargs))
+            else:
+                width += net.out_size
+                self.linears.append(Dummy(net.out_size))
 
-    def forward(self, x1: th.Tensor, x2:th.Tensor) -> th.Tensor:
-        x = th.cat([x1, x2], dim=1)
-        x = self.linear(x)
+        # Pass the last only if needed here
+        if len(net_arch[3] > 0):
+            self.linear_out = create_mlp(width, net_arch=net_arch[2], last=last, **kwargs)
+            self.out_size = net_arch[2][-1]
+        else:
+            self.linear_out = Dummy(width)
+            self.out_size = width
+
+    def freeze(self, idx:int, frozen:bool):
+        for p in self.linears[idx].parameters():
+            p.requires_grad = not frozen
+
+    def forward(self, xs: Tuple[th.Tensor, th.Tensor]) -> th.Tensor:
+        xs = [self.nets[x] for x in xs]
+        xs = [self.linears[x] for x in xs]
+        x = th.cat(xs, dim=1)
+        x = self.linear_out(x)
         return x
 
 class MuxOut(nn.Module):
     '''
     Class to split output to 2 networks 
     '''
-    def __init__(self, net: nn.Module, net_arch: Tuple[List[int]], bn=True, drop=False):
+    def __init__(self, net: nn.Module,
+            net_arch: Tuple[List[int], List[int], List[int]], last=False, **kwargs):
         super().__init()
+
+        self.net = net
+        width = 0
+
+        # Create input linear layer if needed
+        if len(net_arch[0]) > 0:
+            width += net_arch[0][-1]
+            self.linear_in = create_mlp(net.out_size, net_arch=arch, **kwargs)
+        else:
+            width += net.out_size
+            self.linear_in = Dummy(net.out_size)
+
+        # Create output linear layers if needed
+        out_width = 0
+        self.linears = []
+        for arch in net_arch[1:]:
+            if len(arch) > 0:
+                out_width += arch[-1]
+                self.linears.append(create_mlp(width, net_arch=arch, last=last, **kwargs))
+            else:
+                out_width += net.out_size
+                self.linears.append(Dummy(net.out_size))
+
 
         self.linear1 = create_mlp(net.latent_dim, net_arch=net_arch[0], bn=bn, drop=drop)
         self.linear2 = create_mlp(net.latent_dim, net_arch=net_arch[1], bn=bn, drop=drop)
 
+    def freeze(self, first:bool, frozen:bool):
+        target = self.net1 if first else self.net2
+        for p in target.parameters():
+            p.requires_grad = not frozen
+
     def forward(self, x: th.Tensor) -> Tuple[th.Tensor]:
+        x = self.net(x)
         x = self.linear1(x)
         y = self.linear2(x)
         return (x,y)
 
+'''
 class ActorImage(BaseImage):
     def __init__(self, action_dim, bn=False, **kwargs):
         super(ActorImage, self).__init__(bn=bn, **kwargs)
@@ -193,50 +273,6 @@ class QImage2Outs(BaseImage):
 
     def freeze_some(self, frozen):
         raise ValueError("Freezing not supported in QImage2Outs")
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.linear(x)
-        y = self.linear1(x)
-        z = self.linear2(x)
-        return y,z
-
-
-class QImage2OutsFreeze(BaseImage):
-    ''' QImage with two outputs coming out of the features
-        Allow freezing of CNN part
-        Use state shape of QState
-    '''
-    def __init__(self, action_dim, aux_size, drop=False, reduced_dim=10, **kwargs):
-        super(QImage2Outs, self).__init__(drop=drop, **kwargs)
-
-        print("QImage2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop))
-
-        bn=True
-        d = reduced_dim
-
-        # Map features to small state space
-        ll = []
-        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
-        self.linear = nn.Sequential(*ll)
-
-        # RL part
-        ll = []
-        ll.extend(make_linear(d, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
-        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
-        self.linear1 = nn.Sequential(*ll)
-
-        # Aux part
-        ll = []
-        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
-        self.linear2 = nn.Sequential(*ll)
-
-    def freeze_some(self, frozen):
-        for p in self.linear.parameters():
-            p.requires_grad = not frozen
-        for p in self.features.parameters():
-            p.requires_grad = not frozen
 
     def forward(self, x):
         x = self.features(x)
@@ -352,129 +388,6 @@ class QState(nn.Module):
         x = self.linear(x)
         return x
 
-class QMixed(BaseImage):
-    def __init__(self, state_dim, action_dim,
-            bn=True, drop=False, **kwargs):
-        super(QMixed, self).__init__(bn=bn, drop=drop, **kwargs)
-
-        # Map features
-        ll = []
-        ll.extend(make_linear(self.latent_dim, 50, bn=bn, drop=drop))
-        ll.extend(make_linear(50, 20, bn=bn, drop=drop))
-        self.linear1 = nn.Sequential(*ll)
-
-        # Map state
-        ll = []
-        ll.extend(make_linear(state_dim, 50, bn=bn, drop=drop))
-        ll.extend(make_linear(50, 20, bn=bn, drop=drop))
-        self.linear2 = nn.Sequential(*ll)
-
-        # Combine
-        ll = []
-        ll.extend(make_linear(40, action_dim, bn=False, drop=False, relu=False))
-        self.linear3 = nn.Sequential(*ll)
-
-    def forward(self, x):
-        img, state = x
-        x = self.features(img)
-        x = self.linear1(x)
-        y = self.linear2(state)
-        x = self.linear3(th.cat((x, y), dim=-1))
-        return x
-
-class QMixed2Outs(BaseImage):
-    ''' QMixed with two outputs coming out of the features
-        Use state shape of QState
-    '''
-    def __init__(self, state_dim, action_dim, aux_size,
-            drop=False, reduced_dim=10, **kwargs):
-        super(QMixed2Outs, self).__init__(drop=drop, **kwargs)
-
-        print("QMixed2Outs: reduced_dim={}, drop={}".format(reduced_dim, drop))
-
-        bn=True
-        d = reduced_dim
-
-        # Map features to small state space
-        ll = []
-        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
-        self.linear = nn.Sequential(*ll)
-
-        ll = []
-        ll.extend(make_linear(d + state_dim, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
-        self.linear1 = nn.Sequential(*ll)
-
-        # RL part
-        ll = []
-        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
-        self.linear2 = nn.Sequential(*ll)
-
-        # Aux part
-        ll = []
-        ll.extend(make_linear(50, aux_size, bn=False, drop=False, relu=False))
-        self.linear3 = nn.Sequential(*ll)
-
-    def freeze_some(self, frozen):
-        raise ValueError("Freezing not supported in QMixed2Outs")
-
-    def forward(self, x):
-        img, state = x
-        # Features to state
-        x = self.features(img)
-        x = self.linear(x)
-        x = self.linear1(th.cat((x, state), dim=-1)) # RL output
-        y = self.linear2(x) # RL output
-        z = self.linear3(x) # Aux output
-        return y,z
-
-
-class QMixed2OutsFreeze(BaseImage):
-    ''' QMixed with two outputs coming out of the features
-        Needs freezing
-        Use state shape of QState
-    '''
-    def __init__(self, state_dim, action_dim, aux_size,
-            drop=False, reduced_dim=10, **kwargs):
-        super(QMixed2OutsFreeze, self).__init__(drop=drop, **kwargs)
-
-        print("QMixed2OutsFreeze: reduced_dim={}, drop={}".format(reduced_dim, drop))
-
-        bn=True
-        d = reduced_dim
-
-        # Map features to small state space
-        ll = []
-        ll.extend(make_linear(self.latent_dim, d, bn=bn, drop=drop))
-        self.linear = nn.Sequential(*ll)
-
-        # RL part
-        ll = []
-        ll.extend(make_linear(d + state_dim, 100, bn=bn, drop=drop))
-        ll.extend(make_linear(100, 50, bn=bn, drop=drop))
-        ll.extend(make_linear(50, action_dim, drop=False, bn=False, relu=False))
-        self.linear1 = nn.Sequential(*ll)
-
-        # Aux part
-        ll = []
-        ll.extend(make_linear(d, aux_size, bn=False, drop=False, relu=False))
-        self.linear2 = nn.Sequential(*ll)
-
-    def freeze_some(self, frozen):
-        for p in self.linear.parameters():
-            p.requires_grad = not frozen
-        for p in self.features.parameters():
-            p.requires_grad = not frozen
-
-    def forward(self, x):
-        img, state = x
-        # Features to state
-        x = self.features(img)
-        x = self.linear(x)
-        y = self.linear1(th.cat((x, state), dim=-1)) # RL output
-        z = self.linear2(x) # Aux output
-        return y,z
-
 
 class QMixed2(nn.Module):
     def __init__(self, img_stack, bn=True, drop=False, img_dim=224, deep=False):
@@ -554,3 +467,4 @@ class QImageSoftMax(BaseImage):
         x = self.features(x)
         x = self.linear(x)
         return x
+'''
