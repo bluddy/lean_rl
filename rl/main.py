@@ -325,7 +325,7 @@ def run(args):
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'dqn':
-        from rl.policy.DQN import DQN
+        from rl.policy.dqn.DQN import DQN
         policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,

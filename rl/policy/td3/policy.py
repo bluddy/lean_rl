@@ -2,13 +2,7 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 import os, sys, math
-
-device = th.device("cuda" if th.cuda.is_available() else "cpu")
-
-try:
-    import apex.amp as amp
-except ImportError:
-    pass
+from rl.policy.common.models import *
 
 class ActorImage(nn.Module):
     def __init__(self, action_dim, bn=False, **kwargs):

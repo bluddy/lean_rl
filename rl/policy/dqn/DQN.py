@@ -2,9 +2,10 @@ import numpy as np
 import torch as th
 import os, sys, math
 from os.path import join as pjoin
-from .offpolicy import OffPolicyAgent
-from .models import QState, QImage, QMixed, QImageSoftMax, QImageDenseNet, QMixedDenseNet, QImage2Outs, QMixed2Outs, QImage2OutsFreeze
-from .utils import polyak_update
+
+from rl.policy.common.offpolicy import OffPolicyAgent
+from .policy import QState, QImage, QMixed, QImageAux, QMixedAux
+from rl.policy.common.utils import polyak_update
 
 device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
@@ -81,18 +82,10 @@ class DQN(OffPolicyAgent):
                     print("Aux state")
                     aux_size = self.aux_size
 
-                    if self.freeze:
-                        print("Freeze")
-                        n = QMixed2OutsFreeze(state_dim=self.state_dim, action_dim=self.total_steps,
-                            img_stack=self.total_stack,
-                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
-                    else:
-                        print("NoFreeze")
-                        n = QMixed2Outs(state_dim=self.state_dim, action_dim=self.total_steps,
-                            img_stack=self.total_stack,
-                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    n = QMixedAux(state_dim=self.state_dim, action_dim=self.total_steps,
+                        img_stack=self.total_stack,
+                        bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
             elif self.network == 'densenet':
                 n = QMixedDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack, state_dim=self.state_dim).to(device)
