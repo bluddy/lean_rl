@@ -108,6 +108,9 @@ class CNN(nn.Module):
         ll.append(nn.Flatten())
         self.features = nn.Sequential(*ll)
 
+    def forward(self, x):
+        return self.features(x)
+
 class Linear(nn.Module):
     def __init__(self, prev, net_arch:List[int], last=False, **kwargs):
         super().__init__()
