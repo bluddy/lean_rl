@@ -64,7 +64,7 @@ class TD3(OffPolicyAgent):
         self.actor_t = self._create_actor()
         self.actor_t.load_state_dict(self.actor.state_dict())
 
-        self.actor, self.opt_a = self._create_opt(self.actor.parameters(), self.actor_lr)
+        self.actor, self.opt_a = self._create_opt(self.actor, self.actor_lr)
 
         self.critics = [self._create_critic() for _ in range(2)]
         self.critics_t = []

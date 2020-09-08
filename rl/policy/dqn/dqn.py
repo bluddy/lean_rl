@@ -33,8 +33,6 @@ class DQN(OffPolicyAgent):
 
         self._create_models()
 
-        print("DQN. LR=", lr, "freeze=", freeze)
-
     def set_eval(self):
         self.q.eval()
 
@@ -98,7 +96,9 @@ class DQN(OffPolicyAgent):
         self.q_t = self._create_model()
 
         self.q_t.load_state_dict(self.q.state_dict())
-        self.q, self.q_opt = self._create_opt(self.q.parameters(), self.lr)
+        self.q, self.q_opt = self._create_opt(self.q, self.lr)
+
+        print("DDQN LR={}".format(self.lr))
 
     def _discrete_to_cont(self, discrete):
         ''' @discrete: (procs, 1) '''
@@ -286,9 +286,9 @@ class DDQN(DQN):
         for q, qt in zip(self.qs, self.qts):
             qt.load_state_dict(q.state_dict())
 
-        import pdb
-        pdb.set_trace()
-        self.qs, self.opts = list(zip(*[self._create_opt(q.parameters(), self.lr) for q in self.qs]))
+        self.qs, self.opts = list(zip(*[self._create_opt(q, self.lr) for q in self.qs]))
+
+        print("DDQN. LR={}".format(self.lr))
 
     def _get_q(self):
         return self.qs[0]
