@@ -23,11 +23,13 @@ class QImage(nn.Module):
         if net_arch is None:
             net_arch = [100, 50, action_dim]
 
-        cnn = CNN(**kwargs)
-        self.model = Linear(cnn, net_arch, last=True, **kwargs)
+        self.cnn = CNN(**kwargs)
+        self.linear = Linear(self.cnn, net_arch, last=True, **kwargs)
 
     def forward(self, x):
-        return self.model(x)
+        x = self.cnn(x)
+        x = self.linear(x)
+        return x
 
 class QMixed(nn.Module):
     def __init__(self, state_dim, action_dim, net_arch=None, **kwargs):
@@ -36,12 +38,15 @@ class QMixed(nn.Module):
         if net_arch is None:
             net_arch = ([50, 20], [50, 20], [action_dim])
 
-        cnn = CNN(**kwargs)
-        dummy = Dummy(state_dim)
-        self.model = MuxIn(cnn, dummy, net_arch=net_arch, last=True, **kwargs)
+        self.cnn = CNN(**kwargs)
+        self.dummy = Dummy(state_dim)
+        self.mux_in = MuxIn(self.cnn, self.dummy, net_arch=net_arch, last=True, **kwargs)
 
     def forward(self, x):
-        return self.model(x)
+        y = self.cnn(x[0])
+        z = self.dummy(x[1])
+        x = self.mux_in((y, z))
+        return x
 
 class QImageAux(nn.Module):
     def __init__(self, action_dim, aux_size, net_arch=None, **kwargs):
@@ -50,12 +55,13 @@ class QImageAux(nn.Module):
         if net_arch is None:
             net_arch = ([20], [100, 50, action_dim], [100, 50, aux_size])
 
-        cnn = CNN(**kwargs)
-        self.mux_out = MuxOut(cnn, net_arch=net_arch, last=True, **kwargs)
+        self.cnn = CNN(**kwargs)
+        self.mux_out = MuxOut(self.cnn, net_arch=net_arch, last=True, **kwargs)
 
     def forward(self, x):
-        return self.mux_out(x)
-
+        x = self.cnn(x)
+        x = self.mux_out(x)
+        return x
 
 class QMixedAux(nn.Module):
     ''' QMixed with auxiliary output coming out of the features
@@ -72,8 +78,8 @@ class QMixedAux(nn.Module):
             net_arch2 = ([], [action_dim], [aux_size])
 
         self.cnn = CNN(**kwargs)
-        state = Dummy(state_dim)
-        self.mux_in = MuxIn(self.cnn, state, net_arch=net_arch1, **kwargs)
+        self.state = Dummy(state_dim)
+        self.mux_in = MuxIn(self.cnn, self.state, net_arch=net_arch1, **kwargs)
         self.mux_out = MuxOut(self.mux_in, net_arch=net_arch2, last=True, **kwargs)
 
     def freeze_some(self, frozen):
@@ -81,5 +87,9 @@ class QMixedAux(nn.Module):
         self.cnn.freeze(frozen=frozen)
 
     def forward(self, x):
-        return self.mux_out(x)
+        y = self.cnn(x[0])
+        z = self.state(x[1])
+        x = self.mux_in((y,z))
+        x = self.mux_out(x)
+        return x
 

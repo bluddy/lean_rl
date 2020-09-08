@@ -112,11 +112,9 @@ class Linear(nn.Module):
     def __init__(self, prev, net_arch:List[int], last=False, **kwargs):
         super().__init__()
 
-        self.net = prev
         self.linear = create_mlp(prev.out_size, net_arch=net_arch, last=True, **kwargs)
 
     def forward(self, x):
-        x = self.net(x)
         x = self.linear(x)
         return x
 
@@ -128,13 +126,11 @@ class MuxIn(nn.Module):
             net_arch: Tuple[List[int], List[int], List[int]], last=False, **kwargs):
         super().__init__()
 
-        self.nets = [net1, net2]
-        self.net1 = net1
-        self.net2 = net2
+        nets = [net1, net2]
 
         # Create linear layers if needed
         self.linears = []
-        for arch, net in zip(net_arch[:-1], self.nets):
+        for arch, net in zip(net_arch[:-1], nets):
             self.linears.append(create_mlp(net.out_size, net_arch=arch, **kwargs))
 
         self.linear1 = self.linears[0]
@@ -151,7 +147,6 @@ class MuxIn(nn.Module):
             p.requires_grad = not frozen
 
     def forward(self, xs: Tuple[th.Tensor, th.Tensor]) -> th.Tensor:
-        xs = [net(x) for x, net in zip(xs, self.nets)]
         xs = [linear(x) for x, linear in zip(xs, self.linears)]
         x = th.cat(xs, dim=1)
         x = self.linear_out(x)
@@ -164,8 +159,6 @@ class MuxOut(nn.Module):
     def __init__(self, net: nn.Module,
             net_arch: Tuple[List[int], List[int], List[int]], last=False, **kwargs):
         super().__init__()
-
-        self.net = net
 
         # Create input linear layer if needed
         self.linear_in = create_mlp(net.out_size, net_arch=net_arch[0], **kwargs)
@@ -185,7 +178,6 @@ class MuxOut(nn.Module):
             p.requires_grad = not frozen
 
     def forward(self, x: th.Tensor) -> Tuple[th.Tensor]:
-        x = self.net(x)
         x = self.linear_in(x)
         xs = [linear(x) for linear in self.linears]
         return xs
