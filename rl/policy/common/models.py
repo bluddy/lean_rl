@@ -11,7 +11,7 @@ feat_size = 7
 def calc_features(img_stack):
     return img_stack
 
-def make_linear(in_size, out_size, bn=False, drop=False, relu=True):
+def make_linear(in_size:int, out_size:int, bn=False, drop=False, relu=True):
     l = []
     l.append(nn.Linear(in_size, out_size))
     if relu:
@@ -31,7 +31,7 @@ def make_conv(in_channels, out_channels, kernel_size, stride, padding, bn=False,
         l.append(nn.Dropout2d(0.2))
     return l
 
-def create_mlp(start: int, net_arch: List[int], bn=True, drop=False, last=False) -> nn.Module:
+def create_mlp(start: int, net_arch: List[int], bn=True, drop=False, last=False, **kwargs) -> nn.Module:
     '''
     Create an MLP based on the net_arch
     :last: Should we add relu/bn/drop to last layer
@@ -42,11 +42,11 @@ def create_mlp(start: int, net_arch: List[int], bn=True, drop=False, last=False)
     last_units = start
     for i, units in enumerate(net_arch):
 
-        if last and i == len(net_arch) - 1:
+        if last and i >= len(net_arch) - 1:
             bn, drop, relu = False, False, False
 
         ll.extend(make_linear(last_units, units, bn=bn, drop=drop, relu=relu))
-        last_unit = units
+        last_units = units
 
     x = nn.Sequential(*ll)
     x.out_size = net_arch[-1] if net_arch else start
@@ -56,8 +56,8 @@ class Dummy(nn.Module):
     '''
     Placeholder for input
     '''
-    def __init__(self):
-        super().__init__(size)
+    def __init__(self, size):
+        super().__init__()
 
         self.out_size = size
 
@@ -65,7 +65,7 @@ class Dummy(nn.Module):
         return x
 
 class CNN(nn.Module):
-    def __init__(self, img_stack, drop=False, net_arch=(8,[],[]), img_dim=224, **kwargs):
+    def __init__(self, img_stack, drop=False, net_arch=(8,[],[]), img_dim:int=224, **kwargs):
         super().__init__()
 
         if net_arch[1] == []:
@@ -96,10 +96,10 @@ class CNN(nn.Module):
             last_f = f
             if stride == 2:
                 f *= 2
-                l /= 2
+                l //= 2
             elif stride == 4:
                 f *= 4
-                l /= 4
+                l //= 4
 
             ll.extend(make_conv(last_f, f, filter, stride, pad, bn=bn, drop=drop))
 
@@ -125,14 +125,20 @@ class MuxIn(nn.Module):
     Class to combine inputs from 2 incoming networks
     '''
     def __init__(self, net1: nn.Module, net2: nn.Module,
-            net_arch: Tuple[List[int], List[int], List[int]), last=False, **kwargs)
-        super().__init()
+            net_arch: Tuple[List[int], List[int], List[int]], last=False, **kwargs):
+        super().__init__()
 
         self.nets = [net1, net2]
+        self.net1 = net1
+        self.net2 = net2
+
         # Create linear layers if needed
         self.linears = []
         for arch, net in zip(net_arch[:-1], self.nets):
             self.linears.append(create_mlp(net.out_size, net_arch=arch, **kwargs))
+
+        self.linear1 = self.linears[0]
+        self.linear2 = self.linears[1]
 
         width = sum((x.out_size for x in self.linears))
 
@@ -157,17 +163,20 @@ class MuxOut(nn.Module):
     '''
     def __init__(self, net: nn.Module,
             net_arch: Tuple[List[int], List[int], List[int]], last=False, **kwargs):
-        super().__init()
+        super().__init__()
 
         self.net = net
 
         # Create input linear layer if needed
-        self.linear_in = create_mlp(net.out_size, net_arch=arch, **kwargs)
+        self.linear_in = create_mlp(net.out_size, net_arch=net_arch[0], **kwargs)
 
         # Create output linear layers if needed
         self.linears = []
         for arch in net_arch[1:]:
-            self.linears.append(create_mlp(width, net_arch=arch, last=last, **kwargs))
+            self.linears.append(create_mlp(self.linear_in.out_size, net_arch=arch, last=last, **kwargs))
+
+        self.linear1 = self.linears[0]
+        self.linear2 = self.linears[1]
 
         self.out_size = sum((x.out_size for x in self.linears))
 

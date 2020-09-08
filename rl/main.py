@@ -315,7 +315,7 @@ def run(args):
         img_depth *= 2
 
     if args.policy == 'td3':
-        from policy.TD3 import TD3
+        from policy.td3 import TD3
         policy = TD3(state_dim, action_dim, args.stack_size,
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
@@ -325,29 +325,20 @@ def run(args):
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'dqn':
-        from rl.policy.dqn.DQN import DQN
+        from rl.policy.dqn.dqn import DQN
         policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
             reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze, opt=args.opt)
     elif args.policy == 'ddqn':
-        from rl.policy.DQN import DDQN
-        policy = DDQN(state_dim, action_dim, action_steps, args.stack_size,
-            args.mode, network=args.network, lr=args.lr,
+        from rl.policy.dqn.dqn import DDQN
+        policy = DDQN(state_dim=state_dim, action_dim=action_dim, action_steps=action_steps,
+                stack_size=args.stack_size, mode=args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
             reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode,
             freeze=args.freeze, opt=args.opt)
-    elif args.policy == 'bdqn':
-        from rl.policy.DQN import BatchDQN
-        policy = BatchDQN(state_dim=state_dim, action_dim=action_dim,
-            action_steps=action_steps, stack_size=args.stack_size,
-            mode=args.mode,
-            n_samples=args.n_samples,
-            network=args.network, lr=args.lr, bn=args.batchnorm,
-            img_dim=args.img_dim, img_depth=img_depth,
-            amp=args.amp)
     elif args.policy == 'dummy':
         from policy.dummy import Dummy
         policy = Dummy()

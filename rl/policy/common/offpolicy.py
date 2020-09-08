@@ -152,7 +152,7 @@ class OffPolicyAgent(object):
 
         th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
 
-    def load(self, path)
+    def load(self, path):
         checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
 
         for s in self.to_save:
