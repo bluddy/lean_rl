@@ -1,4 +1,5 @@
 import torch as th
+from typing import Iterable
 
 def polyak_update(params: Iterable[th.nn.Parameter], target_params: Iterable[th.nn.Parameter], tau: float) -> None:
     with th.no_grad():

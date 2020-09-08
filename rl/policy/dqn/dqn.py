@@ -17,9 +17,9 @@ except ImportError:
 # DQN
 
 class DQN(OffPolicyAgent):
-    def __init__(self, *args, action_steps:int=None, **kwargs):
+    def __init__(self, action_steps:int=None, **kwargs):
 
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         # odd dims should be centered at 0
         odd_dims = action_steps % 2 == 1
@@ -98,8 +98,7 @@ class DQN(OffPolicyAgent):
         self.q_t = self._create_model()
 
         self.q_t.load_state_dict(self.q.state_dict())
-
-        self.q, self.q_opt = self._create_opt(self.q, self.lr)
+        self.q, self.q_opt = self._create_opt(self.q.parameters(), self.lr)
 
     def _discrete_to_cont(self, discrete):
         ''' @discrete: (procs, 1) '''
@@ -287,7 +286,9 @@ class DDQN(DQN):
         for q, qt in zip(self.qs, self.qts):
             qt.load_state_dict(q.state_dict())
 
-        self.qs, self.opts = list(zip(*[self._create_opt(q, self.lr) for q in self.qs]))
+        import pdb
+        pdb.set_trace()
+        self.qs, self.opts = list(zip(*[self._create_opt(q.parameters(), self.lr) for q in self.qs]))
 
     def _get_q(self):
         return self.qs[0]
