@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import torch.nn as nn
 import torch as th
 import torchvision.models as tmodels
@@ -65,10 +66,11 @@ class Dummy(nn.Module):
         return x
 
 class CNN(nn.Module):
-    def __init__(self, img_stack, drop=False, net_arch=(8,[],[]), img_dim:int=224, **kwargs):
+    def __init__(self, img_stack, drop=False,
+            net_arch:Tuple[List[int], List[int], List[int]]=None, img_dim:int=224, **kwargs):
         super().__init__()
 
-        if net_arch[1] == []:
+        if net_arch is None:
             net_start_f = 8
             net_filters = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
             net_strides = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 2, 2]
@@ -76,7 +78,7 @@ class CNN(nn.Module):
             net_start_f, net_filters, net_strides = net_arch
 
         ## input size:[img_stack, 224, 224]
-        print("BaseImage. drop:{}".format(drop))
+        print("CNN. drop:{}".format(drop))
         bn=True
 
         ll = []
@@ -88,20 +90,22 @@ class CNN(nn.Module):
 
         # Build up CNN
         for filter, stride in zip(net_filters, net_strides):
+            assert(l > 1) # don't go too small
+
             if filter == 3:
                 pad = 1
             elif filter == 5:
                 pad = 2
 
-            last_f = f
             if stride == 2:
+                l = int(math.ceil(l / 2))
                 f *= 2
-                l //= 2
             elif stride == 4:
+                l = int(math.ceil(l / 4))
                 f *= 4
-                l //= 4
 
             ll.extend(make_conv(last_f, f, filter, stride, pad, bn=bn, drop=drop))
+            last_f = f
 
         self.out_size = l * l * f
 
@@ -110,6 +114,11 @@ class CNN(nn.Module):
 
     def forward(self, x):
         return self.features(x)
+
+    def freeze(self, frozen):
+        for p in self.features.parameters():
+            p.requires_grad = not frozen
+
 
 class Linear(nn.Module):
     def __init__(self, prev, net_arch:List[int], last=False, **kwargs):

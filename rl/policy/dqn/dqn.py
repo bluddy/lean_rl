@@ -47,22 +47,16 @@ class DQN(OffPolicyAgent):
                         bn=self.bn, img_dim=self.img_dim,
                         drop=self.dropout).to(device)
                 else:
-                    if self.aux == 'state':
-                        print("Aux state")
+                    if self.aux:
+                        print("Aux")
                         aux_size = self.aux_size
                     else:
                         raise InvalidArgument()
 
-                    if self.freeze:
-                        print("Freeze")
-                        n = QImage2OutsFreeze(action_dim=self.total_steps, img_stack=self.total_stack,
-                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
-                    else:
-                        print("NoFreeze")
-                        n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
-                            bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                            aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                    n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
+                        bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                        aux_size=aux_size).to(device)
+
             elif self.network == 'densenet':
                 n = QImageDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack).to(device)
@@ -77,18 +71,22 @@ class DQN(OffPolicyAgent):
                         img_stack=self.total_stack, bn=self.bn,
                         img_dim=self.img_dim, drop=self.dropout).to(device)
                 else:
-                    print("Aux state")
+                    print("Aux")
                     aux_size = self.aux_size
 
                     n = QMixedAux(state_dim=self.state_dim, action_dim=self.total_steps,
                         img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
-                        aux_size=aux_size, reduced_dim=self.reduced_dim).to(device)
+                        aux_size=aux_size).to(device)
+
             elif self.network == 'densenet':
                 n = QMixedDenseNet(action_dim=self.total_steps,
                     img_stack=self.total_stack, state_dim=self.state_dim).to(device)
         else:
             raise ValueError('Unrecognized mode ' + mode)
+
+        if self.freeze:
+            print("Freeze")
         return n
 
     def _create_models(self):
@@ -152,7 +150,7 @@ class DQN(OffPolicyAgent):
         cont = self._discrete_to_cont(discrete)
         return cont
 
-    def _copy_action_to_dev(self, u):
+    def _copy_action_to_dev(self, u, batch_size):
         # u is the actions: still as ndarrays
         u = u.reshape((batch_size, self.action_dim))
         # Convert continuous action to discrete
@@ -182,7 +180,7 @@ class DQN(OffPolicyAgent):
 
         # Sample replay buffer
         state, state2, action, reward, done, extra_state, indices = \
-            self._sample_to_dev(batch_size, beta=beta, num=num)
+            self._sample_to_dev(replay_buffer, batch_size, beta=beta, num=num)
 
         Q_ts = self.q_t(state2)
         if self.aux is not None:
@@ -257,21 +255,20 @@ class DQN(OffPolicyAgent):
 
         return q_loss.item(), a_ret, Q_now.mean().item(), Q_now.max().item()
 
-    def test(self, replay_buffer, batch_size):
-            [x, _, u, _, _, extra_state, _] = replay_buffer.sample(batch_size)
-            length = len(u)
+    def test(self, replay_buffer, batch_size:int):
+        [x, _, u, _, _, extra_state, _] = replay_buffer.sample(batch_size)
+        length = len(u)
 
-            state, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
+        state, extra_state = self._copy_sample_to_dev_small(x, extra_state, length)
 
-            _, predict = self._get_q()(state)
-            if self.aux:
-                y = extra_state.cpu().data.numpy()
-            else:
-                y = None
+        _, predict = self._get_q()(state)
+        y = None
+        if self.aux:
+            y = extra_state.cpu().data.numpy()
 
-            predict = predict.cpu().data.numpy()
+        predict = predict.cpu().data.numpy()
 
-            return y, predict
+        return y, predict
 
 class DDQN(DQN):
     def __init__(self, *args, **kwargs):
@@ -285,6 +282,10 @@ class DDQN(DQN):
 
         for q, qt in zip(self.qs, self.qts):
             qt.load_state_dict(q.state_dict())
+
+        # debug
+        #import pdb
+        #pdb.set_trace()
 
         self.qs, self.opts = list(zip(*[self._create_opt(q, self.lr) for q in self.qs]))
 
@@ -302,7 +303,7 @@ class DDQN(DQN):
 
             # Get samples
             state, state2, action, reward, done, extra_state, indices = \
-                self._sample_to_dev(batch_size, beta=beta, num=num)
+                self._sample_to_dev(replay_buffer, batch_size, beta=beta, num=num)
 
             if self.aux is not None:
                 if self.freeze:

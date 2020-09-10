@@ -647,7 +647,8 @@ def run(args):
                     (1.0 - beta_start) / beta_frames)
 
                 critic_loss, actor_loss, q_avg, q_max = policy.train(
-                    replay_buffer, g.step, beta, args)
+                    replay_buffer, g.step, batch_size=args.batch_size,
+                    discount=args.discount, tau=args.tau, beta=beta)
 
                 temp_q_avg.append(q_avg)
                 temp_q_max.append(q_max)
@@ -713,7 +714,7 @@ def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_write
         #import pdb
         #pdb.set_trace()
 
-        x, pred_x = policy.test(replay_buffer, args)
+        x, pred_x = policy.test(replay_buffer, args.batch_size)
         if csv_aux is not None:
             csv_aux.writerow(x) # debug, takes up a lot of space
             csv_aux.writerow(pred_x)

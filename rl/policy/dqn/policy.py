@@ -83,7 +83,7 @@ class QMixedAux(nn.Module):
         self.mux_out = MuxOut(self.mux_in, net_arch=net_arch2, last=True, **kwargs)
 
     def freeze_some(self, frozen):
-        self.mux_in.freeze(first=True, frozen=frozen)
+        self.mux_in.freeze(idx=0, frozen=frozen)
         self.cnn.freeze(frozen=frozen)
 
     def forward(self, x):

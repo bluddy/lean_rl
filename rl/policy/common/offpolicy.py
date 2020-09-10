@@ -57,13 +57,13 @@ class OffPolicyAgent(object):
 
         return model, opt
 
-    def _copy_action_to_dev(self, u):
+    def _copy_action_to_dev(self, u, batch_size):
         return th.FloatTensor(u).to(device)
 
     def _copy_sample_to_dev(self, x, y, u, r, d, extra_state, batch_size):
         x = self._process_state(x)
         y = self._process_state(y)
-        u = self._copy_action_to_dev(u)
+        u = self._copy_action_to_dev(u, batch_size)
         r = th.FloatTensor(r).to(device)
         d = th.FloatTensor(1 - d).to(device)
         if extra_state is not None:
@@ -71,8 +71,8 @@ class OffPolicyAgent(object):
             extra_state = th.FloatTensor(extra_state).to(device)
         return x, y, u, r, d, extra_state
 
-    def _sample_to_dev(self, *args, **kwargs):
-        data = replay_buffer.sample(args.batch_size, beta=beta, num=num)
+    def _sample_to_dev(self, replay_buffer, batch_size, beta, num):
+        data = replay_buffer.sample(batch_size, beta=beta, num=num)
         [x, y, u, r, d, extra_state, indices] = data
         length = len(u)
 
@@ -142,7 +142,7 @@ class OffPolicyAgent(object):
         checkpoint = {}
         for s in self.to_save:
             obj = self.__dict__[s]
-            if isintance(obj, list):
+            if isinstance(obj, list) or isinstance(obj, tuple):
                 checkpoint[s] = [o.state_dict() for o in obj]
             else:
                 checkpoint[s] = obj.state_dict()
@@ -156,7 +156,7 @@ class OffPolicyAgent(object):
         checkpoint = th.load(os.path.join(path, 'checkpoint.pth'))
 
         for s in self.to_save:
-            if isintance(self.__dict__[s], list):
+            if isinstance(self.__dict__[s], list) or isinstance(self.__dict__[s], tuple):
                 for obj, robj in zip(self.__dict__[s], checkpoint[s]):
                     obj.load_state_dict(robj)
             else:
