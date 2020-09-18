@@ -140,6 +140,7 @@ def run(args):
         raise ValueError("Unrecognized environment " + args.env)
 
     print("save_mode_path: ", save_mode_path)
+    print("log_path: ", 'logs/' + basename)
 
     now = datetime.datetime.now()
     time_s = now.strftime('%y%m%d_%H%M')

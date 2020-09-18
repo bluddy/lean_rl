@@ -78,11 +78,11 @@ class CNN(nn.Module):
             net_start_f, net_filters, net_strides = net_arch
 
         ## input size:[img_stack, 224, 224]
-        print("CNN. drop:{}".format(drop))
         bn=True
 
         ll = []
         in_f = calc_features(img_stack)
+        print("CNN. input_f:{}, drop:{}".format(in_f, drop))
 
         last_f = in_f
         f = net_start_f

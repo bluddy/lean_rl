@@ -335,17 +335,18 @@ class Environment(common_env.CommonEnv):
         #from rl.utils import ForkablePdb
         #ForkablePdb().set_trace()
 
+        # array of uint8s
         rgb = np.ctypeslib.as_array(self.shared_rgb)
         rgb = np.reshape(rgb, (height, width, 3))
         rgb = np.flipud(rgb)
         # Depth is expressed as a float
         depth = np.ctypeslib.as_array(self.shared_depth)
-        depth = np.reshape(depth, (height, width))
+        depth = np.reshape(depth, (height, width, 1))
         depth = np.flipud(depth)
 
         if save_img:
             scipy.misc.imsave('./img{}_{}.png'.format(
-              self.server_num, self.img_count), arr)
+              self.server_num, self.img_count), rgb)
             self.img_count += 1
 
         return rgb, depth
@@ -442,8 +443,8 @@ class Environment(common_env.CommonEnv):
 
         # Write reward on image
         # pygame is (x,y) while our array is (y,x)
-        img = self.image.transpose((1,0,2)) * 255.0
-        img = img.astype(np.uint8)
+
+        img = self.image.transpose((1,0,2))
         surface = pygame.surfarray.make_surface(img)
 
         if not sim_save:
@@ -529,6 +530,7 @@ class Environment(common_env.CommonEnv):
         self.image = self.image.astype(np.uint8)
 
         if self.depthmap_mode:
+
             # Crop depth to just the left image
             x = [0., 0.5]
             cropx = [int(self.resolution[0] * x[0]), int(self.resolution[0] * x[1]) + 1]
@@ -540,11 +542,11 @@ class Environment(common_env.CommonEnv):
             depth = transform.resize(depth, (h,w), anti_aliasing=True)
             depth *= e24 # max value
             # Separate out components
-            depth = depth.astype(int)
-            depth2 = np.zeros((height, width, 3), dtype=np.uint8)
-            depth2[:,:,0] = depth[:, :] & 0xFF
-            depth2[:,:,1] = (depth[:, :] >> 8) & 0xFF
-            depth2[:,:,2] = (depth[:, :] >> 16) & 0xFF
+            depth = depth.astype(int).squeeze(-1)
+            depth2 = np.zeros((h, w, 3), dtype=np.uint8)
+            depth2[:,:,0] = depth & 0xFF
+            depth2[:,:,1] = (depth >> 8) & 0xFF
+            depth2[:,:,2] = (depth >> 16) & 0xFF
 
             self.image = np.concatenate([self.image, depth2], axis=1)
 
@@ -610,7 +612,8 @@ class Environment(common_env.CommonEnv):
         image = self.image
         # Resize to non-hires
         w, h = self._get_width_height(hires=False, stereo=True, depth=True)
-        image = transform.resize(self.image, (h,w), anti_aliasing=True, preserve_range=True)
+        image = transform.resize(self.image, (h,w), anti_aliasing=True)
+        image *= 255.0
         image = image.astype(np.uint8)
 
         if self.depthmap_mode:
