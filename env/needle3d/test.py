@@ -32,10 +32,14 @@ void main()
 }
 """
 
-vertices = [ 0.6,  0.6, 0.0, 1.0,
+vertices = np.array(
+           [ 0.6,  0.6, 0.0, 1.0,
             -0.6,  0.6, 0.0, 1.0,
-             0.0, -0.6, 0.0, 1.0]
-vertices = np.array(vertices, dtype=np.float32)
+             0.0, -0.6, 0.0, 1.0],
+           dtype=np.float32)
+indices = np.array(
+            [0, 1, 2],
+            dtype=np.uint32)
 
 def create_object(shader):
     # Create a new VAO (Vertex Array Object) and bind it
@@ -43,25 +47,31 @@ def create_object(shader):
     gl.glBindVertexArray(vao)
 
     # Generate buffers to hold our vertices
-    vertex_buffer = gl.glGenBuffers(1)
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vertex_buffer)
+    vbo = gl.glGenBuffers(1)
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
 
     # Get the position of the 'position' in parameter of our shader and bind it.
     position = gl.glGetAttribLocation(shader, 'position')
     gl.glEnableVertexAttribArray(position)
 
+    # Send the data over to the buffer
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
+
+    # Create buffer for indices
+    ebo = gl.glGenBuffers(1)
+    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo)
+    gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
+
     # Describe the position data layout in the buffer
     gl.glVertexAttribPointer(position, 4, gl.GL_FLOAT, False, 0, ctypes.c_void_p(0))
 
-    # Send the data over to the buffer
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, 4*len(vertices), vertices, gl.GL_STATIC_DRAW)
-
     # Unbind the VAO first (Important)
-    gl.glBindVertexArray( 0 )
+    gl.glBindVertexArray(0)
 
     # Unbind other stuff
     gl.glDisableVertexAttribArray(position)
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
+    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
 
     return vao
 
