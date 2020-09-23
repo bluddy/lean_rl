@@ -11,31 +11,34 @@ from PIL import Image
 import numpy as np
 
 
-cubeVertices = ((1,1,1),(1,1,-1),(1,-1,-1),(1,-1,1),(-1,1,1),(-1,-1,-1),(-1,-1,1),(-1,1,-1))
-cubeEdges = ((0,1),(0,3),(0,4),(1,2),(1,7),(2,5),(2,3),(3,6),(4,6),(4,7),(5,6),(5,7))
-cubeQuads = ((0,3,6,4),(2,5,6,3),(1,2,5,7),(1,0,4,7),(7,4,6,5),(2,3,0,1))
-
 vertex_shader = """
 #version 330
-in vec4 position;
+
+layout (location=0) in vec3 aPos;
+
 void main()
 {
-   gl_Position = position;
+   gl_Position = vec4(aPos, 1.0);
 }
 """
 
 fragment_shader = """
 #version 330
+out vec4 FragColor;
+
+uniform vec4 ourColor;
+
 void main()
 {
-   gl_FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+   FragColor = ourColor;
 }
 """
 
 vertices = np.array(
-           [ 0.6,  0.6, 0.0, 1.0,
-            -0.6,  0.6, 0.0, 1.0,
-             0.0, -0.6, 0.0, 1.0],
+           [ 0.6,  0.6, 0.0,
+            -0.6,  0.6, 0.0,
+             0.0, -0.6, 0.0,
+           ],
            dtype=np.float32)
 indices = np.array(
             [0, 1, 2],
@@ -51,8 +54,8 @@ def create_object(shader):
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
 
     # Get the position of the 'position' in parameter of our shader and bind it.
-    position = gl.glGetAttribLocation(shader, 'position')
-    gl.glEnableVertexAttribArray(position)
+    #position = gl.glGetAttribLocation(shader, 'position')
+    #gl.glEnableVertexAttribArray(position)
 
     # Send the data over to the buffer
     gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
@@ -63,25 +66,28 @@ def create_object(shader):
     gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
 
     # Describe the position data layout in the buffer
-    gl.glVertexAttribPointer(position, 4, gl.GL_FLOAT, False, 0, ctypes.c_void_p(0))
+    gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, 3*4, ctypes.c_void_p(0))
+    gl.glEnableVertexAttribArray(0)
 
     # Unbind the VAO first (Important)
     gl.glBindVertexArray(0)
 
     # Unbind other stuff
-    gl.glDisableVertexAttribArray(position)
+    gl.glDisableVertexAttribArray(0)
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
     gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
 
     return vao
 
-def run_display(shader, vertex_array_object):
+def draw(shader, vertex_array_object):
     gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+    loc = gl.glGetUniformLocation(shader, "ourColor")
     gl.glUseProgram(shader)
+    gl.glUniform4f(loc, 0.8, 0.5, 0.0, 1.0)
 
-    gl.glBindVertexArray( vertex_array_object )
+    gl.glBindVertexArray(vertex_array_object)
     gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-    gl.glBindVertexArray( 0 )
+    gl.glBindVertexArray(0)
 
     gl.glUseProgram(0)
 
@@ -121,7 +127,7 @@ def main():
                     #pg.quit()
             #        quit()
 
-            run_display(shader, vao)
+            draw(shader, vao)
             #glRotatef(1, 1, 1, 1)
             #glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
             #solidCube()
