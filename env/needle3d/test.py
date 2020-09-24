@@ -9,6 +9,7 @@ from OpenGL.GLU import *
 
 from PIL import Image
 import numpy as np
+import glm
 
 
 vertex_shader = """
@@ -16,9 +17,13 @@ vertex_shader = """
 
 layout (location=0) in vec3 aPos;
 
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
 void main()
 {
-   gl_Position = vec4(aPos, 1.0);
+   gl_Position = projection * view * model * vec4(aPos, 1.0);
 }
 """
 
@@ -81,14 +86,35 @@ def create_object(shader):
 
 def draw(shader, vertex_array_object):
     gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-    loc = gl.glGetUniformLocation(shader, "ourColor")
+
     gl.glUseProgram(shader)
-    gl.glUniform4f(loc, 0.8, 0.5, 0.0, 1.0)
+
+    # Set the color
+    colorLoc = gl.glGetUniformLocation(shader, 'ourColor')
+    gl.glUniform4f(colorLoc, 0.8, 0.5, 0.0, 1.0)
+
+    # Set model matrix
+    model_mat = glm.mat4()
+    modelLoc = gl.glGetUniformLocation(shader, 'model')
+    gl.glUniformMatrix4fv(modelLoc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+
+    view = glm.lookAt(
+            glm.vec3(0.0, 0.0, 1.0), #location
+            glm.vec3(0.0, 0.0, 0.0), #lookat
+            glm.vec3(0.0, 1.0, 0.0), #up
+            )
+    viewLoc = gl.glGetUniformLocation(shader, 'view')
+    gl.glUniformMatrix4fv(viewLoc, 1, gl.GL_FALSE, glm.value_ptr(view))
+
+    #proj_mat = glm.ortho(0.0, 800.0, 0.0, 600.0, 0.1, 100.0)
+    proj_mat = glm.ortho(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0)
+    projLoc = gl.glGetUniformLocation(shader, 'projection')
+    gl.glUniformMatrix4fv(projLoc, 1, gl.GL_FALSE, glm.value_ptr(proj_mat))
 
     gl.glBindVertexArray(vertex_array_object)
     gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-    gl.glBindVertexArray(0)
 
+    gl.glBindVertexArray(0)
     gl.glUseProgram(0)
 
 def write_png(filename, width, height):
@@ -108,7 +134,7 @@ def main():
             print("Failed to initialize EGL context")
             return
 
-        gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
+        #gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
 
         #gl.glTranslatef(0.0, 0.0, -5)
 
