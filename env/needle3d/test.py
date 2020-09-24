@@ -50,6 +50,8 @@ indices = np.array(
             dtype=np.uint32)
 
 def create_object(shader):
+
+def create_object():
     # Create a new VAO (Vertex Array Object) and bind it
     vao = gl.glGenVertexArrays(1)
     gl.glBindVertexArray(vao)
@@ -57,10 +59,6 @@ def create_object(shader):
     # Generate buffers to hold our vertices
     vbo = gl.glGenBuffers(1)
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
-
-    # Get the position of the 'position' in parameter of our shader and bind it.
-    #position = gl.glGetAttribLocation(shader, 'position')
-    #gl.glEnableVertexAttribArray(position)
 
     # Send the data over to the buffer
     gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
@@ -134,10 +132,6 @@ def main():
             print("Failed to initialize EGL context")
             return
 
-        #gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
-
-        #gl.glTranslatef(0.0, 0.0, -5)
-
         gl.glEnable(gl.GL_DEPTH_TEST)
 
         shader = shaders.compileProgram(
@@ -145,23 +139,11 @@ def main():
             shaders.compileShader(fragment_shader, gl.GL_FRAGMENT_SHADER)
         )
 
-        vao = create_object(shader)
+        vao = create_object()
 
         for i in range(10):
-            #for event in pg.event.get():
-            #    if event.type == pg.QUIT:
-                    #pg.quit()
-            #        quit()
-
             draw(shader, vao)
-            #glRotatef(1, 1, 1, 1)
-            #glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
-            #solidCube()
-            #wireCube()
-            #pg.display.flip()
-            #pg.time.wait(10)
             write_png("test" + str(i) + ".png", display[0], display[1])
-
 
 if __name__ == "__main__":
     main()
