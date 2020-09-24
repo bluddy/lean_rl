@@ -1,10 +1,12 @@
 # OpenGL test
-import pygame as pg
-from pygame.locals import *
+#import pygame as pg
+#from pygame.locals import *
+
+import weakref
 
 from libs.libegl import EGLContext
 import OpenGL.GL as gl
-import OpenGL.GL.shaders as shaders
+import OpenGL.GL.shaders as gl_shaders
 from OpenGL.GLU import *
 
 from PIL import Image
@@ -49,71 +51,106 @@ indices = np.array(
             [0, 1, 2],
             dtype=np.uint32)
 
-def create_object(shader):
+class Shader(object):
+    def __init__(self, vertex_shader, frag_shdaer):
+        self.shader = gl_shaders.compileProgram(
+            gl_shaders.compileShader(vertex_shader, gl.GL_VERTEX_SHADER),
+            gl_shaders.compileShader(fragment_shader, gl.GL_FRAGMENT_SHADER)
+        )
+        self.color_loc = gl.glGetUniformLocation(self.shader, 'ourColor')
+        self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
+        self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
+        self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
 
-def create_object():
-    # Create a new VAO (Vertex Array Object) and bind it
-    vao = gl.glGenVertexArrays(1)
-    gl.glBindVertexArray(vao)
+    def use(self, on:bool):
+        if on:
+            gl.glUseProgram(self.shader)
+        else:
+            gl.glUseProgram(0)
 
-    # Generate buffers to hold our vertices
-    vbo = gl.glGenBuffers(1)
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
+    def set_color(self, color):
+        gl.glUniform4f(self.color_loc, *color)
 
-    # Send the data over to the buffer
-    gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
+    def set_model(self, model_mat):
+        gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
 
-    # Create buffer for indices
-    ebo = gl.glGenBuffers(1)
-    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo)
-    gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
+    def set_view(self, model_mat):
+        gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
 
-    # Describe the position data layout in the buffer
-    gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, 3*4, ctypes.c_void_p(0))
-    gl.glEnableVertexAttribArray(0)
+    def set_proj(self, model_mat):
+        gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
 
-    # Unbind the VAO first (Important)
-    gl.glBindVertexArray(0)
 
-    # Unbind other stuff
-    gl.glDisableVertexAttribArray(0)
-    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
-    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
+class OpenGLObject(object):
+    def __init__(self, renderer, shader, vao, color=(0.8, 0.5, 0.0, 1.0)):
+        self.shader=shader
+        self.color=color
+        self.vao=vao
+        self.renderer = weakref.ref(renderer)
+        self.model_mat = glm.mat4()
 
-    return vao
+    def draw(self):
 
-def draw(shader, vertex_array_object):
-    gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+        self.shader.use(True)
 
-    gl.glUseProgram(shader)
+        # Set the color
+        self.shader.set_color(self.color)
 
-    # Set the color
-    colorLoc = gl.glGetUniformLocation(shader, 'ourColor')
-    gl.glUniform4f(colorLoc, 0.8, 0.5, 0.0, 1.0)
+        self.shader.set_model(self.model_mat)
+        self.shader.set_view(self.renderer().view_mat)
+        self.shader.set_proj(self.renderer().proj_mat)
 
-    # Set model matrix
-    model_mat = glm.mat4()
-    modelLoc = gl.glGetUniformLocation(shader, 'model')
-    gl.glUniformMatrix4fv(modelLoc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+        gl.glBindVertexArray(self.vao)
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        gl.glBindVertexArray(0)
 
-    view = glm.lookAt(
-            glm.vec3(0.0, 0.0, 1.0), #location
-            glm.vec3(0.0, 0.0, 0.0), #lookat
-            glm.vec3(0.0, 1.0, 0.0), #up
-            )
-    viewLoc = gl.glGetUniformLocation(shader, 'view')
-    gl.glUniformMatrix4fv(viewLoc, 1, gl.GL_FALSE, glm.value_ptr(view))
+        self.shader.use(False)
 
-    #proj_mat = glm.ortho(0.0, 800.0, 0.0, 600.0, 0.1, 100.0)
-    proj_mat = glm.ortho(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0)
-    projLoc = gl.glGetUniformLocation(shader, 'projection')
-    gl.glUniformMatrix4fv(projLoc, 1, gl.GL_FALSE, glm.value_ptr(proj_mat))
+class OpenGLRenderer(object):
+    def __init__(self, ortho=True):
+        self.ortho = ortho
+        self.camera_loc = glm.vec3(0.0, 0.0, 1.0)
+        self.camera_lookat = glm.vec3(0.0, 0.0, 0.0)
+        self.camera_up = glm.vec3(0.0, 1.0, 0.0)
+        self.view_mat = glm.lookAt(self.camera_loc, self.camera_lookat, self.camera_up)
+        self.proj_mat = glm.ortho(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0)
 
-    gl.glBindVertexArray(vertex_array_object)
-    gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        gl.glEnable(gl.GL_DEPTH_TEST)
 
-    gl.glBindVertexArray(0)
-    gl.glUseProgram(0)
+    def create_object(self, shader, vertices, indices):
+        # Create a new VAO (Vertex Array Object) and bind it
+        vao = gl.glGenVertexArrays(1)
+        gl.glBindVertexArray(vao)
+
+        # Generate buffers to hold our vertices
+        vbo = gl.glGenBuffers(1)
+        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
+
+        # Send the data over to the buffer
+        gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
+
+        # Create buffer for indices
+        ebo = gl.glGenBuffers(1)
+        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo)
+        gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
+
+        # Describe the position data layout in the buffer
+        gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, 3*4, ctypes.c_void_p(0))
+        gl.glEnableVertexAttribArray(0)
+
+        # Unbind the VAO first (Important)
+        gl.glBindVertexArray(0)
+
+        # Unbind other stuff
+        gl.glDisableVertexAttribArray(0)
+        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
+        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
+
+        return OpenGLObject(self, shader=shader, vao=vao)
+
+    def start_draw(self):
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+
 
 def write_png(filename, width, height):
     img_buf = gl.glReadPixels(0, 0, width, height, gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
@@ -132,17 +169,16 @@ def main():
             print("Failed to initialize EGL context")
             return
 
-        gl.glEnable(gl.GL_DEPTH_TEST)
+        renderer = OpenGLRenderer()
 
-        shader = shaders.compileProgram(
-            shaders.compileShader(vertex_shader, gl.GL_VERTEX_SHADER),
-            shaders.compileShader(fragment_shader, gl.GL_FRAGMENT_SHADER)
-        )
+        shader = Shader(vertex_shader, fragment_shader)
 
-        vao = create_object()
+        obj = renderer.create_object(shader, vertices, indices)
+
+        renderer.start_draw()
 
         for i in range(10):
-            draw(shader, vao)
+            obj.draw()
             write_png("test" + str(i) + ".png", display[0], display[1])
 
 if __name__ == "__main__":
