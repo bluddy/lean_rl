@@ -41,15 +41,30 @@ void main()
 }
 """
 
-vertices = np.array(
-           [ 0.6,  0.6, 0.0,
-            -0.6,  0.6, 0.0,
-             0.0, -0.6, 0.0,
-           ],
-           dtype=np.float32)
-indices = np.array(
-            [0, 1, 2],
-            dtype=np.uint32)
+class Rectangle(object):
+    def __init__(self):
+        self.vertices = np.array(
+                [ 0.5, 0.5, 0.,
+                  -0.5, 0.5, 0.,
+                  0.5, -0.5, 0.,
+                  -0.5, -0.5, 0.,
+                ], dtype=np.float32)
+        self.indices = np.array(
+                [0, 1, 2,
+                 2, 1, 3,
+                 ], dtype=np.int32)
+
+class Triangle(object):
+    def __init__(self):
+        self.vertices = np.array(
+                [ 0.5,  0.5, 0.0,
+                  -0.5,  0.5, 0.0,
+                  0.0, -0.5, 0.0,
+                ],
+                dtype=np.float32)
+        self.indices = np.array(
+                    [0, 1, 2],
+                    dtype=np.uint32)
 
 class Shader(object):
     def __init__(self, vertex_shader, frag_shdaer):
@@ -82,12 +97,14 @@ class Shader(object):
 
 
 class OpenGLObject(object):
-    def __init__(self, renderer, shader, vao, color=(0.8, 0.5, 0.0, 1.0)):
+    def __init__(self, renderer, shader, vao, num_vertices,
+            color=(0.8, 0.5, 0.0, 1.0)):
         self.shader=shader
         self.color=color
         self.vao=vao
         self.renderer = weakref.ref(renderer)
         self.model_mat = glm.mat4()
+        self.num_vertices = num_vertices
 
     def draw(self):
 
@@ -101,7 +118,8 @@ class OpenGLObject(object):
         self.shader.set_proj(self.renderer().proj_mat)
 
         gl.glBindVertexArray(self.vao)
-        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        #gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        gl.glDrawElements(gl.GL_TRIANGLES, self.num_vertices, gl.GL_UNSIGNED_INT, ctypes.c_void_p(0))
         gl.glBindVertexArray(0)
 
         self.shader.use(False)
@@ -125,28 +143,25 @@ class OpenGLRenderer(object):
         # Generate buffers to hold our vertices
         vbo = gl.glGenBuffers(1)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, vbo)
-
-        # Send the data over to the buffer
         gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
+
+        # Describe the position data layout in the buffer
+        gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, 0, ctypes.c_void_p(0))
+        gl.glEnableVertexAttribArray(0)
 
         # Create buffer for indices
         ebo = gl.glGenBuffers(1)
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo)
         gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
 
-        # Describe the position data layout in the buffer
-        gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, 3*4, ctypes.c_void_p(0))
-        gl.glEnableVertexAttribArray(0)
-
         # Unbind the VAO first (Important)
         gl.glBindVertexArray(0)
-
         # Unbind other stuff
         gl.glDisableVertexAttribArray(0)
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
 
-        return OpenGLObject(self, shader=shader, vao=vao)
+        return OpenGLObject(self, shader=shader, vao=vao, num_vertices=len(indices))
 
     def start_draw(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
@@ -173,7 +188,8 @@ def main():
 
         shader = Shader(vertex_shader, fragment_shader)
 
-        obj = renderer.create_object(shader, vertices, indices)
+        rec = Rectangle()
+        obj = renderer.create_object(shader, rec.vertices, rec.indices)
 
         renderer.start_draw()
 
