@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
-import os, sys
-import math
-from math import sin, cos
-from os.path import abspath
+import os, sys, weakref, math, random
 from os.path import join as pjoin
-import random
-import numpy as np
-from shapely.geometry import Polygon, Point, LineString # using to replace sympy
-import pygame as pg
-import glob
 
-from .. import common_env
+import numpy as np
+import shapely.geometry as geo
+import pygame as pg
+import OpenGL.GL as gl
+import OpenGL.GL.shaders as gl_shaders
+import glm
+
+import env.common_env
 
 GREEN = (0, 255, 0)
 
@@ -125,7 +124,7 @@ class Environment(common_env.CommonEnv):
         self.state.needle = Needle(self.state.width, self.state.height,
             self.log_file, random_pos=self.random_needle)
 
-        if self.screen is None or \
+        if self.renderer is None or \
            self.state.width != self.screen.get_width() or \
            self.state.height != self.screen.get_height():
             self.screen = pg.Surface((self.state.width, self.state.height))
@@ -374,28 +373,8 @@ class Environment(common_env.CommonEnv):
         s = []
         s.append(float(self.state.needle.x) / self.state.width)
         s.append(float(self.state.needle.y) / self.state.height)
-        # Get back of needle
-        #c = self.needle.corners
-        #state.append((c[1,0] + c[2,0]) / (2.0 * self.width))
-        #state.append((c[1,1] + c[2,1]) / (2.0 * self.height))
         s.append(float(self.state.needle.w) / two_pi)
         s.extend([float(gate_x), float(gate_y), float(gate_w)])
-        #state.append(float(self.needle.dx))
-        #state.append(float(self.needle.dy))
-        #state.append(float(self.needle.dw))
-        #for gate in self.gates:
-        #    state.append(1.0 if gate.status == 'next' else
-        #                -1.0 if gate.status == 'passed' else 0.)
-        #for _ in range(self.ngates, self.max_gates):
-        #    state.append(0.)
-        #for gate in self.gates:
-        #    state.append(float(gate.x) / self.width)
-        #    state.append(float(gate.y) / self.height)
-        #    state.append(float(gate.w) / two_pi)
-        #for _ in range(self.ngates, self.max_gates):
-        #    state.append(0.)
-        #    state.append(0.)
-        #    state.append(0.)
         s = np.array(s, dtype=np.float32)
         #print("state = ", s) # debug
         return s
@@ -579,7 +558,7 @@ class Gate:
         ''' take in current position,
             see if you passed or failed the gate
         '''
-        path = LineString([last_p, p])
+        path = geo.LineString([last_p, p])
 
         if self.status != 'passed' and \
                 (path.intersects(self.top_box) or
@@ -619,29 +598,29 @@ class Gate:
         # order of corners: TR, BR, BL, TL
         # Remember y starts from below
         self.corners = np.array([
-           [x + h_gl * cos(w) - h_gw * sin(w),
-            y + h_gl * sin(w) + h_gw * cos(w)],
-           [x + h_gl * cos(w) + h_gw * sin(w),
-            y + h_gl * sin(w) - h_gw * cos(w)],
-           [x - h_gl * cos(w) + h_gw * sin(w),
-            y - h_gl * sin(w) - h_gw * cos(w)],
-           [x - h_gl * cos(w) - h_gw * sin(w),
-            y - h_gl * sin(w) + h_gw * cos(w)],
+           [x + h_gl * math.cos(w) - h_gw *math.sin(w),
+            y + h_gl * math.sin(w) + h_gw *math.cos(w)],
+           [x + h_gl * math.cos(w) + h_gw *math.sin(w),
+            y + h_gl * math.sin(w) - h_gw *math.cos(w)],
+           [x - h_gl * math.cos(w) + h_gw *math.sin(w),
+            y - h_gl * math.sin(w) - h_gw *math.cos(w)],
+           [x - h_gl * math.cos(w) - h_gw *math.sin(w),
+            y - h_gl * math.sin(w) + h_gw *math.cos(w)],
            ])
         self.top = np.array(self.corners)
         self.top[3,:] = self.corners[0, :]
         self.top[2,:] = self.corners[1, :]
-        self.top[3,0] -= h_bl * cos(w)
-        self.top[3,1] -= h_bl * sin(w)
-        self.top[2,0] -= h_bl * cos(w)
-        self.top[2,1] -= h_bl * sin(w)
+        self.top[3,0] -= h_bl *math.cos(w)
+        self.top[3,1] -= h_bl *math.sin(w)
+        self.top[2,0] -= h_bl *math.cos(w)
+        self.top[2,1] -= h_bl *math.sin(w)
         self.bottom = np.array(self.corners)
         self.bottom[1,:] = self.corners[2, :]
         self.bottom[0,:] = self.corners[3, :]
-        self.bottom[1,0] += h_bl * cos(w)
-        self.bottom[1,1] += h_bl * sin(w)
-        self.bottom[0,0] += h_bl * cos(w)
-        self.bottom[0,1] += h_bl * sin(w)
+        self.bottom[1,0] += h_bl *math.cos(w)
+        self.bottom[1,1] += h_bl *math.sin(w)
+        self.bottom[0,0] += h_bl *math.cos(w)
+        self.bottom[0,1] += h_bl *math.sin(w)
 
         self.x = x * self.env_width
         self.y = y * self.env_height
@@ -709,9 +688,9 @@ class Gate:
             self.bottom = tmp
 
         # compute other things like polygon
-        self.box = Polygon(self.corners)
-        self.top_box = Polygon(self.top)
-        self.bottom_box = Polygon(self.bottom)
+        self.box = geo.Polygon(self.corners)
+        self.top_box = geo.Polygon(self.top)
+        self.bottom_box = geo.Polygon(self.bottom)
 
 class Surface:
 
@@ -749,7 +728,7 @@ class Surface:
         self.light_color = np.array([232., 146., 124.])
         self.color = np.array(self.deep_color if self.deep else self.light_color)
 
-        self.poly = Polygon(self.corners)
+        self.poly = geo.Polygon(self.corners)
 
     def get_new_damage(self, movement):
         # Check for 2 components
@@ -803,9 +782,9 @@ class Needle:
         self.needle_color = np.array([0., 0., 0.])
         self.thread_color = np.array([167., 188., 214.])
 
-        # Save adjusted thread points since we don't use them for anything
+        # Save adjusted thread pointsmath.since we don't use them for anything
         self.thread_points = [(self.x, env_height - self.y)]
-        self.tip = Point(np.array([self.x, self.env_height - self.y]))
+        self.tip = geo.Point(np.array([self.x, self.env_height - self.y]))
         self.last_tip = self.tip
         self.path_length = 0.
 
@@ -923,6 +902,6 @@ class Needle:
 
         self.dx, self.dy, self.dw = dx, dy, dw
         self.last_tip = self.tip
-        self.tip = Point(np.array([self.x, self.env_height - self.y]))
+        self.tip = geo.Point(np.array([self.x, self.env_height - self.y]))
         self._compute_corners()
 

@@ -12,9 +12,10 @@ from PIL import Image
 import numpy as np
 import glm
 import math
+import ctypes
 
 
-vertex_shader = """
+g_default_vertex_shader = """
 #version 330
 
 layout (location=0) in vec3 aPos;
@@ -29,7 +30,7 @@ void main()
 }
 """
 
-fragment_shader = """
+g_default_fragment_shader = """
 #version 330
 out vec4 FragColor;
 
@@ -67,10 +68,10 @@ class Triangle(object):
                     dtype=np.uint32)
 
 class Shader(object):
-    def __init__(self, vertex_shader, frag_shdaer):
+    def __init__(self, vertex_shader, frag_shader):
         self.shader = gl_shaders.compileProgram(
             gl_shaders.compileShader(vertex_shader, gl.GL_VERTEX_SHADER),
-            gl_shaders.compileShader(fragment_shader, gl.GL_FRAGMENT_SHADER)
+            gl_shaders.compileShader(frag_shader, gl.GL_FRAGMENT_SHADER)
         )
         self.color_loc = gl.glGetUniformLocation(self.shader, 'ourColor')
         self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
@@ -97,14 +98,15 @@ class Shader(object):
 
 
 class OpenGLObject(object):
-    def __init__(self, renderer, shader, vao, num_vertices,
+    def __init__(self, renderer, shader, vao, vertices, indices,
             color=(0.8, 0.5, 0.0, 1.0)):
         self.shader=shader
         self.color=color
         self.vao=vao
+        self.vertices = vertices
+        self.indices = indices
         self.renderer = weakref.ref(renderer)
         self.model = glm.mat4()
-        self.num_vertices = num_vertices
 
     def draw(self):
         self.shader.use(True)
@@ -117,8 +119,7 @@ class OpenGLObject(object):
         self.shader.set_proj(self.renderer().proj_mat)
 
         gl.glBindVertexArray(self.vao)
-        #gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
-        gl.glDrawElements(gl.GL_TRIANGLES, self.num_vertices, gl.GL_UNSIGNED_INT, ctypes.c_void_p(0))
+        gl.glDrawElements(gl.GL_TRIANGLES, len(self.indices), gl.GL_UNSIGNED_INT, ctypes.c_void_p(0))
         gl.glBindVertexArray(0)
 
         self.shader.use(False)
@@ -136,7 +137,8 @@ class OpenGLObject(object):
         self.model = glm.scale(self.model, vec)
 
 class OpenGLRenderer(object):
-    def __init__(self, ortho=True):
+    def __init__(self, res=(800,600), ortho=True):
+        self.res = res
         self.ortho = ortho
         self.camera_loc = glm.vec3(0.0, 0.0, 1.0)
         self.camera_lookat = glm.vec3(0.0, 0.0, 0.0)
@@ -144,9 +146,23 @@ class OpenGLRenderer(object):
         self.view_mat = glm.lookAt(self.camera_loc, self.camera_lookat, self.camera_up)
         self.proj_mat = glm.ortho(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0)
 
+        self.ctx =  EGLContext()
+
+        if not self.ctx.initialize(*self.res):
+            print("Failed to initialize EGL context")
+            return
+
         gl.glEnable(gl.GL_DEPTH_TEST)
 
-    def create_object(self, shader, vertices, indices):
+        self.shaders = {}
+        self.shaders["default"] = Shader(g_default_vertex_shader, g_default_fragment_shader)
+
+    def get_width(self):
+        return self.res[0]
+    def get_height(self):
+        return self.res[1]
+
+    def create_object(self, vertices, indices, shader='default'):
         # Create a new VAO (Vertex Array Object) and bind it
         vao = gl.glGenVertexArrays(1)
         gl.glBindVertexArray(vao)
@@ -172,11 +188,20 @@ class OpenGLRenderer(object):
         gl.glBindBuffer(gl.GL_ARRAY_BUFFER, 0)
         gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, 0)
 
-        return OpenGLObject(self, shader=shader, vao=vao, num_vertices=len(indices))
+        shader = self.shaders[shader]
+
+        return OpenGLObject(self, shader=shader, vao=vao, vertices=vertices, indices=indices)
 
     def start_draw(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
 
+    def close(self):
+        if self.ctx is not None:
+            self.ctx.release()
+            self.ctx = None
+
+    def __del__(self):
+        self.close()
 
 def write_png(filename, width, height):
     img_buf = gl.glReadPixels(0, 0, width, height, gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
@@ -186,30 +211,18 @@ def write_png(filename, width, height):
     print("image generated: " + filename)
 
 def main():
-    #pg.init()
-    #display = (1680, 1050)
-    #pg.display.set_mode(display, DOUBLEBUF|OPENGL)
-    ctx =  EGLContext()
-    display = (800, 600)
-    if not ctx.initialize(*display):
-        print("Failed to initialize EGL context")
-        return
 
     renderer = OpenGLRenderer()
 
-    shader = Shader(vertex_shader, fragment_shader)
-
     rec = Rectangle()
-    obj = renderer.create_object(shader, rec.vertices, rec.indices)
+    obj = renderer.create_object(rec.vertices, rec.indices)
     obj.rotate(math.pi/4)
 
     renderer.start_draw()
 
     for i in range(10):
         obj.draw()
-        write_png("test" + str(i) + ".png", display[0], display[1])
-
-    ctx.release()
+        write_png("test" + str(i) + ".png", renderer.get_width(), renderer.get_height())
 
 if __name__ == "__main__":
     main()
