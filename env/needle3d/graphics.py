@@ -42,30 +42,6 @@ void main()
 }
 """
 
-class Rectangle(object):
-    def __init__(self):
-        self.vertices = np.array(
-                [ 0.5, 0.5, 0.,
-                  -0.5, 0.5, 0.,
-                  0.5, -0.5, 0.,
-                  -0.5, -0.5, 0.,
-                ], dtype=np.float32)
-        self.indices = np.array(
-                [0, 1, 2,
-                 2, 1, 3,
-                 ], dtype=np.uint32)
-
-class Triangle(object):
-    def __init__(self):
-        self.vertices = np.array(
-                [ 0.5,  0.5, 0.0,
-                  -0.5,  0.5, 0.0,
-                  0.0, -0.5, 0.0,
-                ],
-                dtype=np.float32)
-        self.indices = np.array(
-                    [0, 1, 2],
-                    dtype=np.uint32)
 
 class Shader(object):
     def __init__(self, vertex_shader, frag_shader):
@@ -98,11 +74,12 @@ class Shader(object):
 
 
 class OpenGLObject(object):
-    def __init__(self, renderer, shader, vao, vertices, indices,
+    def __init__(self, renderer, shader, vao, buffers, vertices, indices,
             color=(0.8, 0.5, 0.0, 1.0)):
         self.shader=shader
         self.color=color
         self.vao=vao
+        self.buffers=buffers
         self.vertices = vertices
         self.indices = indices
         self.renderer = weakref.ref(renderer)
@@ -127,17 +104,23 @@ class OpenGLObject(object):
     def reset(self):
         self.model = glm.mat4()
 
-    def rotate(self, angle, vec=glm.vec3(0., 0., -1.)):
-        self.model = glm.rotate(self.model, angle, vec)
+    def rotate(self, angle, vec=(0., 0., -1.)):
+        self.model = glm.rotate(self.model, angle, glm.vec3(vec))
 
     def translate(self, vec):
-        self.model = glm.translate(self.model, vec)
+        self.model = glm.translate(self.model, glm.vec3(vec))
 
     def scale(self, vec):
-        self.model = glm.scale(self.model, vec)
+        self.model = glm.scale(self.model, glm.vec3(vec))
+
+    def set_color(self, vec):
+        self.color = vec
+
+    def __del__(self):
+        gl.glDeleteBuffers(len(self.buffers), self.buffers)
 
 class OpenGLRenderer(object):
-    def __init__(self, res=(800,600), ortho=True):
+    def __init__(self, res=(800,600), ortho=True, bg_color=(0., 0., 0.)):
         self.res = res
         self.ortho = ortho
         self.camera_loc = glm.vec3(0.0, 0.0, 1.0)
@@ -153,6 +136,7 @@ class OpenGLRenderer(object):
             return
 
         gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glClearColor(*bg_color, 1.)
 
         self.shaders = {}
         self.shaders["default"] = Shader(g_default_vertex_shader, g_default_fragment_shader)
@@ -161,6 +145,17 @@ class OpenGLRenderer(object):
         return self.res[0]
     def get_height(self):
         return self.res[1]
+
+    def set_ortho(self, left, right, bottom, top):
+        self.proj_mat = glm.ortho(left, right, bottom, top, 0.1, 100.0)
+
+    def move_camera(self, vec):
+        self.view_mat = glm.translate(self.view_mat, glm.vec3(vec))
+
+    def get_img(self):
+        img_buf = gl.glReadPixels(0, 0, self.res[0], self.res[1], gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
+        img = np.frombuffer(img_buf, np.uint8).reshape(self.res[1], self.res[0], 3)[::-1]
+        return img
 
     def create_object(self, vertices, indices, shader='default'):
         # Create a new VAO (Vertex Array Object) and bind it
@@ -190,7 +185,32 @@ class OpenGLRenderer(object):
 
         shader = self.shaders[shader]
 
-        return OpenGLObject(self, shader=shader, vao=vao, vertices=vertices, indices=indices)
+        return OpenGLObject(self, shader=shader, vao=vao, buffers=np.array([vbo, ebo, vao]),
+                vertices=vertices, indices=indices)
+
+    def create_rectangle(self):
+        vertices = np.array(
+                [ 0.5, 0.5, 0.,
+                  -0.5, 0.5, 0.,
+                  0.5, -0.5, 0.,
+                  -0.5, -0.5, 0.,
+                ], dtype=np.float32)
+        indices = np.array(
+                [0, 1, 2,
+                 2, 1, 3,
+                 ], dtype=np.uint32)
+        return self.create_object(vertices, indices)
+
+    def create_triangle(self):
+        vertices = np.array(
+                [ 0.5,  0.5, 0.,
+                  -0.5,  0.5, 0.,
+                  0., -0.5, 0.,
+                ], dtype=np.float32)
+        indices = np.array(
+                [0, 1, 2],
+                dtype=np.uint32)
+        return self.create_object(vertices, indices)
 
     def start_draw(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
@@ -203,26 +223,24 @@ class OpenGLRenderer(object):
     def __del__(self):
         self.close()
 
-def write_png(filename, width, height):
-    img_buf = gl.glReadPixels(0, 0, width, height, gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
-    img = np.frombuffer(img_buf, np.uint8).reshape(height, width, 3)[::-1]
+def write_png(filename, renderer):
+    img = renderer.get_img()
     im = Image.fromarray(img)
     im.save(filename)
     print("image generated: " + filename)
 
 def main():
 
-    renderer = OpenGLRenderer()
+    renderer = OpenGLRenderer(bg_color=(0.5, 0.75, 0.))
 
-    rec = Rectangle()
-    obj = renderer.create_object(rec.vertices, rec.indices)
+    obj = renderer.create_rectangle()
     obj.rotate(math.pi/4)
 
     renderer.start_draw()
 
     for i in range(10):
         obj.draw()
-        write_png("test" + str(i) + ".png", renderer.get_width(), renderer.get_height())
+        write_png("test" + str(i) + ".png", renderer)
 
 if __name__ == "__main__":
     main()

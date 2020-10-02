@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, sys, weakref, math, random
+import os, sys, weakref, math, random, copy
 from os.path import join as pjoin
 
 import numpy as np
@@ -8,10 +8,12 @@ import pygame as pg
 import OpenGL.GL as gl
 import OpenGL.GL.shaders as gl_shaders
 import glm
+import skimage.transform as transform
 
-import env.common_env
+from env.common_env import CommonEnv
+from . import graphics
 
-GREEN = (0, 255, 0)
+GREEN = (0., 255., 0., 1.)
 
 two_pi = math.pi * 2
 
@@ -33,7 +35,7 @@ def rgb2gray(rgb):
 class State:
     pass
 
-class Environment(common_env.CommonEnv):
+class Environment(CommonEnv):
     metadata = {'render.modes': ['image', 'state']}
     background_color = np.array([99., 153., 174.])
 
@@ -86,6 +88,8 @@ class Environment(common_env.CommonEnv):
         self.state.status = None
         self.extra_state_dim = 0
 
+        self.renderer = None
+
         self.reset()
 
     @staticmethod
@@ -113,6 +117,13 @@ class Environment(common_env.CommonEnv):
         self.state.damage = 0
         self.state.next_gate = None
 
+        if self.renderer is None or \
+           self.state.width != self.renderer.get_width() or \
+           self.state.height != self.renderer.get_height():
+            self.renderer = graphics.OpenGLRenderer((self.state.width, self.state.height))
+            self.renderer.set_ortho(0, self.state.width, 0, self.state.height)
+            #self.renderer.move_cam(
+
         if self.random_env:
             self.create_random_env()
         elif self.state.filename is not None:
@@ -121,13 +132,8 @@ class Environment(common_env.CommonEnv):
         else:
             raise ValueError('No file to run')
 
-        self.state.needle = Needle(self.state.width, self.state.height,
+        self.state.needle = Needle(self.renderer, self.state.width, self.state.height,
             self.log_file, random_pos=self.random_needle)
-
-        if self.renderer is None or \
-           self.state.width != self.screen.get_width() or \
-           self.state.height != self.screen.get_height():
-            self.screen = pg.Surface((self.state.width, self.state.height))
 
         self.image = self._draw()
 
@@ -175,30 +181,25 @@ class Environment(common_env.CommonEnv):
         return (cur_state, 0, False, extra)
 
     def _draw(self):
-        self.screen.fill(self.background_color)
+        self.renderer.start_draw()
 
         for surface in self.state.surfaces:
-            surface.draw(self.screen)
+            surface.draw()
 
         for gate in self.state.gates:
-            gate.draw(self.screen)
+            gate.draw()
 
-        self.state.needle.draw(self.screen)
+        self.state.needle.draw()
+
+        # DEBUG
+        from rl.utils import ForkablePdb
+        ForkablePdb().set_trace()
 
         # Scale if needed
-        surface = self.screen
-        if self.scaled_screen is not None:
-            # Precreate surface with final dim and use ~DestSurface
-            # Also consider smoothscale
-            if self.img_dim < 224:
-                scale = pg.transform.smoothscale
-            else:
-                scale = pg.transform.scale
-            scale(self.screen, [self.img_dim, self.img_dim], self.scaled_screen)
-            surface = self.scaled_screen
-
-        # Return an array of uint8 for efficiency
-        frame = pg.surfarray.array3d(surface).astype(np.uint8).transpose((1,0,2))
+        pixels = self.renderer.get_img()
+        frame = transform.resize(pixels, (self.img_dim, self.img_dim), anti_aliasing=True)
+        frame *= 255.0
+        frame = self.image.astype(np.uint8)
         return frame
 
     def render(self, save_path='./out', sim_save=False):
@@ -241,7 +242,7 @@ class Environment(common_env.CommonEnv):
         #print(" - num gates=%d"%(self.ngates))
 
         for _ in range(self.state.ngates):
-            gate = Gate(self.state.width, self.state.height)
+            gate = Gate(self.renderer, self.state.width, self.state.height)
             gate.load(handle)
             self.state.gates.append(gate)
 
@@ -268,7 +269,7 @@ class Environment(common_env.CommonEnv):
 
         # Create gates that don't overlap with any others
         for _ in range(self.state.ngates):
-            gate = Gate(self.state.width, self.state.height)
+            gate = Gate(self.renderer, self.state.width, self.state.height)
             overlaps = True
             while overlaps:
                 rand = np.random.rand(3)
@@ -526,16 +527,16 @@ class Environment(common_env.CommonEnv):
         return False
 
 class Gate:
-    color_passed = np.array([100., 175., 100.])
-    color_failed = np.array([175., 100., 100.])
-    color1 = np.array([251., 216., 114.])
-    color2 = np.array([255., 50., 12.])
-    color3 = np.array([255., 12., 150.])
+    color_passed = (100., 175., 100., 1.)
+    color_failed = (175., 100., 100., 1.)
+    color1 = (251., 216., 114., 1.)
+    color2 = (255., 50., 12., 1.)
+    color3 = (255., 12., 150., 1.)
 
-    def __init__(self, env_width, env_height):
-        self.x = 0
-        self.y = 0
-        self.w = 0
+    def __init__(self, renderer, env_width, env_height):
+        self.x = 0.
+        self.y = 0.
+        self.w = 0.
         self.top = np.zeros((4,2))
         self.bottom = np.zeros((4,2))
         self.corners = np.zeros((4,2))
@@ -553,6 +554,9 @@ class Gate:
 
         self.env_width = env_width
         self.env_height = env_height
+
+        self.renderer = renderer
+
 
     def _update_status_and_color(self, p, last_p):
         ''' take in current position,
@@ -573,54 +577,61 @@ class Gate:
             self.c2 = self.color_passed
             self.c3 = self.color_passed
 
-    def draw(self, surface):
-        pg.draw.polygon(surface, self.c1, self.corners)
-        # If next gate, outline in green
+    def draw(self):
+        self.top_obj.set_color(self.c1)
+        self.top_obj.draw()
         if self.status == 'next':
-            pg.draw.polygon(surface, GREEN, self.corners, 20)
-        pg.draw.polygon(surface, self.c2, self.top)
-        pg.draw.polygon(surface, self.c3, self.bottom)
+            self.mid_obj.set_color(GREEN)
+        else:
+            self.mid_obj.set_color(self.c2)
+        self.mid_obj.draw()
+        self.bot_obj.set_color(self.c3)
+        self.bot_obj.draw()
 
     def from_params(self, x, y, w):
         ''' @x, y, w: 0-1
             y is reversed, from bottom
         '''
+        scale_factor = min(self.env_height, self.env_width)
+
         w *= math.pi / 2
 
-        gate_l = 0.25 # 0.35
+        gate_l = 0.25
         gate_w = gate_l / 3
         box_l = gate_l / 5
 
         h_gw = gate_w / 2.
         h_gl = gate_l / 2.
         h_bl = box_l / 2.
+        sinw = math.sin(w)
+        cosw = math.cos(w)
 
         # order of corners: TR, BR, BL, TL
         # Remember y starts from below
         self.corners = np.array([
-           [x + h_gl * math.cos(w) - h_gw *math.sin(w),
-            y + h_gl * math.sin(w) + h_gw *math.cos(w)],
-           [x + h_gl * math.cos(w) + h_gw *math.sin(w),
-            y + h_gl * math.sin(w) - h_gw *math.cos(w)],
-           [x - h_gl * math.cos(w) + h_gw *math.sin(w),
-            y - h_gl * math.sin(w) - h_gw *math.cos(w)],
-           [x - h_gl * math.cos(w) - h_gw *math.sin(w),
-            y - h_gl * math.sin(w) + h_gw *math.cos(w)],
+           [x + h_gl * cosw - h_gw * sinw,
+            y + h_gl * sinw + h_gw * cosw],
+           [x + h_gl * cosw + h_gw * sinw,
+            y + h_gl * sinw - h_gw * cosw],
+           [x - h_gl * cosw + h_gw * sinw,
+            y - h_gl * sinw - h_gw * cosw],
+           [x - h_gl * cosw - h_gw * sinw,
+            y - h_gl * sinw + h_gw * cosw],
            ])
         self.top = np.array(self.corners)
         self.top[3,:] = self.corners[0, :]
         self.top[2,:] = self.corners[1, :]
-        self.top[3,0] -= h_bl *math.cos(w)
-        self.top[3,1] -= h_bl *math.sin(w)
-        self.top[2,0] -= h_bl *math.cos(w)
-        self.top[2,1] -= h_bl *math.sin(w)
+        self.top[3,0] -= h_bl * cosw
+        self.top[3,1] -= h_bl * sinw
+        self.top[2,0] -= h_bl * cosw
+        self.top[2,1] -= h_bl * sinw
         self.bottom = np.array(self.corners)
         self.bottom[1,:] = self.corners[2, :]
         self.bottom[0,:] = self.corners[3, :]
-        self.bottom[1,0] += h_bl *math.cos(w)
-        self.bottom[1,1] += h_bl *math.sin(w)
-        self.bottom[0,0] += h_bl *math.cos(w)
-        self.bottom[0,1] += h_bl *math.sin(w)
+        self.bottom[1,0] += h_bl * cosw
+        self.bottom[1,1] += h_bl * sinw
+        self.bottom[0,0] += h_bl * cosw
+        self.bottom[0,1] += h_bl * sinw
 
         self.x = x * self.env_width
         self.y = y * self.env_height
@@ -632,6 +643,21 @@ class Gate:
         self.top[:,1] *= self.env_height
         self.bottom[:,0] *= self.env_width
         self.bottom[:,1] *= self.env_height
+
+        # Graphics
+        self.mid_obj = self.renderer.create_rectangle()
+        self.top_obj = copy.copy(self.mid_obj)
+
+        self.mid_obj.scale((gate_w, gate_l, 1.))
+        self.top_obj.scale((gate_w, box_l, 1.))
+        self.bot_obj = copy.copy(self.top_obj)
+        self.top_obj.translate((0., h_gl, 0.))
+        self.bot_obj.translate((0., -h_gl, 0.))
+
+        for x in self.top_obj, self.mid_obj, self.bot_obj:
+            x.scale((scale_factor, scale_factor, 1.))
+            x.rotate(w)
+            x.translate((self.x, self.y, 0))
 
         #print("corners2: ", self.corners) # debug
 
@@ -651,6 +677,11 @@ class Gate:
         bottomx = safe_load_line('BottomX', handle)
         bottomy = safe_load_line('BottomY', handle)
 
+        pos = [float(x) for x in pos]
+        self.from_params(*pos)
+
+
+        '''
         self.x = self.env_width * float(pos[0])
         self.y = self.env_height * float(pos[1])
         self.w = float(pos[2])
@@ -675,6 +706,7 @@ class Gate:
         self.w -= np.pi / 2
 
         self._create_polys()
+        '''
 
     def _create_polys(self):
 
@@ -710,7 +742,7 @@ class Surface:
 
     def draw(self, surface):
         ''' update damage and surface color '''
-        pg.draw.polygon(surface, self.color, self.corners)
+        #pg.draw.polygon(surface, self.color, self.corners) # TODO
 
     '''
     Load surface from file at the current position
@@ -756,7 +788,8 @@ class Needle:
 
     # Assume w=0 points to the negative x-axis
 
-    def __init__(self, env_width, env_height, log_file, random_pos=False):
+    def __init__(self, renderer, env_width, env_height, log_file, random_pos=False):
+        self.renderer = renderer
         if random_pos:
             self.x = random.randint(0, env_width - 1)
             self.y = random.randint(0, env_height - 1)
@@ -779,8 +812,8 @@ class Needle:
 
         #self.needle_color = np.array([134., 200., 188.])
         # Make needle clearer
-        self.needle_color = np.array([0., 0., 0.])
-        self.thread_color = np.array([167., 188., 214.])
+        self.needle_color = (0., 0., 0., 1.)
+        self.thread_color = (167., 188., 214., 1.)
 
         # Save adjusted thread pointsmath.since we don't use them for anything
         self.thread_points = [(self.x, env_height - self.y)]
@@ -790,12 +823,17 @@ class Needle:
 
         self.log_file = log_file
 
+        # Graphics
+        self.obj = renderer.create_triangle()
+        self.obj.scale(self.scale)
+        self.obj.set_color(self.needle_color)
+
         self._load()
 
 
-    def draw(self, surface):
-        self._draw_thread(surface)
-        self._draw_needle(surface)
+    def draw(self):
+        #self._draw_thread()
+        self._draw_needle()
 
     def _compute_corners(self):
         """
@@ -822,8 +860,12 @@ class Needle:
 
         self.corners = np.array([[x, y], [top_x, top_y], [bot_x, bot_y]])
 
-    def _draw_needle(self, surface):
-        pg.draw.polygon(surface, self.needle_color, self.corners)
+    def _draw_needle(self):
+        old_model = self.obj.model
+        self.obj.rotate(self.w)
+        self.obj.translate((self.x, self.y, 0.))
+        self.obj.draw()
+        self.obj.model = old_model
 
     def _draw_thread(self, surface):
         if len(self.thread_points) > 1:

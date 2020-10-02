@@ -104,6 +104,29 @@ def run(args):
         save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
             args.env, env_name, suffix))
 
+    if args.env == 'needle3d':
+        from env.needle3d.env import Environment
+        env_dir = pjoin(cur_dir, '..', 'env', 'needle', 'data')
+        env_file = pjoin(env_dir, 'environment_' + args.task + '.txt')
+        env_name = 'rand' if args.random_env else args.task
+
+
+        basename = '{}_{}_{}_{}'.format(
+            args.env, env_name, args.policy, args.mode[:2])
+        if args.random_needle:
+            basename += '_r'
+
+        suffix = ''
+        if args.random_env or args.random_needle:
+            suffix += '_'
+        if args.random_env:
+            suffix += 'r'
+        if args.random_needle:
+            suffix += 'n'
+
+        save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
+            args.env, env_name, suffix))
+
     elif args.env == 'sim':
         from env.sim_env.env import Environment
         basename = args.env
@@ -209,6 +232,23 @@ def run(args):
     def create_env(args, server_num, dummy_env=False):
         if args.env == 'needle':
             from env.needle.env import Environment
+            return Environment(
+                filename=env_file,
+                mode=args.mode,
+                stack_size = args.stack_size,
+                img_dim=args.img_dim,
+                random_env=args.random_env,
+                random_needle=args.random_needle,
+                scale_rewards=args.scale_rewards,
+                action_steps=args.action_steps,
+                server_num=server_num,
+                add_delay=args.add_delay,
+                save_mode_path=save_mode_path,
+                save_mode='',
+                )
+
+        elif args.env == 'needle3d':
+            from env.needle3d.env import Environment
             return Environment(
                 filename=env_file,
                 mode=args.mode,
@@ -1102,7 +1142,7 @@ if __name__ == "__main__":
     if args.task is None:
         if args.env == 'sim':
             args.task = 'reach'
-        elif args.env == 'needle':
+        elif args.env in ['needle', 'needle3d']:
             args.task = '15'
 
     if args.env == 'sim' and args.task == 'reach':
