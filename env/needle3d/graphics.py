@@ -6,8 +6,8 @@ import weakref
 
 from libs.libegl import EGLContext
 import OpenGL
-OpenGL.ERROR_CHECKING=False
-OpenGL.ERROR_LOGGING=False
+#OpenGL.ERROR_CHECKING=False
+#OpenGL.ERROR_LOGGING=False
 import OpenGL.GL as gl
 import OpenGL.GL.shaders as gl_shaders
 
@@ -150,12 +150,17 @@ class OpenGLRenderer(object):
         return self.res[1]
 
     def set_ortho(self, left, right, bottom, top):
-        self.proj_mat = glm.ortho(left, right, bottom, top, 0.1, 100.0)
+        self.proj_mat = glm.ortho(left, right, bottom, top, -0.1, 100.0)
 
     def move_camera(self, vec):
         self.view_mat = glm.translate(self.view_mat, glm.vec3(vec))
 
     def get_img(self):
+        #fence = gl.glFenceSync(gl.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+        #while gl.glClientWaitSync(fence, gl.GL_SYNC_FLUSH_COMMANDS_BIT, 500000000) == gl.GL_TIMEOUT_EXPIRED:
+        #    pass
+        #gl.glDeleteSync(fence)
+        gl.glFinish()
         img_buf = gl.glReadPixels(0, 0, self.res[0], self.res[1], gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
         img = np.frombuffer(img_buf, np.uint8).reshape(self.res[1], self.res[0], 3)[::-1]
         return img

@@ -196,8 +196,8 @@ class Environment(CommonEnv):
         #for surface in self.state.surfaces:
             #surface.draw()
 
-        for gate in self.state.gates:
-            gate.draw()
+        #for gate in self.state.gates:
+            #gate.draw()
 
         self.state.needle.draw()
 
@@ -872,8 +872,8 @@ class Needle:
 
     def _draw_needle(self):
         old_model = self.obj.model
-        self.obj.rotate(self.w)
-        self.obj.translate((self.x, self.y, 0.))
+        #self.obj.rotate(self.w)
+        #self.obj.translate((self.x, self.y, 0.))
         self.obj.draw()
         self.obj.model = old_model
 
