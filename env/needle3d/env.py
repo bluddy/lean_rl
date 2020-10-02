@@ -88,8 +88,6 @@ class Environment(CommonEnv):
 
         self.renderer = None
 
-        self.count = 0 # debug
-
         if full_init:
             self.reset()
 
@@ -128,13 +126,11 @@ class Environment(CommonEnv):
         if self.renderer is None or \
            self.state.width != self.renderer.get_width() or \
            self.state.height != self.renderer.get_height():
-            print("init renderer ", self.count)
-            self.count += 1
             self.renderer = graphics.OpenGLRenderer(
                     res=(self.state.width, self.state.height),
                     bg_color=self.background_color
                     )
-            self.renderer.set_ortho(0, self.state.width, 0, self.state.height)
+            self.renderer.set_ortho(-self.state.width, self.state.width, -self.state.height, self.state.height)
             #self.renderer.move_cam(
 
         # Init env
