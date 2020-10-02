@@ -814,7 +814,7 @@ class Needle:
         self.corners = None
 
         self.length_const = 0.12
-        self.scale = np.sqrt(env_width ** 2 + env_height ** 2)
+        self.scale = float(env_width) / 10.
         self.is_moving = False
 
         self.env_width = env_width
