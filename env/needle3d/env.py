@@ -814,7 +814,7 @@ class Needle:
         self.corners = None
 
         self.length_const = 0.12
-        self.scale = float(env_width) / 10.
+        self.scale = env_width / 5.
         self.is_moving = False
 
         self.env_width = env_width
@@ -835,7 +835,7 @@ class Needle:
 
         # Graphics
         self.obj = renderer.create_triangle()
-        self.obj.scale(self.scale)
+        self.obj.scale((self.scale, self.scale / 2., 1.))
         self.obj.set_color(self.needle_color)
 
         self._load()
@@ -872,7 +872,7 @@ class Needle:
 
     def _draw_needle(self):
         old_model = self.obj.model
-        #self.obj.rotate(self.w)
+        self.obj.rotate(self.w)
         #self.obj.translate((self.x, self.y, 0.))
         self.obj.draw()
         self.obj.model = old_model
