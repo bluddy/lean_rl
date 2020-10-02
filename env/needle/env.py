@@ -554,9 +554,9 @@ class Gate:
     color3 = np.array([255., 12., 150.])
 
     def __init__(self, env_width, env_height):
-        self.x = 0
-        self.y = 0
-        self.w = 0
+        self.x = 0.
+        self.y = 0.
+        self.w = 0.
         self.top = np.zeros((4,2))
         self.bottom = np.zeros((4,2))
         self.corners = np.zeros((4,2))
