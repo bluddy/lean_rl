@@ -262,6 +262,7 @@ def run(args):
                 add_delay=args.add_delay,
                 save_mode_path=save_mode_path,
                 save_mode='',
+                full_init=not dummy_env,
                 )
 
         elif args.env == 'sim':

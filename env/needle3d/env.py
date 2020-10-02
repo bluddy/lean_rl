@@ -37,7 +37,7 @@ class State:
 
 class Environment(CommonEnv):
     metadata = {'render.modes': ['image', 'state']}
-    background_color = np.array([99., 153., 174.])
+    background_color = np.array([99., 153., 174.]) / 255.
 
     def __init__(self, mode='image', stack_size=1,
             log_file=None, filename=None, max_steps=150, img_dim=224,
@@ -46,6 +46,7 @@ class Environment(CommonEnv):
             min_gates=3, max_gates=3,
             scale_rewards=False,
             add_delay=0.,
+            full_init=True,
             **kwargs):
 
         super(Environment, self).__init__(**kwargs)
@@ -73,9 +74,6 @@ class Environment(CommonEnv):
         self.max_gates = max_gates
         self.min_gates = min_gates
 
-        # Create screen for scaling down
-        self.scaled_screen = pg.Surface((self.img_dim, self.img_dim))
-        self.screen = None
         pg.font.init()
 
         # Set up state
@@ -90,7 +88,10 @@ class Environment(CommonEnv):
 
         self.renderer = None
 
-        self.reset()
+        self.count = 0 # debug
+
+        if full_init:
+            self.reset()
 
     @staticmethod
     def clean_up_env():
@@ -117,13 +118,26 @@ class Environment(CommonEnv):
         self.state.damage = 0
         self.state.next_gate = None
 
+        self.state.width = 1920
+        self.state.height = 1080
+
+        #from rl.utils import ForkablePdb
+        #ForkablePdb().set_trace()
+
+
         if self.renderer is None or \
            self.state.width != self.renderer.get_width() or \
            self.state.height != self.renderer.get_height():
-            self.renderer = graphics.OpenGLRenderer((self.state.width, self.state.height))
+            print("init renderer ", self.count)
+            self.count += 1
+            self.renderer = graphics.OpenGLRenderer(
+                    res=(self.state.width, self.state.height),
+                    bg_color=self.background_color
+                    )
             self.renderer.set_ortho(0, self.state.width, 0, self.state.height)
             #self.renderer.move_cam(
 
+        # Init env
         if self.random_env:
             self.create_random_env()
         elif self.state.filename is not None:
@@ -183,8 +197,8 @@ class Environment(CommonEnv):
     def _draw(self):
         self.renderer.start_draw()
 
-        for surface in self.state.surfaces:
-            surface.draw()
+        #for surface in self.state.surfaces:
+            #surface.draw()
 
         for gate in self.state.gates:
             gate.draw()
@@ -192,14 +206,14 @@ class Environment(CommonEnv):
         self.state.needle.draw()
 
         # DEBUG
-        from rl.utils import ForkablePdb
-        ForkablePdb().set_trace()
+        #from rl.utils import ForkablePdb
+        #ForkablePdb().set_trace()
 
         # Scale if needed
         pixels = self.renderer.get_img()
         frame = transform.resize(pixels, (self.img_dim, self.img_dim), anti_aliasing=True)
         frame *= 255.0
-        frame = self.image.astype(np.uint8)
+        frame = frame.astype(np.uint8)
         return frame
 
     def render(self, save_path='./out', sim_save=False):
@@ -527,11 +541,11 @@ class Environment(CommonEnv):
         return False
 
 class Gate:
-    color_passed = (100., 175., 100., 1.)
-    color_failed = (175., 100., 100., 1.)
-    color1 = (251., 216., 114., 1.)
-    color2 = (255., 50., 12., 1.)
-    color3 = (255., 12., 150., 1.)
+    color_passed = np.array([100., 175., 100., 1.]) / 255.
+    color_failed = np.array([175., 100., 100., 1.]) / 255.
+    color1 = np.array([251., 216., 114., 1.]) / 255.
+    color2 = np.array([255., 50., 12., 1.]) / 255.
+    color3 = np.array([255., 12., 150., 1.]) / 255.
 
     def __init__(self, renderer, env_width, env_height):
         self.x = 0.

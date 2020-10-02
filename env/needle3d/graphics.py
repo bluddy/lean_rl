@@ -5,6 +5,9 @@
 import weakref
 
 from libs.libegl import EGLContext
+import OpenGL
+OpenGL.ERROR_CHECKING=False
+OpenGL.ERROR_LOGGING=False
 import OpenGL.GL as gl
 import OpenGL.GL.shaders as gl_shaders
 
