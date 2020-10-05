@@ -104,7 +104,7 @@ def run(args):
         save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
             args.env, env_name, suffix))
 
-    if args.env == 'needle3d':
+    elif args.env == 'needle3d':
         from env.needle3d.env import Environment
         env_dir = pjoin(cur_dir, '..', 'env', 'needle', 'data')
         env_file = pjoin(env_dir, 'environment_' + args.task + '.txt')
