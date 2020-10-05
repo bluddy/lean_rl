@@ -130,8 +130,8 @@ class Environment(CommonEnv):
                     res=(self.state.width, self.state.height),
                     bg_color=self.background_color
                     )
-            self.renderer.set_ortho(-self.state.width, self.state.width, -self.state.height, self.state.height)
-            #self.renderer.move_cam(
+            self.renderer.set_ortho(0, self.state.width, 0, self.state.height)
+            #self.renderer.translate_camera((-self.state.width / 2., -self.state.height / 2., 0.))
 
         # Init env
         if self.random_env:
@@ -872,8 +872,9 @@ class Needle:
 
     def _draw_needle(self):
         old_model = self.obj.model
-        self.obj.rotate(self.w)
+        #self.obj.rotate(self.w)
         #self.obj.translate((self.x, self.y, 0.))
+        self.obj.translate((2., 0., 0.))
         self.obj.draw()
         self.obj.model = old_model
 
