@@ -122,7 +122,6 @@ class Environment(CommonEnv):
         #from rl.utils import ForkablePdb
         #ForkablePdb().set_trace()
 
-
         if self.renderer is None or \
            self.state.width != self.renderer.get_width() or \
            self.state.height != self.renderer.get_height():
@@ -228,8 +227,8 @@ class Environment(CommonEnv):
                 self.state.action)
             '''
             needle = self.state.needle
-            reward_s = 'x:{}, y:{}, w:{}'.format(
-                    needle.x, needle.y, needle.w)
+            reward_s = 'x:{:.3f}, y:{:.3f}, w:{:.3f}'.format(
+                    float(needle.x), float(needle.y), float(needle.w))
             txt_surface = myfont.render(reward_s, False, (0, 0, 0))
             surface.blit(txt_surface, (10, 10))
 
@@ -605,8 +604,10 @@ class Gate:
         self.bot_obj.draw()
 
     def from_params(self, x, y, w):
-        ''' @x, y, w: 0-1
-            y is reversed, from bottom
+        ''' @x, y, w: -3.14 to 0 to 3.14
+            y is 0 at bottom, goes up
+            x is 0 at left
+            w is 0 at left, pos going cw
         '''
         scale_factor = min(self.env_height, self.env_width)
 
@@ -880,6 +881,7 @@ class Needle:
         self.obj.translate((self.x, self.y, 0.))
         #self.obj.rotate(self.w)
         #self.obj.translate((1000., 2., 0.))
+        self.obj.rotate(-math.pi/2)
         self.obj.scale((self.scale * 0.7, self.scale, 1.))
         self.obj.draw()
         self.obj.model = old_model
