@@ -211,9 +211,14 @@ class Environment(common_env.CommonEnv):
         # draw text
         if not sim_save:
             myfont = pygame.font.SysFont('Arial', 10)
+            needle = self.state.needle
+            reward_s = 'x:{:.2f}, y:{:.2f}, w:{:.2f}'.format(
+                    float(needle.x), float(needle.y), float(needle.w))
+            '''
             reward_s = "S:{} TR:{:.3f}, R:{:.3f} a:{}".format(
                 self.server_num, self.total_reward, self.last_reward,
                 self.state.action)
+                '''
             txt_surface = myfont.render(reward_s, False, (0, 0, 0))
             surface.blit(txt_surface, (10, 10))
 

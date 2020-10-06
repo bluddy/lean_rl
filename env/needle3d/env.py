@@ -130,7 +130,8 @@ class Environment(CommonEnv):
                     res=(self.state.width, self.state.height),
                     bg_color=self.background_color
                     )
-            self.renderer.set_ortho(0, self.state.width, 0, self.state.height)
+            #self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
+            self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
             #self.renderer.translate_camera((-self.state.width / 2., -self.state.height / 2., 0.))
 
         # Init env
@@ -221,9 +222,14 @@ class Environment(CommonEnv):
         # draw text
         if not sim_save:
             myfont = pg.font.SysFont('Arial', 10)
+            '''
             reward_s = "S:{} TR:{:.3f}, R:{:.3f} a:{}".format(
                 self.server_num, self.total_reward, self.last_reward,
                 self.state.action)
+            '''
+            needle = self.state.needle
+            reward_s = 'x:{}, y:{}, w:{}'.format(
+                    needle.x, needle.y, needle.w)
             txt_surface = myfont.render(reward_s, False, (0, 0, 0))
             surface.blit(txt_surface, (10, 10))
 
@@ -814,7 +820,7 @@ class Needle:
         self.corners = None
 
         self.length_const = 0.12
-        self.scale = env_width / 5.
+        self.scale = env_width / 10.
         self.is_moving = False
 
         self.env_width = env_width
@@ -835,7 +841,6 @@ class Needle:
 
         # Graphics
         self.obj = renderer.create_triangle()
-        self.obj.scale((self.scale, self.scale / 2., 1.))
         self.obj.set_color(self.needle_color)
 
         self._load()
@@ -872,9 +877,10 @@ class Needle:
 
     def _draw_needle(self):
         old_model = self.obj.model
+        self.obj.translate((self.x, self.y, 0.))
         #self.obj.rotate(self.w)
-        #self.obj.translate((self.x, self.y, 0.))
-        self.obj.translate((2., 0., 0.))
+        #self.obj.translate((1000., 2., 0.))
+        self.obj.scale((self.scale * 0.7, self.scale, 1.))
         self.obj.draw()
         self.obj.model = old_model
 
