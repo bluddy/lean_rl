@@ -107,7 +107,7 @@ class OpenGLObject(object):
     def reset(self):
         self.model = glm.mat4()
 
-    def rotate(self, angle, vec=(0., 0., 1.)):
+    def rotate(self, angle, vec=(0., 0., -1.)):
         self.model = glm.rotate(self.model, angle, glm.vec3(vec))
 
     def translate(self, vec):

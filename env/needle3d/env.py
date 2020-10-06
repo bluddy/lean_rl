@@ -881,7 +881,7 @@ class Needle:
         self.obj.translate((self.x, self.y, 0.))
         #self.obj.rotate(self.w)
         #self.obj.translate((1000., 2., 0.))
-        self.obj.rotate(-math.pi/2)
+        self.obj.rotate(float(self.w) + math.pi/2)
         self.obj.scale((self.scale * 0.7, self.scale, 1.))
         self.obj.draw()
         self.obj.model = old_model
@@ -939,8 +939,10 @@ class Needle:
                 dw = 0.02 * np.sign(dw)
 
         self.w += dw
-        if abs(self.w) > two_pi:
-            self.w -= np.sign(self.w) * two_pi
+        if self.w > math.pi:
+            self.w -= 2 * math.pi
+        elif self.w < -math.pi:
+            self.w += 2 * math.pi
 
         oldx, oldy = self.x, self.y
         self.x += dx
