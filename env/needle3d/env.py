@@ -837,8 +837,8 @@ class Needle:
         self.thread_color = np.array([167., 188., 214., 255.]) / 255.
 
         # Save adjusted thread pointsmath.since we don't use them for anything
-        self.thread_points = [(self.x, env_height - self.y)]
-        self.tip = geo.Point(np.array([self.x, self.env_height - self.y]))
+        self.thread_points = [(self.x, self.y)]
+        self.tip = geo.Point(np.array([self.x, self.y]))
         self.last_tip = self.tip
         self.path_length = 0.
 
@@ -861,7 +861,7 @@ class Needle:
         """
         w = self.w
         x = self.x
-        y = self.env_height - self.y
+        y = self.y
 
         length = self.length_const * self.scale
 
@@ -961,12 +961,12 @@ class Needle:
             self.y = self.env_height
 
         if self.x != oldx or self.y != oldy:
-            self.thread_points.append((self.x, self.env_height - self.y))
+            self.thread_points.append((self.x, self.y))
             dlength = math.sqrt(dx * dx + dy * dy)
             self.path_length += dlength
 
         self.dx, self.dy, self.dw = dx, dy, dw
         self.last_tip = self.tip
-        self.tip = geo.Point(np.array([self.x, self.env_height - self.y]))
+        self.tip = geo.Point(np.array([self.x, self.y]))
         self._compute_corners()
 
