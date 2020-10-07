@@ -13,7 +13,7 @@ import skimage.transform as transform
 from env.common_env import CommonEnv
 from . import graphics
 
-GREEN = (0., 255., 0., 1.)
+GREEN = np.array([0., 255., 0., 255.]) / 255.
 
 two_pi = math.pi * 2
 
@@ -196,8 +196,8 @@ class Environment(CommonEnv):
         #for surface in self.state.surfaces:
             #surface.draw()
 
-        #for gate in self.state.gates:
-            #gate.draw()
+        for gate in self.state.gates:
+            gate.draw()
 
         self.state.needle.draw()
 
@@ -542,11 +542,11 @@ class Environment(CommonEnv):
         return False
 
 class Gate:
-    color_passed = np.array([100., 175., 100., 1.]) / 255.
-    color_failed = np.array([175., 100., 100., 1.]) / 255.
-    color1 = np.array([251., 216., 114., 1.]) / 255.
-    color2 = np.array([255., 50., 12., 1.]) / 255.
-    color3 = np.array([255., 12., 150., 1.]) / 255.
+    color_passed = np.array([100., 175., 100., 255.]) / 255.
+    color_failed = np.array([175., 100., 100., 255.]) / 255.
+    color1 = np.array([251., 216., 114., 255.]) / 255.
+    color2 = np.array([255., 50., 12., 255.]) / 255.
+    color3 = np.array([255., 12., 150., 255.]) / 255.
 
     def __init__(self, renderer, env_width, env_height):
         self.x = 0.
@@ -593,12 +593,11 @@ class Gate:
             self.c3 = self.color_passed
 
     def draw(self):
-        self.top_obj.set_color(self.c1)
+        self.top_obj.set_color(self.c2)
         self.top_obj.draw()
-        if self.status == 'next':
-            self.mid_obj.set_color(GREEN)
-        else:
-            self.mid_obj.set_color(self.c2)
+        #if self.status == 'next': #TODO
+        #    self.mid_obj.set_color(GREEN)
+        self.mid_obj.set_color(self.c1)
         self.mid_obj.draw()
         self.bot_obj.set_color(self.c3)
         self.bot_obj.draw()
@@ -663,18 +662,23 @@ class Gate:
 
         # Graphics
         self.mid_obj = self.renderer.create_rectangle()
-        self.top_obj = copy.copy(self.mid_obj)
+        self.top_obj = self.renderer.create_rectangle()
+        self.bot_obj = self.renderer.create_rectangle()
 
-        self.mid_obj.scale((gate_w, gate_l, 1.))
-        self.top_obj.scale((gate_w, box_l, 1.))
-        self.bot_obj = copy.copy(self.top_obj)
-        self.top_obj.translate((0., h_gl, 0.))
-        self.bot_obj.translate((0., -h_gl, 0.))
+        self.mid_obj.translate((self.x, self.y, 0.))
+        self.top_obj.translate((self.x, self.y, 0.))
+        self.bot_obj.translate((self.x, self.y, 0.))
 
-        for x in self.top_obj, self.mid_obj, self.bot_obj:
-            x.scale((scale_factor, scale_factor, 1.))
-            x.rotate(w)
-            x.translate((self.x, self.y, 0))
+        self.mid_obj.rotate(w)
+        self.top_obj.rotate(w)
+        self.bot_obj.rotate(w)
+
+        self.top_obj.translate((0., h_gl * scale_factor, 0.))
+        self.bot_obj.translate((0., -h_gl * scale_factor, 0.))
+
+        self.mid_obj.scale((gate_w * scale_factor, gate_l * scale_factor, 1.))
+        self.top_obj.scale((gate_w * scale_factor, box_l * scale_factor, 1.))
+        self.bot_obj.scale((gate_w * scale_factor, box_l * scale_factor, 1.))
 
         #print("corners2: ", self.corners) # debug
 
@@ -773,8 +777,8 @@ class Surface:
         self.corners[:, 1] = self.env_height - self.corners[:, 1]
 
         self.deep = isdeep[0] == 'true'
-        self.deep_color = np.array([207., 69., 32.])
-        self.light_color = np.array([232., 146., 124.])
+        self.deep_color = np.array([207., 69., 32., 255.]) / 255.
+        self.light_color = np.array([232., 146., 124., 255.]) / 255.
         self.color = np.array(self.deep_color if self.deep else self.light_color)
 
         self.poly = geo.Polygon(self.corners)
@@ -829,8 +833,8 @@ class Needle:
 
         #self.needle_color = np.array([134., 200., 188.])
         # Make needle clearer
-        self.needle_color = (0., 0., 0., 1.)
-        self.thread_color = (167., 188., 214., 1.)
+        self.needle_color = np.array([0., 0., 0., 255.]) / 255.
+        self.thread_color = np.array([167., 188., 214., 255.]) / 255.
 
         # Save adjusted thread pointsmath.since we don't use them for anything
         self.thread_points = [(self.x, env_height - self.y)]
@@ -879,8 +883,6 @@ class Needle:
     def _draw_needle(self):
         old_model = self.obj.model
         self.obj.translate((self.x, self.y, 0.))
-        #self.obj.rotate(self.w)
-        #self.obj.translate((1000., 2., 0.))
         self.obj.rotate(float(self.w) + math.pi/2)
         self.obj.scale((self.scale * 0.7, self.scale, 1.))
         self.obj.draw()
