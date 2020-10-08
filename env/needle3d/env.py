@@ -16,6 +16,7 @@ from . import graphics
 GREEN = np.array([0., 255., 0., 255.]) / 255.
 
 two_pi = math.pi * 2
+pi_div2 = math.pi / 2
 
 VELOCITY = 50
 
@@ -258,7 +259,7 @@ class Environment(CommonEnv):
 
         for _ in range(self.state.ngates):
             gate = Gate(self.renderer, self.state.width, self.state.height)
-            gate.load(handle)
+            gate.load(handle, min(self.state.width, self.state.height))
             self.state.gates.append(gate)
 
         if self.state.ngates > 0:
@@ -288,6 +289,7 @@ class Environment(CommonEnv):
             overlaps = True
             while overlaps:
                 rand = np.random.rand(3)
+                rand[3] *= pi_div2
                 gate.from_params(*rand)
                 overlaps = False
                 for gate2 in self.state.gates:
@@ -602,7 +604,7 @@ class Gate:
         self.bot_obj.set_color(self.c3)
         self.bot_obj.draw()
 
-    def from_params(self, x, y, w):
+    def from_params(self, x, y, w, length=None, width=None):
         ''' @x, y, w: -3.14 to 0 to 3.14
             y is 0 at bottom, goes up
             x is 0 at left
@@ -610,10 +612,8 @@ class Gate:
         '''
         scale_factor = min(self.env_height, self.env_width)
 
-        w *= math.pi / 2
-
-        gate_l = 0.25
-        gate_w = gate_l / 3
+        gate_l = 0.25 if length is None else length
+        gate_w = gate_l / 3 if width is None else width
         box_l = gate_l / 5
 
         h_gw = gate_w / 2.
@@ -669,9 +669,9 @@ class Gate:
         self.top_obj.translate((self.x, self.y, 0.))
         self.bot_obj.translate((self.x, self.y, 0.))
 
-        self.mid_obj.rotate(w)
-        self.top_obj.rotate(w)
-        self.bot_obj.rotate(w)
+        self.mid_obj.rotate(w + pi_div2)
+        self.top_obj.rotate(w + pi_div2)
+        self.bot_obj.rotate(w + pi_div2)
 
         self.top_obj.translate((0., h_gl * scale_factor, 0.))
         self.bot_obj.translate((0., -h_gl * scale_factor, 0.))
@@ -688,19 +688,29 @@ class Gate:
     '''
     Load Gate from file at the current position.
     '''
-    def load(self, handle):
+    def load(self, handle, scale):
 
         pos = safe_load_line('GatePos', handle)
         cornersx = safe_load_line('GateX', handle)
+        cornersx = np.array([float(x) for x in cornersx])
         cornersy = safe_load_line('GateY', handle)
+        cornersy = np.array([float(x) for x in cornersy])
         topx = safe_load_line('TopX', handle)
         topy = safe_load_line('TopY', handle)
         bottomx = safe_load_line('BottomX', handle)
         bottomy = safe_load_line('BottomY', handle)
 
-        pos = [float(x) for x in pos]
-        self.from_params(*pos)
+        #from rl.utils import ForkablePdb
+        #ForkablePdb().set_trace()
 
+        diffx = np.array([cornersx[1] - cornersx[0], cornersx[2] - cornersx[1]])
+        diffy = np.array([cornersy[1] - cornersy[0], cornersy[2] - cornersy[1]])
+        diffs = np.sqrt(diffx * diffx + diffy * diffy)
+        length = np.max(diffs)
+        width = np.min(diffs)
+
+        pos = [float(x) for x in pos]
+        self.from_params(*pos, length=length/scale, width=width/scale)
 
         '''
         self.x = self.env_width * float(pos[0])
@@ -870,8 +880,8 @@ class Needle:
         scale = 0.03 * self.scale
 
         # Back of the needle
-        top_w = w - math.pi/2
-        bot_w = w + math.pi/2
+        top_w = w - pi_div2
+        bot_w = w + pi_div2
 
         top_x = x - scale * math.cos(top_w) + lcosw
         top_y = y - scale * math.sin(top_w) + lsinw
@@ -883,7 +893,7 @@ class Needle:
     def _draw_needle(self):
         old_model = self.obj.model
         self.obj.translate((self.x, self.y, 0.))
-        self.obj.rotate(float(self.w) + math.pi/2)
+        self.obj.rotate(float(self.w) + pi_div2)
         self.obj.scale((self.scale * 0.7, self.scale, 1.))
         self.obj.draw()
         self.obj.model = old_model
@@ -942,9 +952,9 @@ class Needle:
 
         self.w += dw
         if self.w > math.pi:
-            self.w -= 2 * math.pi
+            self.w -= two_pi
         elif self.w < -math.pi:
-            self.w += 2 * math.pi
+            self.w += two_pi
 
         oldx, oldy = self.x, self.y
         self.x += dx
