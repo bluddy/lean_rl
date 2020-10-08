@@ -610,15 +610,15 @@ class Gate:
             x is 0 at left
             w is 0 at left, pos going cw
         '''
-        scale_factor = min(self.env_height, self.env_width)
+        scale = min(self.env_height, self.env_width)
 
-        gate_l = 0.25 if length is None else length
-        gate_w = gate_l / 3 if width is None else width
-        box_l = gate_l / 5
+        gl = 0.25 if length is None else length
+        gw = gl / 3. if width is None else width
+        bl = gl / 10.
 
-        h_gw = gate_w / 2.
-        h_gl = gate_l / 2.
-        h_bl = box_l / 2.
+        h_gw = gw / 2.
+        h_gl = gl / 2.
+        h_bl = bl / 2.
         sinw = math.sin(w)
         cosw = math.cos(w)
 
@@ -673,12 +673,12 @@ class Gate:
         self.top_obj.rotate(w + pi_div2)
         self.bot_obj.rotate(w + pi_div2)
 
-        self.top_obj.translate((0., h_gl * scale_factor, 0.))
-        self.bot_obj.translate((0., -h_gl * scale_factor, 0.))
+        self.top_obj.translate((0., (h_gl + h_bl) * scale, 0.))
+        self.bot_obj.translate((0., (-h_gl - h_bl) * scale, 0.))
 
-        self.mid_obj.scale((gate_w * scale_factor, gate_l * scale_factor, 1.))
-        self.top_obj.scale((gate_w * scale_factor, box_l * scale_factor, 1.))
-        self.bot_obj.scale((gate_w * scale_factor, box_l * scale_factor, 1.))
+        self.mid_obj.scale((gw * scale, gl * scale, 1.))
+        self.top_obj.scale((gw * scale, bl * scale, 1.))
+        self.bot_obj.scale((gw * scale, bl * scale, 1.))
 
         #print("corners2: ", self.corners) # debug
 
