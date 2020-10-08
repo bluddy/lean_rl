@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-import os, sys, weakref, math, random, copy
+import os, math, random, copy
 from os.path import join as pjoin
 
 import numpy as np
 import shapely.geometry as geo
 import pygame as pg
-import OpenGL.GL as gl
-import OpenGL.GL.shaders as gl_shaders
-import glm
 import skimage.transform as transform
 
 from env.common_env import CommonEnv
