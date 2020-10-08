@@ -10,6 +10,8 @@ import skimage.transform as transform
 from env.common_env import CommonEnv
 from . import graphics
 
+import cProfile, pstats
+
 GREEN = np.array([0., 255., 0., 255.]) / 255.
 
 two_pi = math.pi * 2
@@ -32,6 +34,16 @@ def rgb2gray(rgb):
 
 class State:
     pass
+
+PROFILE=False
+
+if PROFILE:
+    g_pr = cProfile.Profile()
+
+def dump_stats():
+    ps = pstats.Stats(g_pr)
+    ps.sort_stats('calls', 'cumtime')
+    ps.print_stats()
 
 class Environment(CommonEnv):
     metadata = {'render.modes': ['image', 'state']}
@@ -83,6 +95,8 @@ class Environment(CommonEnv):
         self.state.filename = filename
         self.state.status = None
         self.extra_state_dim = 0
+
+        self.profile_time = 100
 
         self.renderer = None
 
@@ -205,7 +219,7 @@ class Environment(CommonEnv):
 
         # Scale if needed
         pixels = self.renderer.get_img()
-        frame = transform.resize(pixels, (self.img_dim, self.img_dim), anti_aliasing=True)
+        frame = transform.resize(pixels, (self.img_dim, self.img_dim), anti_aliasing=False)
         frame *= 255.0
         frame = frame.astype(np.uint8)
         return frame
@@ -421,6 +435,11 @@ class Environment(CommonEnv):
               * done
         """
 
+        if PROFILE:
+            if self.total_time % self.profile_time == 0 and self.total_time > 0:
+                dump_stats()
+            g_pr.enable()
+
         if self.done:
             print("[{}] In step: Need reset".format(self.server_num))
             return
@@ -476,6 +495,10 @@ class Environment(CommonEnv):
             "best_action": None,
             "extra_state": None
         }
+
+        if PROFILE:
+            g_pr.disable()
+
         return (st, reward, done, extra)
 
     def _surface_with_needle(self):
