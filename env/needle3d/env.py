@@ -700,7 +700,7 @@ class Gate:
         self.mid_obj.rotate(w + pi_div2)
         self.top_obj.rotate(w + pi_div2)
         self.bot_obj.rotate(w + pi_div2)
-        #self.highlight_obj.rotate(w + pi_div2)
+        self.highlight_obj.rotate(w + pi_div2)
 
         self.top_obj.translate((0., h_gl * scale, 0.))
         self.bot_obj.translate((0., -h_gl * scale, 0.))

@@ -147,7 +147,7 @@ class OpenGLRenderer(object):
             return
 
         gl.glEnable(gl.GL_DEPTH_TEST)
-        gl.glLineWidth(5)
+        gl.glLineWidth(10)
         gl.glClearColor(*bg_color, 1.)
 
         self.shaders = {}
