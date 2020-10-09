@@ -14,6 +14,13 @@ import cProfile, pstats
 
 GREEN = np.array([0., 255., 0., 255.]) / 255.
 
+'''
+For best results, use pillow-simd:
+
+$ pip uninstall pillow
+$ CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
+'''
+
 two_pi = math.pi * 2
 pi_div2 = math.pi / 2
 
