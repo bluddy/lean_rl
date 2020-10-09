@@ -5,7 +5,7 @@ from os.path import join as pjoin
 import numpy as np
 import shapely.geometry as geo
 import pygame as pg
-import skimage.transform as transform
+from PIL import Image
 
 from env.common_env import CommonEnv
 from . import graphics
@@ -217,11 +217,10 @@ class Environment(CommonEnv):
         #from rl.utils import ForkablePdb
         #ForkablePdb().set_trace()
 
-        # Scale if needed
         pixels = self.renderer.get_img()
-        frame = transform.resize(pixels, (self.img_dim, self.img_dim), anti_aliasing=False)
-        frame *= 255.0
-        frame = frame.astype(np.uint8)
+        frame = Image.fromarray(pixels)
+        frame = frame.resize((self.img_dim, self.img_dim), resample=Image.NEAREST)
+        frame = np.asarray(frame)
         return frame
 
     def render(self, save_path='./out', sim_save=False):
