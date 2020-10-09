@@ -75,10 +75,12 @@ class Shader(object):
     def set_proj(self, model_mat):
         gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
 
+LINES=0
+TRIANGLES=1
 
 class OpenGLObject(object):
     def __init__(self, renderer, shader, vao, buffers, vertices, indices,
-            color=(0.8, 0.5, 0.0, 1.0)):
+            color=(0.8, 0.5, 0.0, 1.0), primitive=TRIANGLES):
         self.shader=shader
         self.color=color
         self.vao=vao
@@ -87,6 +89,7 @@ class OpenGLObject(object):
         self.indices = indices
         self.renderer = weakref.ref(renderer)
         self.model = glm.mat4()
+        self.primitive = primitive
 
     def draw(self):
         self.shader.use(True)
@@ -99,7 +102,12 @@ class OpenGLObject(object):
         self.shader.set_proj(self.renderer().proj_mat)
 
         gl.glBindVertexArray(self.vao)
-        gl.glDrawElements(gl.GL_TRIANGLES, len(self.indices), gl.GL_UNSIGNED_INT, ctypes.c_void_p(0))
+        if self.primitive == TRIANGLES:
+            gl.glDrawElements(gl.GL_TRIANGLES, len(self.indices), gl.GL_UNSIGNED_INT, ctypes.c_void_p(0))
+        elif self.primitive == LINES:
+            gl.glDrawArrays(gl.GL_LINES, 0, len(self.vertices))
+        else:
+            raise ValueError("wrong primitive")
         gl.glBindVertexArray(0)
 
         self.shader.use(False)
@@ -139,6 +147,7 @@ class OpenGLRenderer(object):
             return
 
         gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glLineWidth(5)
         gl.glClearColor(*bg_color, 1.)
 
         self.shaders = {}
@@ -161,7 +170,7 @@ class OpenGLRenderer(object):
         img = np.frombuffer(img_buf, np.uint8).reshape(self.res[1], self.res[0], 3)[::-1]
         return img
 
-    def create_object(self, vertices, indices, shader='default'):
+    def create_object(self, vertices, indices=None, shader='default', primitive=TRIANGLES):
         # Create a new VAO (Vertex Array Object) and bind it
         vao = gl.glGenVertexArrays(1)
         gl.glBindVertexArray(vao)
@@ -175,10 +184,15 @@ class OpenGLRenderer(object):
         gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, 0, ctypes.c_void_p(0))
         gl.glEnableVertexAttribArray(0)
 
-        # Create buffer for indices
-        ebo = gl.glGenBuffers(1)
-        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo)
-        gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
+        buffers=[vbo, vao]
+
+        # Create buffer for indices if needed
+        if indices is not None:
+            ebo = gl.glGenBuffers(1)
+            gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, ebo)
+            gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, gl.GL_STATIC_DRAW)
+
+            buffers.insert(0, ebo)
 
         # Unbind the VAO first (Important)
         gl.glBindVertexArray(0)
@@ -189,8 +203,8 @@ class OpenGLRenderer(object):
 
         shader = self.shaders[shader]
 
-        return OpenGLObject(self, shader=shader, vao=vao, buffers=np.array([vbo, ebo, vao]),
-                vertices=vertices, indices=indices)
+        return OpenGLObject(self, shader=shader, vao=vao, buffers=np.array(buffers),
+                vertices=vertices, indices=indices, primitive=primitive)
 
     def create_rectangle(self):
         vertices = np.array(
@@ -215,6 +229,19 @@ class OpenGLRenderer(object):
                 [0, 1, 2],
                 dtype=np.uint32)
         return self.create_object(vertices, indices)
+
+    def create_wireframe_rec(self):
+        vertices = np.array(
+                [ 0.5, 0.5, 0.,
+                 -0.5, 0.5, 0.,
+                 -0.5, 0.5, 0.,
+                 -0.5, -0.5, 0.,
+                 -0.5, -0.5, 0.,
+                 0.5, -0.5, 0.,
+                 0.5, -0.5, 0.,
+                 0.5, 0.5, 0.
+                 ], np.float32)
+        return self.create_object(vertices, primitive=LINES)
 
     def start_draw(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)

@@ -617,12 +617,12 @@ class Gate:
     def draw(self):
         self.top_obj.set_color(self.c2)
         self.top_obj.draw()
-        #if self.status == 'next': #TODO
-        #    self.mid_obj.set_color(GREEN)
         self.mid_obj.set_color(self.c1)
         self.mid_obj.draw()
         self.bot_obj.set_color(self.c3)
         self.bot_obj.draw()
+        if self.status == 'next':
+            self.highlight_obj.draw()
 
     def from_params(self, x, y, w, length=None, width=None):
         ''' @x, y, w: -3.14 to 0 to 3.14
@@ -684,14 +684,17 @@ class Gate:
         self.mid_obj = self.renderer.create_rectangle()
         self.top_obj = self.renderer.create_rectangle()
         self.bot_obj = self.renderer.create_rectangle()
+        self.highlight_obj = self.renderer.create_wireframe_rec()
 
         self.mid_obj.translate((self.x, self.y, 0.))
         self.top_obj.translate((self.x, self.y, 0.))
         self.bot_obj.translate((self.x, self.y, 0.))
+        self.highlight_obj.translate((self.x, self.y, 0.))
 
         self.mid_obj.rotate(w + pi_div2)
         self.top_obj.rotate(w + pi_div2)
         self.bot_obj.rotate(w + pi_div2)
+        #self.highlight_obj.rotate(w + pi_div2)
 
         self.top_obj.translate((0., h_gl * scale, 0.))
         self.bot_obj.translate((0., -h_gl * scale, 0.))
@@ -699,6 +702,9 @@ class Gate:
         self.mid_obj.scale((gw * scale, (gl - bl) * scale, 1.))
         self.top_obj.scale((gw * scale, bl * scale, 1.))
         self.bot_obj.scale((gw * scale, bl * scale, 1.))
+        self.highlight_obj.scale((gw * 1.05 * scale, (gl + bl) * 1.05 * scale, 1.))
+
+        self.highlight_obj.set_color((0., 1.0, 0., 1.0)) # low alpha green
 
         #print("corners2: ", self.corners) # debug
 
