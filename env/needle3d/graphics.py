@@ -161,7 +161,7 @@ class OpenGLRenderer(object):
         self.proj_mat = glm.ortho(left, right, bottom, top, -0.1, 100.0)
 
     def set_perspective(self, fov=45):
-        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), 0.1, 100.)
+        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), -0.1, 100.)
 
     def set_camera_loc(self, vec):
         self.camera_loc = glm.vec3(vec)
