@@ -133,11 +133,10 @@ class OpenGLObject(object):
 class OpenGLRenderer(object):
     def __init__(self, res=(800,600), ortho=True, bg_color=(0., 0., 0.)):
         self.res = res
-        self.ortho = ortho
         self.camera_loc = glm.vec3(0.0, 0.0, 1.0)
         self.camera_lookat = glm.vec3(0.0, 0.0, 0.0)
         self.camera_up = glm.vec3(0.0, 1.0, 0.0)
-        self.view_mat = glm.lookAt(self.camera_loc, self.camera_lookat, self.camera_up)
+        self.update_view_matrix()
         self.proj_mat = glm.ortho(-1.0, 1.0, -1.0, 1.0, 0.1, 100.0)
 
         self.ctx =  EGLContext()
@@ -160,6 +159,21 @@ class OpenGLRenderer(object):
 
     def set_ortho(self, left, right, bottom, top):
         self.proj_mat = glm.ortho(left, right, bottom, top, -0.1, 100.0)
+
+    def set_perspective(self, fov=45):
+        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), 0.1, 100.)
+
+    def set_camera_loc(self, vec):
+        self.camera_loc = glm.vec3(vec)
+
+    def set_camera_lookat(self, vec):
+        self.camera_lookat = glm.vec3(vec)
+
+    def set_camera_up(self, vec):
+        self.camera_up = glm.vec3(vec)
+
+    def update_view_matrix(self):
+        self.view_mat = glm.lookAt(self.camera_loc, self.camera_lookat, self.camera_up)
 
     def translate_camera(self, vec):
         self.view_mat = glm.translate(self.view_mat, glm.vec3(vec))

@@ -52,8 +52,14 @@ def dump_stats():
     ps.sort_stats('calls', 'cumtime')
     ps.print_stats()
 
+ORTHO=0
+PERSPECTIVE=1
+
 class Environment(CommonEnv):
-    metadata = {'render.modes': ['image', 'state']}
+    metadata = {
+            'render.modes': ['image', 'state'],
+            'view.modes' : [ORTHO, PERSPECTIVE],
+            }
     background_color = np.array([99., 153., 174.]) / 255.
 
     def __init__(self, mode='image', stack_size=1,
@@ -64,6 +70,7 @@ class Environment(CommonEnv):
             scale_rewards=False,
             add_delay=0.,
             full_init=True,
+            view_mode=ORTHO,
             **kwargs):
 
         super(Environment, self).__init__(**kwargs)
@@ -76,7 +83,8 @@ class Environment(CommonEnv):
 
         self.t = 0
         self.max_steps = max_steps
-        self.mode = mode
+        self.render_mode = mode
+        self.view_mode = view_mode
         self.episode = 0
         self.total_time = 0
         self.render_ep_path = None
@@ -148,9 +156,13 @@ class Environment(CommonEnv):
                     res=(self.state.width, self.state.height),
                     bg_color=self.background_color
                     )
-            #self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
-            self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
-            #self.renderer.translate_camera((-self.state.width / 2., -self.state.height / 2., 0.))
+            if self.view_mode == ORTHO:
+                self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
+            elif self.view_mode == PERSPECTIVE:
+                self.renderer.set_perspective()
+                self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 5.))
+                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
+                self.renderer.update_view_matrix()
 
         # Init env
         if self.random_env:
@@ -196,14 +208,14 @@ class Environment(CommonEnv):
         if self.render_ep_path is not None:
             self.render(self.render_ep_path, sim_save=False)
 
-        if self.mode in ['state', 'mixed']:
+        if self.render_mode in ['state', 'mixed']:
             st = self._get_env_state().reshape((1,-1))
 
-        if self.mode == 'image':
+        if self.render_mode == 'image':
             cur_state = ob
-        elif self.mode == 'state':
+        elif self.render_mode == 'state':
             cur_state = st
-        elif self.mode == 'mixed':
+        elif self.render_mode == 'mixed':
             cur_state = (ob, st)
 
         extra = {"action":None, "save_mode":self.get_save_mode(), "success":False}
@@ -476,7 +488,7 @@ class Environment(CommonEnv):
         stack = [x.transpose((2,0,1)) for x in self.stack]
         ob = np.array(stack)
 
-        if self.mode in ['state', 'mixed']:
+        if self.render_mode in ['state', 'mixed']:
             """ else from state to action"""
             cur_state = self._get_env_state().reshape((1,-1))
 
@@ -487,11 +499,11 @@ class Environment(CommonEnv):
             self.render(self.render_ep_path, sim_save=False)
 
         st = None
-        if self.mode == 'image':
+        if self.render_mode == 'image':
             st = ob
-        elif self.mode == 'state':
+        elif self.render_mode == 'state':
             st = cur_state
-        elif self.mode == 'mixed':
+        elif self.render_mode == 'mixed':
             st = (ob, cur_state)
 
         extra = {
