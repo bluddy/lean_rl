@@ -174,9 +174,9 @@ class Environment(CommonEnv):
                     self.renderer.update_view_matrix()
                 elif self.camera_loc == BOTTOM:
                     self.renderer.set_perspective()
-                    self.renderer.set_camera_loc((self.state.width/2., 0., 100.))
-                    self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
                     self.renderer.set_camera_up((0., 0., 1.))
+                    self.renderer.set_camera_loc((self.state.width/2., -300., 300.))
+                    self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
                     self.renderer.update_view_matrix()
             else:
                 raise ValueError("Unknown view_mode")
