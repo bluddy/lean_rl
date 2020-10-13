@@ -52,15 +52,21 @@ def dump_stats():
     ps.sort_stats('calls', 'cumtime')
     ps.print_stats()
 
+# Projection types
 ORTHO=0
 PERSPECTIVE=1
+
+# Camera positions
+TOP_DOWN=0
+BOTTOM=1
 
 class Environment(CommonEnv):
     metadata = {
             'render.modes': ['image', 'state'],
             'view.modes' : [ORTHO, PERSPECTIVE],
+            'camera.pos' : [TOP_DOWN, BOTTOM],
             }
-    background_color = np.array([99., 153., 174.]) / 255.
+    background_color = np.array([99., 153., 174., 255.]) / 255.
 
     def __init__(self, mode='image', stack_size=1,
             log_file=None, filename=None, max_steps=150, img_dim=224,
@@ -70,7 +76,8 @@ class Environment(CommonEnv):
             scale_rewards=False,
             add_delay=0.,
             full_init=True,
-            view_mode=ORTHO,
+            view_mode=PERSPECTIVE,
+            camera_loc=BOTTOM,
             **kwargs):
 
         super(Environment, self).__init__(**kwargs)
@@ -85,6 +92,7 @@ class Environment(CommonEnv):
         self.max_steps = max_steps
         self.render_mode = mode
         self.view_mode = view_mode
+        self.camera_loc = camera_loc
         self.episode = 0
         self.total_time = 0
         self.render_ep_path = None
@@ -154,15 +162,24 @@ class Environment(CommonEnv):
            self.state.height != self.renderer.get_height():
             self.renderer = graphics.OpenGLRenderer(
                     res=(self.state.width, self.state.height),
-                    bg_color=self.background_color
+                    #bg_color=self.background_color
                     )
             if self.view_mode == ORTHO:
                 self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
             elif self.view_mode == PERSPECTIVE:
-                self.renderer.set_perspective()
-                self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 5.))
-                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
-                self.renderer.update_view_matrix()
+                if self.camera_loc == TOP_DOWN:
+                    self.renderer.set_perspective()
+                    self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 1000.))
+                    self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
+                    self.renderer.update_view_matrix()
+                elif self.camera_loc == BOTTOM:
+                    self.renderer.set_perspective()
+                    self.renderer.set_camera_loc((self.state.width/2., 0., 100.))
+                    self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
+                    self.renderer.set_camera_up((0., 0., 1.))
+                    self.renderer.update_view_matrix()
+            else:
+                raise ValueError("Unknown view_mode")
 
         # Init env
         if self.random_env:
@@ -227,6 +244,8 @@ class Environment(CommonEnv):
         #for surface in self.state.surfaces:
             #surface.draw()
 
+        self.background.draw()
+
         for gate in self.state.gates:
             gate.draw()
 
@@ -282,6 +301,8 @@ class Environment(CommonEnv):
         self.state.width = int(D[0])
         #print(" - width=%d, height=%d"%(self.width, self.height))
 
+        self.create_backround()
+
         D = safe_load_line('Gates', handle)
         self.state.ngates = int(D[0])
         #print(" - num gates=%d"%(self.ngates))
@@ -306,9 +327,17 @@ class Environment(CommonEnv):
             s.load(handle)
             self.state.surfaces.append(s)
 
+    def create_backround(self):
+        self.background = self.renderer.create_rectangle()
+        self.background.set_color(self.background_color)
+        self.background.translate((self.state.width/2., self.state.height/2., -0.5))
+        self.background.scale((self.state.width, self.state.height, 1.))
+
     def create_random_env(self):
         self.state.width = 1920
         self.state.height = 1080
+
+        self.create_background()
 
         self.state.ngates = random.randint(self.min_gates, self.max_gates)
 

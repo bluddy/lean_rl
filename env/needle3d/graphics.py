@@ -166,6 +166,12 @@ class OpenGLRenderer(object):
     def set_camera_loc(self, vec):
         self.camera_loc = glm.vec3(vec)
 
+    def set_camera_up(self, vec):
+        self.camera_up = glm.vec3(vec)
+
+    def move_camera(self, vec):
+        self.camera_loc += glm.vec3(vec)
+
     def set_camera_lookat(self, vec):
         self.camera_lookat = glm.vec3(vec)
 
