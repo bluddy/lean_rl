@@ -52,19 +52,10 @@ def dump_stats():
     ps.sort_stats('calls', 'cumtime')
     ps.print_stats()
 
-# Projection types
-ORTHO=0
-PERSPECTIVE=1
-
-# Camera positions
-TOP_DOWN=0
-BOTTOM=1
-
 class Environment(CommonEnv):
     metadata = {
             'render.modes': ['image', 'state'],
-            'view.modes' : [ORTHO, PERSPECTIVE],
-            'camera.pos' : [TOP_DOWN, BOTTOM],
+            'camera.modes' : ['ortho', 'topdown', 'bottom'],
             }
     background_color = np.array([99., 153., 174., 255.]) / 255.
 
@@ -76,8 +67,7 @@ class Environment(CommonEnv):
             scale_rewards=False,
             add_delay=0.,
             full_init=True,
-            view_mode=PERSPECTIVE,
-            camera_loc=BOTTOM,
+            camera='ortho',
             **kwargs):
 
         super(Environment, self).__init__(**kwargs)
@@ -91,8 +81,7 @@ class Environment(CommonEnv):
         self.t = 0
         self.max_steps = max_steps
         self.render_mode = mode
-        self.view_mode = view_mode
-        self.camera_loc = camera_loc
+        self.camera_mode = camera
         self.episode = 0
         self.total_time = 0
         self.render_ep_path = None
@@ -164,22 +153,21 @@ class Environment(CommonEnv):
                     res=(self.state.width, self.state.height),
                     #bg_color=self.background_color
                     )
-            if self.view_mode == ORTHO:
+            if self.camera_mode == 'ortho':
                 self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
-            elif self.view_mode == PERSPECTIVE:
-                if self.camera_loc == TOP_DOWN:
-                    self.renderer.set_perspective()
-                    self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 1000.))
-                    self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
-                    self.renderer.update_view_matrix()
-                elif self.camera_loc == BOTTOM:
-                    self.renderer.set_perspective()
-                    self.renderer.set_camera_up((0., 0., 1.))
-                    self.renderer.set_camera_loc((self.state.width/2., -300., 300.))
-                    self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
-                    self.renderer.update_view_matrix()
+            elif self.camera_mode == 'topdown':
+                self.renderer.set_perspective()
+                self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 1000.))
+                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
+                self.renderer.update_view_matrix()
+            elif self.camera_mode == 'bottom':
+                self.renderer.set_perspective()
+                self.renderer.set_camera_up((0., 0., 1.))
+                self.renderer.set_camera_loc((self.state.width/2., -300., 300.))
+                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
+                self.renderer.update_view_matrix()
             else:
-                raise ValueError("Unknown view_mode")
+                raise ValueError("Unknown camera_mode" + self.camera_mode)
 
         # Init env
         if self.random_env:

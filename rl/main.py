@@ -108,24 +108,18 @@ def run(args):
         from env.needle3d.env import Environment
         env_dir = pjoin(cur_dir, '..', 'env', 'needle', 'data')
         env_file = pjoin(env_dir, 'environment_' + args.task + '.txt')
+
         env_name = 'rand' if args.random_env else args.task
 
+        basename = args.env + '_' + env_name + '_'
+        basename += args.camera + '_'
 
-        basename = '{}_{}_{}_{}'.format(
-            args.env, env_name, args.policy, args.mode[:2])
         if args.random_needle:
             basename += '_r'
 
-        suffix = ''
-        if args.random_env or args.random_needle:
-            suffix += '_'
-        if args.random_env:
-            suffix += 'r'
-        if args.random_needle:
-            suffix += 'n'
+        save_mode_path = os.path.join('saved_data', basename)
 
-        save_mode_path = os.path.join('saved_data', '{}_{}{}'.format(
-            args.env, env_name, suffix))
+        basename += '_' + args.policy + '_' + args.mode[:3]
 
     elif args.env == 'sim':
         from env.sim_env.env import Environment
@@ -263,6 +257,7 @@ def run(args):
                 save_mode_path=save_mode_path,
                 save_mode='',
                 full_init=not dummy_env,
+                camera=args.camera,
                 )
 
         elif args.env == 'sim':
@@ -1128,6 +1123,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--add-delay', default=0., type=float,
             help='Add delay to fast environments')
+
+    parser.add_argument('--camera', default='ortho',
+            help='Angle of camera for needle3d (ortho/topdown/bottom)')
 
     args = parser.parse_args()
 
