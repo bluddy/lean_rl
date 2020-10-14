@@ -593,12 +593,13 @@ def run(args):
                 print("Greedy={}, std={}".format(epsilon_greedy, noise_std))
 
             # Block and flush result if needed
+            test_envs = envs if args.eval_envs == 0 else envs[:args.eval_envs]
             new_reward = evaluate_policy(
                 csv_wr, csv_f, log_f, tb_writer, logdir,
                 total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
                 total_success2,
                 temp_loss, temp_q_avg, temp_q_max,
-                envs, args, policy, g, test_path)
+                test_envs, args, policy, g, test_path)
             g.reload_since_eval = False
 
             # Set save mode randomly for the environments
@@ -947,8 +948,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--seed", default=1e6, type=int,
         help='Sets Gym, PyTorch and Numpy seeds')
-    parser.add_argument("--eval-freq", default=10000, type=int, # 200
+    parser.add_argument("--eval-freq", default=2000, type=int, # 200
         help='How often (time steps) we evaluate')
+    parser.add_argument('--eval-envs', default=0, type=int,
+            help='How many environments to test with (0 is all)')
     parser.add_argument("--train-freq", default=100, type=int,
         help='Timesteps to explore before applying learning')
     parser.add_argument("--render-freq", default=100, type=int,
@@ -1109,6 +1112,7 @@ if __name__ == "__main__":
     #-- Test-cnn for aux
     parser.add_argument('--eval-loops', default=100, type=int,
             help='How many times to test over data in replay buffer')
+
 
     #-- find stats of data
     parser.add_argument('--stat-freq', default=0, type=int,

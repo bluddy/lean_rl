@@ -20,3 +20,6 @@ python -m rl.main --env sim --procs 4 --lr 1e-3 --capacity 5e4 --task suture --m
 
 # Graph with info
 ../../../rl/graph.py --info make.csv --div 50 --tmax 2000000
+
+# Needle3d with ortho cam
+python3 -m rl.main --env needle3d --procs 25 --lr 1e-4 --mode image --opt sgd --eval-envs 10 --camera ortho
