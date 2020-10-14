@@ -112,14 +112,14 @@ def run(args):
         env_name = 'rand' if args.random_env else args.task
 
         basename = args.env + '_' + env_name + '_'
-        basename += args.camera + '_'
+        basename += args.camera
 
         if args.random_needle:
             basename += '_r'
 
         save_mode_path = os.path.join('saved_data', basename)
 
-        basename += '_' + args.policy + '_' + args.mode[:3]
+        basename += '_' + args.policy + '_' + args.mode
 
     elif args.env == 'sim':
         from env.sim_env.env import Environment
