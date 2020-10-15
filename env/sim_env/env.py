@@ -525,30 +525,28 @@ class Environment(common_env.CommonEnv):
 
         w, h = self._get_width_height(hires=True, stereo=True, depth=False)
         # Transform Converts to float64 and 0 to 1.0
-        self.image = transform.resize(image, (h,w), anti_aliasing=True)
+        self.image = transform.resize(image, (h,w), anti_aliasing=False)
         self.image *= 255.0
         self.image = self.image.astype(np.uint8)
 
-        if self.depthmap_mode:
+        # Crop depth to just the left image
+        x = [0., 0.5]
+        cropx = [int(self.resolution[0] * x[0]), int(self.resolution[0] * x[1]) + 1]
+        depth = depth[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
 
-            # Crop depth to just the left image
-            x = [0., 0.5]
-            cropx = [int(self.resolution[0] * x[0]), int(self.resolution[0] * x[1]) + 1]
-            depth = depth[cropy[0]:cropy[1], cropx[0]:cropx[1], :]
+        # no interpolation on depth
+        w, h = self._get_width_height(hires=True, stereo=False, depth=False)
+        # Transform converts to float64
+        depth = transform.resize(depth, (h,w), anti_aliasing=False)
+        depth *= e24 # max value
+        # Separate out components
+        depth = depth.astype(int).squeeze(-1)
+        depth2 = np.zeros((h, w, 3), dtype=np.uint8)
+        depth2[:,:,0] = depth & 0xFF
+        depth2[:,:,1] = (depth >> 8) & 0xFF
+        depth2[:,:,2] = (depth >> 16) & 0xFF
 
-            # no interpolation on depth
-            w, h = self._get_width_height(hires=True, stereo=False, depth=False)
-            # Transform converts to float64
-            depth = transform.resize(depth, (h,w), anti_aliasing=True)
-            depth *= e24 # max value
-            # Separate out components
-            depth = depth.astype(int).squeeze(-1)
-            depth2 = np.zeros((h, w, 3), dtype=np.uint8)
-            depth2[:,:,0] = depth & 0xFF
-            depth2[:,:,1] = (depth >> 8) & 0xFF
-            depth2[:,:,2] = (depth >> 16) & 0xFF
-
-            self.image = np.concatenate([self.image, depth2], axis=1)
+        self.image = np.concatenate([self.image, depth2], axis=1)
 
         event = self.last_event
         self.last_event = None
@@ -612,7 +610,7 @@ class Environment(common_env.CommonEnv):
         image = self.image
         # Resize to non-hires
         w, h = self._get_width_height(hires=False, stereo=True, depth=True)
-        image = transform.resize(self.image, (h,w), anti_aliasing=True)
+        image = transform.resize(self.image, (h,w), anti_aliasing=False)
         image *= 255.0
         image = image.astype(np.uint8)
 
