@@ -146,7 +146,10 @@ class CommonEnv(object):
 
         if self._sm.mode == 'record':
             if not os.path.exists(self._sm.path):
-                os.makedirs(self._sm.path)
+                try:
+                    os.makedirs(self._sm.path)
+                except e:
+                    pass
 
             self._sm.states = []
 
