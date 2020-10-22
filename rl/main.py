@@ -960,7 +960,7 @@ if __name__ == "__main__":
         help='How often (timesteps) we save the images in a saved episode')
     parser.add_argument("--max-timesteps", default=2e7, type=float,
         help='Max time steps to run environment for')
-    parser.add_argument("--learning-start", default=0, type=int,
+    parser.add_argument("--learning-start", default=None, type=int,
         help='Timesteps before learning')
 
     #--- Exploration Noise
@@ -971,8 +971,6 @@ if __name__ == "__main__":
         help='OU sigma level: how much to add per step') # was 0.25
     parser.add_argument("--ou-theta", default=0.15, type=float,
         help='OU theta: how much to reuse current levels')
-
-
 
     parser.add_argument("--ep-greedy", default=False,
         action='store_true',
@@ -1153,6 +1151,13 @@ if __name__ == "__main__":
 
     if args.env == 'sim' and args.mode != 'state' and not args.no_aux:
         args.aux = 'state'
+
+    # If we're loading, fill up the buffer before we start learning
+    if args.learning_start is None:
+        if args.load_last:
+            args.learning_start = args.capacity
+        else:
+            args.learning_start = 0 # default value normally
 
     assert not (args.depthmap_mode and args.stereo_mode)
     assert (args.mode in ['image', 'mixed', 'state'])
