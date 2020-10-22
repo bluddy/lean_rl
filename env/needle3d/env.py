@@ -526,7 +526,7 @@ class Environment(CommonEnv):
         extra = {
             "action": action_orig,
             "save_mode": self.get_save_mode(),
-            "success": self._get_next_gate_status() == None,
+            "success": self._get_next_gate_status() == 'done',
             "best_action": None,
             "extra_state": None
         }
