@@ -29,7 +29,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     if info_file is not None:
         files, labels = load_info_file(info_file)
 
-    # Load files
+    # Load files. Data is organized by types of data (e.g. different expeiments)
     data = []
     # Get lowest max t among files
     if not tmax:
@@ -74,6 +74,11 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
             "s2_high":s2_high,
         })
 
+    if max_value:
+        for d in data:
+            for s in ['r', 's1', 's2', 'r_avg', 's1_avg', 's2_avg']:
+                utils.set_max_value_over_time(d[s])
+
     if labels is None:
         labels = [str(x) for x in range(len(files))]
     use_legend = len(files) > 1
@@ -111,7 +116,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     # Plot Success
     fig = plt.figure()
     for d, label in zip(data, labels):
-        plt.plot(d["t"], d["s1"] + d["s2"], label=label)
+        plt.plot(d["t"], d["s1"], label=label)
     plt.xlabel('steps')
     plt.ylabel('success')
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
@@ -122,7 +127,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     fig = plt.figure()
     for d, label in zip(data, labels):
         length = len(d["s1_avg"])
-        plt.plot(d["t"][:length], d["s1_avg"] + d["s2_avg"], label=label)
+        plt.plot(d["t"][:length], d["s1_avg"], label=label)
     plt.xlabel('steps')
     plt.ylabel('success')
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
