@@ -47,6 +47,17 @@ def get_stats(data, div=50):
     upper = avg + 3 * std
     return avg, var, lower, upper
 
+def set_max_value_over_time(data):
+    '''
+    Track the max value over time and set it
+    '''
+    max = data[0]
+    for i, x in enumerate(data):
+        if x < max:
+            data[i] = max
+        else:
+            max = x
+
 
 class RateControl(object):
     ''' Stats for rate

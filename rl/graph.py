@@ -25,7 +25,7 @@ def load_info_file(file):
     return files, labels
 
 # CSV: t, r, q_avg, q_max, loss_avg, best_avg_r, last_learn_t, last_eval_t, succ1_pct, succ2_pct
-def load_files(files, labels=None, tmax=None, div=50, info_file=None):
+def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=False):
     if info_file is not None:
         files, labels = load_info_file(info_file)
 
@@ -159,7 +159,9 @@ if __name__ == "__main__":
     parser.add_argument('--info', default=None, help='Info for labels, files')
     parser.add_argument('--tmax', default=None, type=int, help='Max time')
     parser.add_argument('--div', default=10, type=int, help='Mean points in graph')
+    parser.add_argument('--max-value', default=False, action='store_true',
+            help='Graph the max values achieved (e.g. for non-random envs)')
     args = parser.parse_args()
 
-    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels, info_file=args.info)
+    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels, info_file=args.info, max_value=args.max_value)
 

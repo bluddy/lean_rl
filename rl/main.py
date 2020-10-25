@@ -1124,7 +1124,7 @@ if __name__ == "__main__":
             help='Dynamic % playing to aim for')
 
     parser.add_argument('--add-delay', default=0., type=float,
-            help='Add delay to fast environments')
+            help='Add delay to fast environments, in seconds')
 
     parser.add_argument('--camera', default='ortho',
             help='Angle of camera for needle3d (ortho/topdown/bottom)')
