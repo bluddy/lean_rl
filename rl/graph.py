@@ -50,6 +50,8 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
                 t = int(line[0])
                 if t > tmax:
                     break
+                if line[0][0] == '#':
+                    continue
                 ts.append(t)
                 rs.append(float(line[1]))
                 s1.append(float(line[8]))
@@ -75,8 +77,15 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
         })
 
     if max_value:
+        # Check if we need to append last values at tmax
+        do_append = False
         for d in data:
+            if d['t'][-1] < tmax:
+                d['t'] = np.append(d['t'], tmax)
+                do_append = True
             for s in ['r', 's1', 's2', 'r_avg', 's1_avg', 's2_avg']:
+                if do_append:
+                    d[s] = np.append(d[s], 0.)
                 utils.set_max_value_over_time(d[s])
 
     if labels is None:

@@ -49,7 +49,7 @@ def get_stats(data, div=50):
 
 def set_max_value_over_time(data):
     '''
-    Track the max value over time and set it
+    Track the max value over time and copy to a new array
     '''
     max = data[0]
     for i, x in enumerate(data):
