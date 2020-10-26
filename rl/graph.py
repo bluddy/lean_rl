@@ -20,6 +20,8 @@ def load_info_file(file):
         for line in csv_f:
             if len(line) == 0:
                 break
+            if line[0][0] == '#':
+                continue
             files.append(line[0])
             labels.append(line[1])
     return files, labels
@@ -50,8 +52,6 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
                 t = int(line[0])
                 if t > tmax:
                     break
-                if line[0][0] == '#':
-                    continue
                 ts.append(t)
                 rs.append(float(line[1]))
                 s1.append(float(line[8]))
