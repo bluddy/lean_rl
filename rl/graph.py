@@ -27,22 +27,29 @@ def load_info_file(file):
     return files, labels
 
 # CSV: t, r, q_avg, q_max, loss_avg, best_avg_r, last_learn_t, last_eval_t, succ1_pct, succ2_pct
-def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=False):
+def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=False, font=18):
+    matplotlib.rcParams.update({'font.size':font})
+
+
     if info_file is not None:
         files, labels = load_info_file(info_file)
 
     # Load files. Data is organized by types of data (e.g. different expeiments)
     data = []
-    # Get lowest max t among files
+    # Get lowest/highest max t among files
     if not tmax:
-        tmax = sys.maxsize
+        tmax = 0 if max_value else sys.maxsize
         for f in files:
             with open(f, 'r') as f:
                 csv_f = csv.reader(f, delimiter=',')
                 for line in csv_f:
                     t = int(line[0])
-            if t < tmax:
-                tmax = t
+            if max_value:
+                if t > tmax:
+                    tmax = t
+            else:
+                if t < tmax:
+                    tmax = t
 
     for f in files:
         ts, rs, s1, s2 = [], [], [], []
@@ -81,12 +88,15 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
         do_append = False
         for d in data:
             if d['t'][-1] < tmax:
-                d['t'] = np.append(d['t'], tmax)
                 do_append = True
-            for s in ['r', 's1', 's2', 'r_avg', 's1_avg', 's2_avg']:
+            for s in d.keys():
+                if s == 't':
+                    continue
                 if do_append:
-                    d[s] = np.append(d[s], 0.)
+                    d[s] = np.append(d[s], 0)
                 utils.set_max_value_over_time(d[s])
+            if do_append:
+                d['t'] = np.append(d['t'], tmax)
 
     if labels is None:
         labels = [str(x) for x in range(len(files))]
@@ -108,7 +118,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     if use_legend:
         plt.legend(frameon=True)
-    plt.savefig('rewards_avg.png')
+    plt.savefig('rewards_avg.png', bbox_inches = "tight")
 
     # Plot R
     fig = plt.figure()
@@ -120,7 +130,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     if use_legend:
         plt.legend(frameon=True)
-    plt.savefig('rewards.png')
+    plt.savefig('rewards.png', bbox_inches = "tight")
 
     # Plot Success
     fig = plt.figure()
@@ -130,7 +140,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     plt.ylabel('success')
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     plt.legend(frameon=True)
-    plt.savefig('success1.png')
+    plt.savefig('success1.png', bbox_inches = "tight")
 
     # Plot Average Success
     fig = plt.figure()
@@ -141,7 +151,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
     plt.ylabel('success')
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     plt.legend(frameon=True)
-    plt.savefig('success1_avg.png')
+    plt.savefig('success1_avg.png', bbox_inches = "tight")
 
     if use_succ2:
         # Plot Success
@@ -153,7 +163,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
         plt.ylabel('success')
         plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
         plt.legend(frameon=True)
-        plt.savefig('success2.png')
+        plt.savefig('success2.png', bbox_inches = "tight")
 
         # Plot Average Success
         fig = plt.figure()
@@ -164,7 +174,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
         plt.ylabel('success')
         plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
         plt.legend(frameon=True)
-        plt.savefig('success2_avg.png')
+        plt.savefig('success2_avg.png', bbox_inches = "tight")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -175,7 +185,9 @@ if __name__ == "__main__":
     parser.add_argument('--div', default=10, type=int, help='Mean points in graph')
     parser.add_argument('--max-value', default=False, action='store_true',
             help='Graph the max values achieved (e.g. for non-random envs)')
+    parser.add_argument('--font', default=18, type=int,
+            help='Set font size')
     args = parser.parse_args()
 
-    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels, info_file=args.info, max_value=args.max_value)
+    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels, info_file=args.info, max_value=args.max_value, font=args.font)
 
