@@ -27,37 +27,16 @@ def load_info_file(file):
     return files, labels
 
 # CSV: t, r, q_avg, q_max, loss_avg, best_avg_r, last_learn_t, last_eval_t, succ1_pct, succ2_pct
-def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=False, font=18):
-    matplotlib.rcParams.update({'font.size':font})
-
-
-    if info_file is not None:
-        files, labels = load_info_file(info_file)
-
+def load_files(files, tmax=None, div=50):
     # Load files. Data is organized by types of data (e.g. different expeiments)
     data = []
-    # Get lowest/highest max t among files
-    if not tmax:
-        tmax = 0 if max_value else sys.maxsize
-        for f in files:
-            with open(f, 'r') as f:
-                csv_f = csv.reader(f, delimiter=',')
-                for line in csv_f:
-                    t = int(line[0])
-            if max_value:
-                if t > tmax:
-                    tmax = t
-            else:
-                if t < tmax:
-                    tmax = t
-
     for f in files:
         ts, rs, s1, s2 = [], [], [], []
         with open(f, 'r') as f:
             csv_f = csv.reader(f, delimiter=',')
             for line in csv_f:
                 t = int(line[0])
-                if t > tmax:
+                if tmax and t > tmax:
                     break
                 ts.append(t)
                 rs.append(float(line[1]))
@@ -82,6 +61,32 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
             "s1_high":s1_high,
             "s2_high":s2_high,
         })
+    return data
+
+# CSV: t, r, q_avg, q_max, loss_avg, best_avg_r, last_learn_t, last_eval_t, succ1_pct, succ2_pct
+def graph_results(files, labels=None, tmax=None, div=50, info_file=None, max_value=False, font=18):
+
+    matplotlib.rcParams.update({'font.size':font})
+
+    if info_file is not None:
+        files, labels = load_info_file(info_file)
+
+    # Get lowest/highest max t among files
+    if not tmax:
+        tmax = 0 if max_value else sys.maxsize
+        for f in files:
+            with open(f, 'r') as f:
+                csv_f = csv.reader(f, delimiter=',')
+                for line in csv_f:
+                    t = int(line[0])
+            if max_value:
+                if t > tmax:
+                    tmax = t
+            else:
+                if t < tmax:
+                    tmax = t
+
+    data = load_files(files, tmax, div)
 
     if max_value:
         # Check if we need to append last values at tmax
@@ -100,6 +105,7 @@ def load_files(files, labels=None, tmax=None, div=50, info_file=None, max_value=
 
     if labels is None:
         labels = [str(x) for x in range(len(files))]
+
     use_legend = len(files) > 1
 
     use_succ2 = False
@@ -189,5 +195,6 @@ if __name__ == "__main__":
             help='Set font size')
     args = parser.parse_args()
 
-    load_files(args.files, tmax=args.tmax, div=args.div, labels=args.labels, info_file=args.info, max_value=args.max_value, font=args.font)
+    graph_results(args.files, tmax=args.tmax, div=args.div, labels=args.labels,
+            info_file=args.info, max_value=args.max_value, font=args.font)
 
