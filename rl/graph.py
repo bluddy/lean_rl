@@ -156,6 +156,7 @@ def graph_results(files, labels=None, tmax=None, div=50, info_file=None, max_val
     plt.xlabel('steps')
     plt.ylabel('success')
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
+    #plt.legend(frameon=True, loc="lower right")
     plt.legend(frameon=True)
     plt.savefig('success1_avg.png', bbox_inches = "tight")
 
@@ -181,6 +182,12 @@ def graph_results(files, labels=None, tmax=None, div=50, info_file=None, max_val
         plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
         plt.legend(frameon=True)
         plt.savefig('success2_avg.png', bbox_inches = "tight")
+
+def time_graph():
+    labels = ['5ms', '10ms', '20ms', '40ms', '100ms']
+    play_times = [4.26, 4.15, 6, 6, 11.11]
+    sim_times = [11.23, 12.33, 11.6, 17.16, 100]
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
