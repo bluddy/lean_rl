@@ -57,7 +57,7 @@ def run(args):
     pattern = '_img*.png'
     filelist = glob.glob(pattern)
     if len(filelist) > 0:
-        cmd = 'cat {} | ffmpeg -f image2pipe -r 25 -vcodec png -i - -f lavfi -i anullsrc -vcodec h264 -preset veryslow -shortest {}'.format(pattern, out_file)
+        cmd = 'cat {} | ffmpeg -f image2pipe -r 30 -vcodec png -i - -f lavfi -i anullsrc -vcodec h264 -preset ultrafast -pix_fmt yuv420p -g 1 -crf 1 -shortest {}'.format(pattern, out_file)
         os.system(cmd)
         #cmd = 'ffmpeg -i {} -f lavfi -i anullsrc -c:v copy -c:a aac -shortest {}'.format(out_file2, out_file)
         for f in filelist:
@@ -70,8 +70,8 @@ if __name__ == '__main__':
     parser.add_argument('--out', help='mono|stereo|depth', default='mono')
     parser.add_argument('--size', default=448, type=int)
     parser.add_argument('--width-mult', type=int, default=3)
-    parser.add_argument('--out-width', type=int, default=720)
-    parser.add_argument('--out-height', type=int, default=486)
+    parser.add_argument('--out-width', type=int, default=1280)
+    parser.add_argument('--out-height', type=int, default=720)
     args = parser.parse_args()
     run(args)
 
