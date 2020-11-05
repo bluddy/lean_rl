@@ -34,7 +34,7 @@ class CommonEnv(object):
             infix = '_{:07d}'.format(self._sm.ep if sim_save else self.episode)
         suffix = ''
         if use_t:
-            suffix = '_{:03d}'.format(self.t)
+            suffix = '_{:05d}'.format(self.t)
         return '{:02d}{}{}'.format(self.server_num, infix, suffix)
 
     def _step_play(self):

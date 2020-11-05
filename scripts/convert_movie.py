@@ -6,6 +6,8 @@ import os
 import argparse
 import numpy as np
 import subprocess as sp
+from PIL import Image
+import glob
 
 def run(args):
     height = args.size
@@ -30,46 +32,25 @@ def run(args):
         images.append(image)
     pipe.stdout.close()
 
-    # Reshape
-    images2 = []
+    # Reshape and save images
     if args.out == 'mono':
         tgt_width = height
-        for image in images:
+        for i, image in enumerate(images):
             img = image[:,0:tgt_width,:]
-            images2.append(img)
+            img = Image.fromarray(img)
+            img.save('_img{:05d}.png'.format(i))
 
-    tgt_file = os.path.splitext(args.file)[0] + '_out.mp4' 
-    if os.path.isfile(tgt_file):
-        os.remove(tgt_file)
+    out_file = os.path.splitext(args.file)[0] + '_out.mp4'
+    if os.path.isfile(out_file):
+        os.remove(out_file)
 
-
-    # Dump file
-    command = [ 'ffmpeg',
-        #'-loglevel', '8',
-        '-s', '{}x{}'.format(tgt_width, height),
-        '-f', 'image2pipe',
-        '-r', '5',
-        '-pix_fmt', 'rgb24',
-        '-vcodec', 'rawvideo',
-        '-i', '-',
-        #'-an',
-        '-vcodec', 'libx264',
-        '-preset', 'veryslow',
-        tgt_file
-        ]
-    pipe = sp.Popen(command, stdin=sp.PIPE)
-    for img in images2:
-        import pdb
-        pdb.set_trace()
-        #img = img.copy(order='C')
-        s = img.tostring()
-        pipe.stdin.write(s)
-
-    pipe.stdin.close()
-    pipe.wait()
-
-    if pipe.returncode != 0:
-        raise sp.CalledProcessError(pipe.returncode, command)
+    pattern = '_img*.png'
+    filelist = glob.glob(pattern)
+    if len(filelist) > 0:
+        cmd = 'cat {} | ffmpeg -loglevel 8 -f image2pipe -r 5 -vcodec png -i - -vcodec h264 -preset veryslow {}'.format(pattern, out_file)
+        os.system(cmd)
+        for f in filelist:
+            os.remove(f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
