@@ -41,16 +41,19 @@ def run(args):
             img.save('_img{:05d}.png'.format(i))
 
     out_file = os.path.splitext(args.file)[0] + '_out.mp4'
+    out_file2 = os.path.splitext(args.file)[0] + '_out2.mp4'
     if os.path.isfile(out_file):
         os.remove(out_file)
 
     pattern = '_img*.png'
     filelist = glob.glob(pattern)
     if len(filelist) > 0:
-        cmd = 'cat {} | ffmpeg -loglevel 8 -f image2pipe -r 5 -vcodec png -i - -vcodec h264 -preset veryslow {}'.format(pattern, out_file)
+        cmd = 'cat {} | ffmpeg -f image2pipe -r 5 -vcodec png -i - -f lavfi -i anullsrc -vcodec h264 -preset veryslow -shortest {}'.format(pattern, out_file)
         os.system(cmd)
+        #cmd = 'ffmpeg -i {} -f lavfi -i anullsrc -c:v copy -c:a aac -shortest {}'.format(out_file2, out_file)
         for f in filelist:
             os.remove(f)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
