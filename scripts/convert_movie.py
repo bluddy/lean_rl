@@ -32,11 +32,20 @@ def run(args):
         images.append(image)
     pipe.stdout.close()
 
-    # Reshape and save images
     if args.out == 'mono':
         tgt_width = height
+
+    # Create black image
+    x_off = (args.out_width - tgt_width) / 2
+    y_off = (args.out_height - height) / 2
+    bg = np.zeros((args.out_height, args.out_width, 3), dtype=np.uint8)
+
+    # Reshape and save images
+    if args.out == 'mono':
         for i, image in enumerate(images):
-            img = image[:,0:tgt_width,:]
+            img = bg.copy()
+            img[y_off:-y_off, x_off:-x_off, :] = image[:,0:tgt_width,:]
+            #img = image[:,0:tgt_width,:]
             img = Image.fromarray(img)
             img.save('_img{:05d}.png'.format(i))
 
@@ -48,7 +57,7 @@ def run(args):
     pattern = '_img*.png'
     filelist = glob.glob(pattern)
     if len(filelist) > 0:
-        cmd = 'cat {} | ffmpeg -f image2pipe -r 5 -vcodec png -i - -f lavfi -i anullsrc -vcodec h264 -preset veryslow -shortest {}'.format(pattern, out_file)
+        cmd = 'cat {} | ffmpeg -f image2pipe -r 25 -vcodec png -i - -f lavfi -i anullsrc -vcodec h264 -preset veryslow -shortest {}'.format(pattern, out_file)
         os.system(cmd)
         #cmd = 'ffmpeg -i {} -f lavfi -i anullsrc -c:v copy -c:a aac -shortest {}'.format(out_file2, out_file)
         for f in filelist:
@@ -60,7 +69,9 @@ if __name__ == '__main__':
     parser.add_argument('file', help='movie file to load')
     parser.add_argument('--out', help='mono|stereo|depth', default='mono')
     parser.add_argument('--size', default=448, type=int)
-    parser.add_argument('--width_mult', type=int, default=3)
+    parser.add_argument('--width-mult', type=int, default=3)
+    parser.add_argument('--out-width', type=int, default=720)
+    parser.add_argument('--out-height', type=int, default=486)
     args = parser.parse_args()
     run(args)
 
