@@ -70,8 +70,8 @@ if __name__ == '__main__':
     parser.add_argument('--out', help='mono|stereo|depth', default='mono')
     parser.add_argument('--size', default=448, type=int)
     parser.add_argument('--width-mult', type=int, default=3)
-    parser.add_argument('--out-width', type=int, default=1280)
-    parser.add_argument('--out-height', type=int, default=720)
+    parser.add_argument('--out-width', type=int, default=720)
+    parser.add_argument('--out-height', type=int, default=486)
     args = parser.parse_args()
     run(args)
 
