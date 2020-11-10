@@ -28,6 +28,9 @@ from .env_wrapper import EnvWrapper
 import scipy.misc
 from multiprocessing import Process, Pipe
 
+MAX_REWARD = 10000.
+MIN_REWARD = -10000.
+
 class GlobalState(object):
     ''' Easy to serialize global state for runs '''
     def __init__(self, step=0, play_steps=0, best_reward=-1e5, last_train_step=0,
@@ -523,7 +526,8 @@ def run(args):
                 action = d["action"]
                 new_states.append(new_state)
 
-                if action is not None: # Not reset
+                # Not reset, and reward not broken
+                if action is not None and reward < MAX_REWARD and reward > MIN_REWARD:
                     w_s1.append(state)
                     w_s2.append(new_state)
                     w_r.append(reward)
@@ -594,12 +598,15 @@ def run(args):
 
             # Block and flush result if needed
             test_envs = envs if args.eval_envs == 0 else envs[:args.eval_envs]
-            new_reward = evaluate_policy(
-                csv_wr, csv_f, log_f, tb_writer, logdir,
-                total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
-                total_success2,
-                temp_loss, temp_q_avg, temp_q_max,
-                test_envs, args, policy, g, test_path)
+            new_reward = None
+            while new_reward is None:
+                new_reward = evaluate_policy(
+                    csv_wr, csv_f, log_f, tb_writer, logdir,
+                    total_times, total_rewards, total_loss, total_q_avg, total_q_max, total_success1,
+                    total_success2,
+                    temp_loss, temp_q_avg, temp_q_max,
+                    test_envs, args, policy, g, test_path)
+
             g.reload_since_eval = False
 
             # Set save mode randomly for the environments
@@ -841,6 +848,11 @@ def evaluate_policy(
         env.restore_last_save_mode() # Resume recording
 
     avg_reward = rewards.mean()
+
+    # Check for errors in rewards
+    if avg_reward < MIN_REWARD or avg_reward > MAX_REWARD:
+        return None
+
     actions = np.array(actions, dtype=np.float32)
     avg_action = actions.mean()
     std_action = actions.std()
