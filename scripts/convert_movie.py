@@ -1,5 +1,11 @@
 #!/usr/bin/env python
-''' Convet movies
+''' Convert movies from our default format,
+    to a format usable by Davinci Resolve video editing:
+    - Add an audio track
+    - Convert formats
+    - Increase fps
+    - Add a black background of required shape
+    
 '''
 
 import os
