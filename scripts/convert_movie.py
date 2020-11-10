@@ -49,12 +49,26 @@ def run(args):
 
     # Check if resize
     if tgt_width > args.out_width:
+        args.resize_width = True
+    else:
+        args.resize_width = False
+
+    if args.resize_width:
         resize = True
         ratio = float(args.out_width) / tgt_width
         resize_height = int(args.out_height * ratio)
+        resize_width = args.out_width
         x_off = 0
         y_off = (args.out_height - resize_height) / 2
+    elif args.resize_height:
+        resize = True
+        ratio = float(args.out_height) / height
+        resize_height = args.out_height
+        resize_width = int(tgt_width * ratio)
+        x_off = (args.out_width - resize_width) / 2
+        y_off = 0
     else:
+        resize = False
         # Create black image
         x_off = (args.out_width - tgt_width) / 2
         y_off = (args.out_height - height) / 2
@@ -67,9 +81,9 @@ def run(args):
         if resize:
             img = image[:,tgt_start:tgt_width_end,:]
             img = Image.fromarray(img)
-            img = img.resize((args.out_width, resize_height))
+            img = img.resize((resize_width, resize_height))
             img = np.asarray(img)
-            bg2[y_off:-y_off, :, :] = img
+            bg2[y_off:args.out_height-y_off, x_off:args.out_width-x_off, :] = img
         else:
             bg2[y_off:-y_off, x_off:-x_off, :] = image[:,tgt_start:tgt_width_end,:]
         img = Image.fromarray(bg2)
@@ -96,6 +110,7 @@ if __name__ == '__main__':
     parser.add_argument('--width-mult', type=int, default=3)
     parser.add_argument('--out-width', type=int, default=720)
     parser.add_argument('--out-height', type=int, default=486)
+    parser.add_argument('--resize-height', default=False, action='store_true')
     args = parser.parse_args()
     run(args)
 
