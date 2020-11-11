@@ -410,7 +410,7 @@ def run(args):
                 if len(line) > 8:
                     succ1_pct = float(line[8])
                     succ2_pct = float(line[9])
-                    # ignore play_steps -- we're not graphing that automatically
+                    # ignore the rest -- we're not graphing that automatically
                 total_times.append(t)
                 total_rewards.append(r)
                 total_q_avg.append(q_avg)
@@ -920,10 +920,12 @@ def evaluate_policy(
     plt.savefig(pjoin(logdir, 'success.png'))
     plt.close()
 
-    s = "\nEval Ep:{} R:{:.3f} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
+    s = "\nEval Ep:{} R:{:.3f} T:{} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "min:{:.2f} max:{:.2f} " \
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward, r_avg[-1], g.best_reward, avg_action, std_action,
+      env.episode, avg_reward,
+      str(datetime.timedelta(seconds=g.runtime)),
+      r_avg[-1], g.best_reward, avg_action, std_action,
       min_action, max_action, q_avg, q_max, loss_avg)
     print(s)
     log_f.write(s + '\n')
@@ -931,7 +933,8 @@ def evaluate_policy(
     csv_wr.writerow([
         g.step, avg_reward, q_avg, q_max, loss_avg,
         g.best_reward, g.last_train_step, g.last_eval_step, succ1_pct, succ2_pct, g.play_steps,
-        1 if g.reload_since_eval else 0
+        1 if g.reload_since_eval else 0,
+        g.runtime
     ])
     csv_f.flush()
 
