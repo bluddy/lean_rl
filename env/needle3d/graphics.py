@@ -233,9 +233,49 @@ class OpenGLRenderer(object):
                   0.5, -0.5, 0.,
                   -0.5, -0.5, 0.,
                 ], dtype=np.float32)
+        # CCW
         indices = np.array(
                 [0, 1, 2,
                  2, 1, 3,
+                 ], dtype=np.uint32)
+        return self.create_object(vertices, indices)
+
+    def create_cube(self):
+        #1 -----0
+        #|\     |\
+        #| \    | \
+        #|  5---+--4
+        #|  |   |  |
+        #3--+---2  |
+        # \ |    \ |
+        #  \|     \|
+        #   7------6
+        p = 0.5
+        n = -0.5
+        vertices = np.array(
+                [ p, p, p, # 0
+                  n, p, p, # 1
+                  p, n, p, # 2
+                  n, n, p, # 3
+                  p, p, n, # 4
+                  n, p, n, # 5
+                  p, n, n, # 6
+                  n, n, n, # 7
+                ], dtype=np.float32)
+        # CCW
+        indices = np.array(
+                [0, 4, 6, # right side
+                 6, 2, 0,
+                 5, 1, 3, # left side
+                 3, 7, 5,
+                 1, 0, 2, # back side
+                 2, 3, 1,
+                 4, 5, 7, # front
+                 7, 6, 4,
+                 0, 1, 5, # top
+                 5, 4, 0,
+                 3, 2, 6, # bottom
+                 6, 7, 3
                  ], dtype=np.uint32)
         return self.create_object(vertices, indices)
 
