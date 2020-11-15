@@ -45,6 +45,36 @@ void main()
 }
 """
 
+g_lighting_vertex_shader = """
+#version 330
+
+layout (location=0) in vec3 aPos;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+   gl_Position = projection * view * model * vec4(aPos, 1.0);
+}
+"""
+
+g_lighting_fragment_shader = """
+#version 330
+out vec4 FragColor;
+
+uniform float ambientStrength;
+uniform vec4 objectColor;
+uniform vec3 ambientLightColor;
+
+void main()
+{
+   vec3 ambient = ambientStrength * ambientLightColor;
+   FragColor = vec4(ambient4, 1.0) * objectColor;
+}
+"""
+
 
 class Shader(object):
     def __init__(self, vertex_shader, frag_shader):
@@ -52,7 +82,10 @@ class Shader(object):
             gl_shaders.compileShader(vertex_shader, gl.GL_VERTEX_SHADER),
             gl_shaders.compileShader(frag_shader, gl.GL_FRAGMENT_SHADER)
         )
-        self.color_loc = gl.glGetUniformLocation(self.shader, 'ourColor')
+        self.ambient_str_loc = gl.glGetUniformLocation(self.shader, 'ambientStrength')
+        self.ambient_color_loc = gl.glGetUniformLocation(self.shader, 'ambientLightColor')
+        self.obj_color_loc = gl.glGetUniformLocation(self.shader, 'objectColor')
+
         self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
         self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
         self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
@@ -63,8 +96,14 @@ class Shader(object):
         else:
             gl.glUseProgram(0)
 
-    def set_color(self, color):
-        gl.glUniform4f(self.color_loc, *color)
+    def set_object_color(self, color):
+        gl.glUniform4f(self.obj_color_loc, *color)
+
+    def set_light_color(self, color):
+        gl.glUniform3f(self.ambient_color_loc, *color)
+
+    def set_ambient_strength(self, x):
+        gl.glUniform1f(self.ambient_str_loc, x)
 
     def set_model(self, model_mat):
         gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
