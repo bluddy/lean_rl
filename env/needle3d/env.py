@@ -56,6 +56,7 @@ class Environment(CommonEnv):
     metadata = {
             'render.modes': ['image', 'state'],
             'camera.modes' : ['ortho', 'topdown', 'bottom'],
+            'object.modes' : ['2d', '3d' ]
             }
     background_color = np.array([99., 153., 174., 255.]) / 255.
 
@@ -68,6 +69,7 @@ class Environment(CommonEnv):
             add_delay=0.,
             full_init=True,
             camera='ortho',
+            object_mode='2d',
             **kwargs):
 
         super(Environment, self).__init__(**kwargs)
@@ -82,6 +84,7 @@ class Environment(CommonEnv):
         self.max_steps = max_steps
         self.render_mode = mode
         self.camera_mode = camera
+        self.object_mode = object_mode
         self.episode = 0
         self.total_time = 0
         self.render_ep_path = None
@@ -296,7 +299,7 @@ class Environment(CommonEnv):
         #print(" - num gates=%d"%(self.ngates))
 
         for _ in range(self.state.ngates):
-            gate = Gate(self.renderer, self.state.width, self.state.height)
+            gate = Gate(self.renderer, self.state.width, self.state.height, self.object_mode)
             gate.load(handle, min(self.state.width, self.state.height))
             self.state.gates.append(gate)
 
@@ -331,7 +334,7 @@ class Environment(CommonEnv):
 
         # Create gates that don't overlap with any others
         for _ in range(self.state.ngates):
-            gate = Gate(self.renderer, self.state.width, self.state.height)
+            gate = Gate(self.renderer, self.state.width, self.state.height, self.object_mode)
             overlaps = True
             while overlaps:
                 rand = np.random.rand(3)
@@ -605,7 +608,7 @@ class Gate:
     color2 = np.array([255., 50., 12., 255.]) / 255.
     color3 = np.array([255., 12., 150., 255.]) / 255.
 
-    def __init__(self, renderer, env_width, env_height):
+    def __init__(self, renderer, env_width, env_height, object_mode):
         self.x = 0.
         self.y = 0.
         self.w = 0.
@@ -626,6 +629,7 @@ class Gate:
 
         self.env_width = env_width
         self.env_height = env_height
+        self.object_mode = object_mode
 
         self.renderer = renderer
 
@@ -669,6 +673,7 @@ class Gate:
 
         gl = 0.25 if length is None else length
         gw = gl / 3. if width is None else width
+        gh = gw / 2 # height if needed
         bl = gl / 10.
 
         h_gw = gw / 2.
@@ -716,9 +721,15 @@ class Gate:
         self.bottom[:,1] *= self.env_height
 
         # Graphics
-        self.mid_obj = self.renderer.create_rectangle()
-        self.top_obj = self.renderer.create_rectangle()
-        self.bot_obj = self.renderer.create_rectangle()
+        if self.object_mode =='2d':
+            create_fun = self.renderer.create_rectangle
+        elif self.object_mode =='3d':
+            create_fun = self.renderer.create_cube
+        else:
+            raise ValueError("Unknown object_mode " + self.object_mode)
+        self.mid_obj = create_fun()
+        self.top_obj = create_fun()
+        self.bot_obj = create_fun()
         self.highlight_obj = self.renderer.create_wireframe_rec()
 
         self.mid_obj.translate((self.x, self.y, 0.))
@@ -734,9 +745,10 @@ class Gate:
         self.top_obj.translate((0., h_gl * scale, 0.))
         self.bot_obj.translate((0., -h_gl * scale, 0.))
 
-        self.mid_obj.scale((gw * scale, (gl - bl) * scale, 1.))
-        self.top_obj.scale((gw * scale, bl * scale, 1.))
-        self.bot_obj.scale((gw * scale, bl * scale, 1.))
+        z_scale = gh * scale if self.object_mode == '3d' else 1.
+        self.mid_obj.scale((gw * scale, (gl - bl) * scale, z_scale))
+        self.top_obj.scale((gw * scale, bl * scale, z_scale))
+        self.bot_obj.scale((gw * scale, bl * scale, z_scale))
         self.highlight_obj.scale((gw * 1.05 * scale, (gl + bl) * 1.05 * scale, 1.))
 
         self.highlight_obj.set_color((0., 1.0, 0., 1.0)) # low alpha green

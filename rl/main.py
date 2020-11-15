@@ -114,8 +114,9 @@ def run(args):
 
         env_name = 'rand' if args.random_env else args.task
 
-        basename = args.env + '_' + env_name + '_'
-        basename += args.camera
+        basename = args.env + '_' + env_name
+        basename += '_' + args.camera
+        basename += '_' + args.objects
 
         if args.random_needle:
             basename += '_r'
@@ -261,6 +262,7 @@ def run(args):
                 save_mode='',
                 full_init=not dummy_env,
                 camera=args.camera,
+                object_mode=args.objects,
                 )
 
         elif args.env == 'sim':
@@ -1143,6 +1145,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--camera', default='ortho',
             help='Angle of camera for needle3d (ortho/topdown/bottom)')
+    parser.add_argument('--objects', default='2d',
+            help='Type of objects to use (2d/3d)')
 
     args = parser.parse_args()
 
