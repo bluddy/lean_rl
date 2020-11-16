@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os, math, random, copy
 from os.path import join as pjoin
+import weakref
 
 import numpy as np
 import shapely.geometry as geo
@@ -8,7 +9,7 @@ import pygame as pg
 from PIL import Image
 
 from env.common_env import CommonEnv
-from . import graphics
+from . import graphics as gr
 
 import cProfile, pstats
 
@@ -85,6 +86,7 @@ class Environment(CommonEnv):
         self.render_mode = mode
         self.camera_mode = camera
         self.object_mode = object_mode
+        self.shader_mode = gr.LIGHTING if object_mode == '3d' else gr.DEFAULT
         self.episode = 0
         self.total_time = 0
         self.render_ep_path = None
@@ -152,7 +154,7 @@ class Environment(CommonEnv):
         if self.renderer is None or \
            self.state.width != self.renderer.get_width() or \
            self.state.height != self.renderer.get_height():
-            self.renderer = graphics.OpenGLRenderer(
+            self.renderer = gr.OpenGLRenderer(
                     res=(self.state.width, self.state.height),
                     #bg_color=self.background_color
                     )
@@ -181,7 +183,7 @@ class Environment(CommonEnv):
         else:
             raise ValueError('No file to run')
 
-        self.state.needle = Needle(self.renderer, self.state.width, self.state.height,
+        self.state.needle = Needle(self, self.renderer, self.state.width, self.state.height,
             self.log_file, random_pos=self.random_needle)
 
         self.image = self._draw()
@@ -299,7 +301,7 @@ class Environment(CommonEnv):
         #print(" - num gates=%d"%(self.ngates))
 
         for _ in range(self.state.ngates):
-            gate = Gate(self.renderer, self.state.width, self.state.height, self.object_mode)
+            gate = Gate(self, self.renderer, self.state.width, self.state.height)
             gate.load(handle, min(self.state.width, self.state.height))
             self.state.gates.append(gate)
 
@@ -319,7 +321,7 @@ class Environment(CommonEnv):
             self.state.surfaces.append(s)
 
     def create_backround(self):
-        self.background = self.renderer.create_rectangle()
+        self.background = self.renderer.create_rectangle(self.shader_mode)
         self.background.set_color(self.background_color)
         self.background.translate((self.state.width/2., self.state.height/2., -0.5))
         self.background.scale((self.state.width, self.state.height, 1.))
@@ -334,7 +336,7 @@ class Environment(CommonEnv):
 
         # Create gates that don't overlap with any others
         for _ in range(self.state.ngates):
-            gate = Gate(self.renderer, self.state.width, self.state.height, self.object_mode)
+            gate = Gate(self, self.renderer, self.state.width, self.state.height)
             overlaps = True
             while overlaps:
                 rand = np.random.rand(3)
@@ -608,7 +610,11 @@ class Gate:
     color2 = np.array([255., 50., 12., 255.]) / 255.
     color3 = np.array([255., 12., 150., 255.]) / 255.
 
-    def __init__(self, renderer, env_width, env_height, object_mode):
+    def __init__(self, env, renderer, env_width, env_height):
+
+        self.env = weakref.ref(env)
+        self.renderer = renderer
+
         self.x = 0.
         self.y = 0.
         self.w = 0.
@@ -629,10 +635,6 @@ class Gate:
 
         self.env_width = env_width
         self.env_height = env_height
-        self.object_mode = object_mode
-
-        self.renderer = renderer
-
 
     def _update_status_and_color(self, p, last_p):
         ''' take in current position,
@@ -721,16 +723,16 @@ class Gate:
         self.bottom[:,1] *= self.env_height
 
         # Graphics
-        if self.object_mode =='2d':
+        if self.env().object_mode =='2d':
             create_fun = self.renderer.create_rectangle
-        elif self.object_mode =='3d':
+        elif self.env().object_mode =='3d':
             create_fun = self.renderer.create_cube
         else:
-            raise ValueError("Unknown object_mode " + self.object_mode)
-        self.mid_obj = create_fun()
-        self.top_obj = create_fun()
-        self.bot_obj = create_fun()
-        self.highlight_obj = self.renderer.create_wireframe_rec()
+            raise ValueError("Unknown object_mode " + self.env().object_mode)
+        self.mid_obj = create_fun(shader=self.env().shader_mode)
+        self.top_obj = create_fun(shader=self.env().shader_mode)
+        self.bot_obj = create_fun(shader=self.env().shader_mode)
+        self.highlight_obj = self.renderer.create_wireframe_rec(shader=self.env().shader_mode)
 
         self.mid_obj.translate((self.x, self.y, 0.))
         self.top_obj.translate((self.x, self.y, 0.))
@@ -745,7 +747,7 @@ class Gate:
         self.top_obj.translate((0., h_gl * scale, 0.))
         self.bot_obj.translate((0., -h_gl * scale, 0.))
 
-        z_scale = gh * scale if self.object_mode == '3d' else 1.
+        z_scale = gh * scale if self.env().object_mode == '3d' else 1.
         self.mid_obj.scale((gw * scale, (gl - bl) * scale, z_scale))
         self.top_obj.scale((gw * scale, bl * scale, z_scale))
         self.bot_obj.scale((gw * scale, bl * scale, z_scale))
@@ -892,7 +894,9 @@ class Needle:
 
     # Assume w=0 points to the negative x-axis
 
-    def __init__(self, renderer, env_width, env_height, log_file, random_pos=False):
+    def __init__(self, env, renderer, env_width, env_height, log_file, random_pos=False):
+
+        self.env = weakref.ref(env)
         self.renderer = renderer
         if random_pos:
             self.x = random.randint(0, env_width - 1)
@@ -928,7 +932,7 @@ class Needle:
         self.log_file = log_file
 
         # Graphics
-        self.obj = renderer.create_triangle()
+        self.obj = renderer.create_triangle(shader=self.env().shader_mode)
         self.obj.set_color(self.needle_color)
 
         self._load()

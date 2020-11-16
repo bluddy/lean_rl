@@ -17,73 +17,43 @@ import glm
 import math
 import ctypes
 
-
-g_default_vertex_shader = """
-#version 330
-
-layout (location=0) in vec3 aPos;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-void main()
-{
-   gl_Position = projection * view * model * vec4(aPos, 1.0);
-}
-"""
-
-g_default_fragment_shader = """
-#version 330
-out vec4 FragColor;
-
-uniform vec4 ourColor;
-
-void main()
-{
-   FragColor = ourColor;
-}
-"""
-
-g_lighting_vertex_shader = """
-#version 330
-
-layout (location=0) in vec3 aPos;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
-
-void main()
-{
-   gl_Position = projection * view * model * vec4(aPos, 1.0);
-}
-"""
-
-g_lighting_fragment_shader = """
-#version 330
-out vec4 FragColor;
-
-uniform float ambientStrength;
-uniform vec4 objectColor;
-uniform vec3 ambientLightColor;
-
-void main()
-{
-   vec3 ambient = ambientStrength * ambientLightColor;
-   FragColor = vec4(ambient4, 1.0) * objectColor;
-}
-"""
+DEFAULT=0
+LIGHTING=1
 
 
 class Shader(object):
-    def __init__(self, vertex_shader, frag_shader):
+    vertex_shader = """
+    #version 330
+
+    layout (location=0) in vec3 aPos;
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    void main()
+    {
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    }
+    """
+
+    fragment_shader = """
+    #version 330
+    out vec4 FragColor;
+
+    uniform vec4 objectColor;
+
+    void main()
+    {
+    FragColor = objectColor;
+    }
+    """
+
+    def __init__(self):
         self.shader = gl_shaders.compileProgram(
-            gl_shaders.compileShader(vertex_shader, gl.GL_VERTEX_SHADER),
-            gl_shaders.compileShader(frag_shader, gl.GL_FRAGMENT_SHADER)
+            gl_shaders.compileShader(self.vertex_shader, gl.GL_VERTEX_SHADER),
+            gl_shaders.compileShader(self.fragment_shader, gl.GL_FRAGMENT_SHADER)
         )
-        self.ambient_str_loc = gl.glGetUniformLocation(self.shader, 'ambientStrength')
-        self.ambient_color_loc = gl.glGetUniformLocation(self.shader, 'ambientLightColor')
         self.obj_color_loc = gl.glGetUniformLocation(self.shader, 'objectColor')
 
         self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
@@ -99,7 +69,75 @@ class Shader(object):
     def set_object_color(self, color):
         gl.glUniform4f(self.obj_color_loc, *color)
 
-    def set_light_color(self, color):
+    def set_model(self, model_mat):
+        gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+
+    def set_view(self, model_mat):
+        gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+
+    def set_proj(self, model_mat):
+        gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+
+
+class LightingShader(object):
+
+    vertex_shader = """
+    #version 330
+
+    layout (location=0) in vec3 aPos;
+
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    void main()
+    {
+    gl_Position = projection * view * model * vec4(aPos, 1.0);
+    }
+    """
+
+    fragment_shader = """
+    #version 330
+    out vec4 FragColor;
+
+    uniform float ambientStrength;
+    uniform vec4 objectColor;
+    uniform vec3 ambientLightColor;
+
+    void main()
+    {
+    vec3 ambient = ambientStrength * ambientLightColor;
+    FragColor = vec4(ambient, 1.0) * objectColor;
+    }
+    """
+    def __init__(self):
+        self.shader = gl_shaders.compileProgram(
+            gl_shaders.compileShader(self.vertex_shader, gl.GL_VERTEX_SHADER),
+            gl_shaders.compileShader(self.fragment_shader, gl.GL_FRAGMENT_SHADER)
+        )
+        self.ambient_str_loc = gl.glGetUniformLocation(self.shader, 'ambientStrength')
+        self.ambient_color_loc = gl.glGetUniformLocation(self.shader, 'ambientLightColor')
+        self.obj_color_loc = gl.glGetUniformLocation(self.shader, 'objectColor')
+
+        self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
+        self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
+        self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
+
+    def set_default_values(self):
+        self.set_ambient_strength(0.2)
+        self.set_ambient_color((1.0, 1.0, 1.0))
+
+    def use(self, on:bool):
+        if on:
+            gl.glUseProgram(self.shader)
+            self.set_default_values()
+        else:
+            gl.glUseProgram(0)
+
+    def set_object_color(self, color):
+        gl.glUniform4f(self.obj_color_loc, *color)
+
+    def set_ambient_color(self, color):
         gl.glUniform3f(self.ambient_color_loc, *color)
 
     def set_ambient_strength(self, x):
@@ -134,7 +172,7 @@ class OpenGLObject(object):
         self.shader.use(True)
 
         # Set the color
-        self.shader.set_color(self.color)
+        self.shader.set_object_color(self.color)
 
         self.shader.set_model(self.model)
         self.shader.set_view(self.renderer().view_mat)
@@ -189,7 +227,8 @@ class OpenGLRenderer(object):
         gl.glClearColor(*bg_color, 1.)
 
         self.shaders = {}
-        self.shaders["default"] = Shader(g_default_vertex_shader, g_default_fragment_shader)
+        self.shaders[DEFAULT] = Shader()
+        self.shaders[LIGHTING] = LightingShader()
 
     def get_width(self):
         return self.res[0]
@@ -229,7 +268,7 @@ class OpenGLRenderer(object):
         img = np.frombuffer(img_buf, np.uint8).reshape(self.res[1], self.res[0], 3)[::-1]
         return img
 
-    def create_object(self, vertices, indices=None, shader='default', primitive=TRIANGLES):
+    def create_object(self, vertices, indices=None, shader=DEFAULT, primitive=TRIANGLES):
         # Create a new VAO (Vertex Array Object) and bind it
         vao = gl.glGenVertexArrays(1)
         gl.glBindVertexArray(vao)
@@ -253,7 +292,7 @@ class OpenGLRenderer(object):
 
             buffers.insert(0, ebo)
 
-        # Unbind the VAO first (Important)
+        # Unbind the VAO first (important)
         gl.glBindVertexArray(0)
         # Unbind other stuff
         gl.glDisableVertexAttribArray(0)
@@ -265,7 +304,7 @@ class OpenGLRenderer(object):
         return OpenGLObject(self, shader=shader, vao=vao, buffers=np.array(buffers),
                 vertices=vertices, indices=indices, primitive=primitive)
 
-    def create_rectangle(self):
+    def create_rectangle(self, shader=DEFAULT):
         vertices = np.array(
                 [ 0.5, 0.5, 0.,
                   -0.5, 0.5, 0.,
@@ -277,9 +316,9 @@ class OpenGLRenderer(object):
                 [0, 1, 2,
                  2, 1, 3,
                  ], dtype=np.uint32)
-        return self.create_object(vertices, indices)
+        return self.create_object(vertices, indices, shader=shader)
 
-    def create_cube(self):
+    def create_cube(self, shader=DEFAULT):
         #1 -----0
         #|\     |\
         #| \    | \
@@ -316,9 +355,9 @@ class OpenGLRenderer(object):
                  3, 2, 6, # bottom
                  6, 7, 3
                  ], dtype=np.uint32)
-        return self.create_object(vertices, indices)
+        return self.create_object(vertices, indices, shader=shader)
 
-    def create_triangle(self):
+    def create_triangle(self, shader=DEFAULT):
         vertices = np.array(
                 [ 0.5,  0.5, 0.,
                   -0.5,  0.5, 0.,
@@ -327,9 +366,9 @@ class OpenGLRenderer(object):
         indices = np.array(
                 [0, 1, 2],
                 dtype=np.uint32)
-        return self.create_object(vertices, indices)
+        return self.create_object(vertices, indices, shader=shader)
 
-    def create_wireframe_rec(self):
+    def create_wireframe_rec(self, shader=DEFAULT):
         vertices = np.array(
                 [ 0.5, 0.5, 0.,
                  -0.5, 0.5, 0.,
@@ -340,7 +379,7 @@ class OpenGLRenderer(object):
                  0.5, -0.5, 0.,
                  0.5, 0.5, 0.
                  ], np.float32)
-        return self.create_object(vertices, primitive=LINES)
+        return self.create_object(vertices, primitive=LINES, shader=shader)
 
     def start_draw(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
