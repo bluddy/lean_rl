@@ -85,6 +85,7 @@ class LightingShader(object):
     #version 330
 
     layout (location=0) in vec3 aPos;
+    layout (location=1) in vec3 aNormal;
 
     uniform mat4 model;
     uniform mat4 view;
@@ -106,8 +107,8 @@ class LightingShader(object):
 
     void main()
     {
-    vec3 ambient = ambientStrength * ambientLightColor;
-    FragColor = vec4(ambient, 1.0) * objectColor;
+        vec3 ambient = ambientStrength * ambientLightColor;
+        FragColor = vec4(ambient, 1.0) * objectColor;
     }
     """
     def __init__(self):
@@ -330,16 +331,17 @@ class OpenGLRenderer(object):
         #   7------6
         p = 0.5
         n = -0.5
-        vertices = np.array(
-                [ p, p, p, # 0
-                  n, p, p, # 1
-                  p, n, p, # 2
-                  n, n, p, # 3
-                  p, p, n, # 4
-                  n, p, n, # 5
-                  p, n, n, # 6
-                  n, n, n, # 7
-                ], dtype=np.float32)
+        vertices = [
+                p, p, n, # 0
+                n, p, n, # 1
+                p, n, n, # 2
+                n, n, n, # 3
+                p, p, p, # 4
+                n, p, p, # 5
+                p, n, p, # 6
+                n, n, p, # 7
+                ]
+        vertices = np.array(vertices, dtype=np.float32)
         # CCW
         indices = np.array(
                 [0, 4, 6, # right side
