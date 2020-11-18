@@ -150,15 +150,19 @@ class LightingShader(object):
         self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
         self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
 
+        self.done_init = False
+
     def set_default_values(self):
         self.set_ambient_strength(0.2)
         self.set_light_color((1.0, 1.0, 1.0))
-        self.set_light_pos((0,0,100))
+        self.set_light_pos((0,0,500))
 
     def use(self, on:bool):
         if on:
             gl.glUseProgram(self.shader)
-            self.set_default_values()
+            if not self.done_init:
+                self.set_default_values()
+                self.done_init = True
         else:
             gl.glUseProgram(0)
 
@@ -224,7 +228,7 @@ class OpenGLObject(object):
             raise ValueError("wrong primitive")
         gl.glBindVertexArray(0)
 
-        self.shader.use(False)
+        #self.shader.use(False)
 
     def reset(self):
         self.model = glm.mat4()
