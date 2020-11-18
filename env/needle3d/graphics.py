@@ -6,8 +6,8 @@ import weakref
 
 from libs.libegl import EGLContext
 import OpenGL
-OpenGL.ERROR_CHECKING=False
-OpenGL.ERROR_LOGGING=False
+#OpenGL.ERROR_CHECKING=False
+#OpenGL.ERROR_LOGGING=False
 import OpenGL.GL as gl
 import OpenGL.GL.shaders as gl_shaders
 
@@ -15,11 +15,12 @@ from PIL import Image
 import numpy as np
 import glm
 import math
-import ctypes
+import ctypes as ct
 
 DEFAULT=0
 LIGHTING=1
 
+sizeof_float = ct.sizeof(ct.c_float)
 
 class Shader(object):
     vertex_shader = """
@@ -128,11 +129,10 @@ class LightingShader(object):
         vec3 norm = normalize(Normal);
         vec3 lightDir = normalize(lightPos - FragPos);
         float diff = max(dot(norm, lightDir), 0.0);
-        //float diff = max(dot(norm, lightDir), 0.0);
         vec3 diffuse = diff * lightColor;
 
+        // debug FragColor = vec4(norm, 1.0);
         FragColor = vec4(ambient + diffuse, 1.0) * objectColor;
-        //FragColor = vec4(ambient, 1.0) * objectColor;
     }
     """
 
@@ -153,7 +153,7 @@ class LightingShader(object):
     def set_default_values(self):
         self.set_ambient_strength(0.2)
         self.set_light_color((1.0, 1.0, 1.0))
-        self.set_light_pos((0,0,20))
+        self.set_light_pos((0,0,100))
 
     def use(self, on:bool):
         if on:
@@ -214,7 +214,7 @@ class OpenGLObject(object):
         gl.glBindVertexArray(self.vao)
         if self.primitive == TRIANGLES:
             if self.indices is not None:
-                gl.glDrawElements(gl.GL_TRIANGLES, len(self.indices), gl.GL_UNSIGNED_INT, ctypes.c_void_p(0))
+                gl.glDrawElements(gl.GL_TRIANGLES, len(self.indices), gl.GL_UNSIGNED_INT, ct.c_void_p(0))
             else:
                 gl.glDrawArrays(gl.GL_TRIANGLES, 0, len(self.vertices))
 
@@ -276,7 +276,7 @@ class OpenGLRenderer(object):
         self.proj_mat = glm.ortho(left, right, bottom, top, -0.1, 100.0)
 
     def set_perspective(self, fov=45):
-        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), -0.1, 100.)
+        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), 0.5, 5000.)
 
     def set_camera_loc(self, vec):
         self.camera_loc = glm.vec3(vec)
@@ -305,7 +305,7 @@ class OpenGLRenderer(object):
         img = np.frombuffer(img_buf, np.uint8).reshape(self.res[1], self.res[0], 3)[::-1]
         return img
 
-    def create_object(self, vertices, indices=None, shader=DEFAULT, primitive=TRIANGLES, stride=0):
+    def create_object(self, vertices, indices=None, shader=DEFAULT, primitive=TRIANGLES, normals=True):
         '''
         stride: how far to move between vertices
         '''
@@ -319,8 +319,16 @@ class OpenGLRenderer(object):
         gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
 
         # Describe the position data layout in the buffer
-        gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, stride, ctypes.c_void_p(0))
+        stride = 3 * sizeof_float
+        if normals:
+            stride = 6 * sizeof_float
+
+        gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, False, stride, ct.c_void_p(0))
         gl.glEnableVertexAttribArray(0)
+
+        if normals:
+            gl.glVertexAttribPointer(1, 3, gl.GL_FLOAT, False, stride, ct.c_void_p(3 * sizeof_float))
+            gl.glEnableVertexAttribArray(1)
 
         buffers=[vbo, vao]
 
@@ -356,7 +364,7 @@ class OpenGLRenderer(object):
                 [0, 1, 2,
                  2, 1, 3,
                  ], dtype=np.uint32)
-        return self.create_object(vertices, indices, shader=shader, stride=6 * 4)
+        return self.create_object(vertices, indices, shader=shader)
 
     def create_cube(self, shader=DEFAULT):
         # Into the screen is neg
@@ -404,7 +412,7 @@ class OpenGLRenderer(object):
                 *v5, *nF, *v4, *nF, *v0, *nF,
         ]
         vertices = np.array(vertices, dtype=np.float32)
-        return self.create_object(vertices, shader=shader, stride=6 * 4) # 6 floats
+        return self.create_object(vertices, shader=shader)
     #TODO: format with normals
 
     def create_triangle(self, shader=DEFAULT):
@@ -416,7 +424,7 @@ class OpenGLRenderer(object):
         indices = np.array(
                 [0, 1, 2],
                 dtype=np.uint32)
-        return self.create_object(vertices, indices, shader=shader, stride=6*4)
+        return self.create_object(vertices, indices, shader=shader)
 
     def create_wireframe_rec(self, shader=DEFAULT):
         vertices = np.array(
@@ -429,7 +437,7 @@ class OpenGLRenderer(object):
                  0.5, -0.5, 0.,
                  0.5, 0.5, 0.
                  ], np.float32)
-        return self.create_object(vertices, primitive=LINES, shader=shader)
+        return self.create_object(vertices, primitive=LINES, shader=shader, normals=False)
 
     def start_draw(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
