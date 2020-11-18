@@ -264,8 +264,10 @@ class OpenGLRenderer(object):
             return
 
         gl.glEnable(gl.GL_DEPTH_TEST)
+        gl.glEnable(gl.GL_CULL_FACE)
         gl.glLineWidth(10)
         gl.glClearColor(*bg_color, 1.)
+        gl.glFrontFace(gl.GL_CCW)
 
         self.shaders = {}
         self.shaders[DEFAULT] = Shader()
@@ -280,7 +282,7 @@ class OpenGLRenderer(object):
         self.proj_mat = glm.ortho(left, right, bottom, top, -0.1, 100.0)
 
     def set_perspective(self, fov=45):
-        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), 0.5, 5000.)
+        self.proj_mat = glm.perspectiveFov(glm.radians(fov), float(self.res[0]), float(self.res[1]), 1., 5000.)
 
     def set_camera_loc(self, vec):
         self.camera_loc = glm.vec3(vec)
