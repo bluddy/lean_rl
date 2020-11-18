@@ -30,6 +30,7 @@ class Shader(object):
     layout (location=0) in vec3 aPos;
 
     uniform mat4 model;
+    uniform mat4 normal_matrix;
     uniform mat4 view;
     uniform mat4 projection;
 
@@ -61,6 +62,7 @@ class Shader(object):
         self.obj_color_loc = gl.glGetUniformLocation(self.shader, 'objectColor')
 
         self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
+        self.normal_matrix_loc = gl.glGetUniformLocation(self.shader, 'normal_matrix')
         self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
         self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
 
@@ -74,11 +76,14 @@ class Shader(object):
     def set_model(self, model_mat):
         gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
 
-    def set_view(self, model_mat):
-        gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+    def set_normal_matrix(self, mat):
+        gl.glUniformMatrix4fv(self.normal_matrix_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
 
-    def set_proj(self, model_mat):
-        gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+    def set_view(self, mat):
+        gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
+
+    def set_proj(self, mat):
+        gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
 
 
 class LightingShader(object):
@@ -90,6 +95,7 @@ class LightingShader(object):
     layout (location=1) in vec3 aNormal;
 
     uniform mat4 model;
+    uniform mat4 normal_matrix; // For correcting normals
     uniform mat4 view;
     uniform mat4 projection;
 
@@ -103,7 +109,7 @@ class LightingShader(object):
         // Calculate world pos of vertex (to get interpolated fragment pos for triangle)
         FragPos = vec3(model * vec4(aPos, 1.0));
 
-        Normal = aNormal; // Passthrough
+        Normal = mat3(normal_matrix) * aNormal; // Passthrough
     }
     """
 
@@ -150,6 +156,7 @@ class LightingShader(object):
         self.light_pos_loc = gl.glGetUniformLocation(self.shader, 'lightPos')
 
         self.model_loc = gl.glGetUniformLocation(self.shader, 'model')
+        self.normal_matrix_loc = gl.glGetUniformLocation(self.shader, 'normal_matrix')
         self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
         self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
 
@@ -169,6 +176,9 @@ class LightingShader(object):
 
     def set_model(self, model_mat):
         gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+
+    def set_normal_matrix(self, mat):
+        gl.glUniformMatrix4fv(self.normal_matrix_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
 
     # Determined by renderer
     def set_light_color(self, color):
@@ -202,6 +212,8 @@ class OpenGLObject(object):
         self.indices = indices
         self.renderer = renderer
         self.model = glm.mat4()
+        self.normal_matrix = glm.inverseTranspose(self.model)
+        self.model_dirty = False
         self.primitive = primitive
 
     def draw(self):
@@ -210,7 +222,11 @@ class OpenGLObject(object):
         # Set the color
         self.shader.set_object_color(self.color)
 
+        if self.model_dirty:
+            self.normal_matrix = glm.inverseTranspose(self.model)
+            self.model_dirty = False
         self.shader.set_model(self.model)
+        self.shader.set_normal_matrix(self.normal_matrix)
         self.shader.set_view(self.renderer.view_mat)
         self.shader.set_proj(self.renderer.proj_mat)
 
@@ -229,15 +245,19 @@ class OpenGLObject(object):
 
     def reset(self):
         self.model = glm.mat4()
+        self.model_dirty = True
 
     def rotate(self, angle, vec=(0., 0., -1.)):
         self.model = glm.rotate(self.model, angle, glm.vec3(vec))
+        self.model_dirty = True
 
     def translate(self, vec):
         self.model = glm.translate(self.model, glm.vec3(vec))
+        self.model_dirty = True
 
     def scale(self, vec):
         self.model = glm.scale(self.model, glm.vec3(vec))
+        self.model_dirty = True
 
     def set_color(self, vec):
         self.color = vec
