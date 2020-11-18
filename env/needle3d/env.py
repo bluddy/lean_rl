@@ -168,7 +168,7 @@ class Environment(CommonEnv):
             elif self.camera_mode == 'bottom':
                 self.renderer.set_perspective()
                 self.renderer.set_camera_up((0., 0., 1.))
-                self.renderer.set_camera_loc((self.state.width/2., -300., 300.))
+                self.renderer.set_camera_loc((self.state.width/2., -300., 800.))
                 self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
                 self.renderer.update_view_matrix()
             else:
