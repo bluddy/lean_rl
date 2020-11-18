@@ -17,8 +17,9 @@ import glm
 import math
 import ctypes as ct
 
-DEFAULT=0
-LIGHTING=1
+NONE=0
+DEFAULT=1
+LIGHTING=2
 
 sizeof_float = ct.sizeof(ct.c_float)
 
@@ -50,7 +51,9 @@ class Shader(object):
     }
     """
 
-    def __init__(self):
+    def __init__(self, renderer):
+        self.id = DEFAULT
+        self.renderer = renderer
         self.shader = gl_shaders.compileProgram(
             gl_shaders.compileShader(self.vertex_shader, gl.GL_VERTEX_SHADER),
             gl_shaders.compileShader(self.fragment_shader, gl.GL_FRAGMENT_SHADER)
@@ -61,11 +64,9 @@ class Shader(object):
         self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
         self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
 
-    def use(self, on:bool):
-        if on:
-            gl.glUseProgram(self.shader)
-        else:
-            gl.glUseProgram(0)
+    def use(self):
+        gl.glUseProgram(self.shader)
+        self.renderer.active_shader = self.id
 
     def set_object_color(self, color):
         gl.glUniform4f(self.obj_color_loc, *color)
@@ -136,7 +137,9 @@ class LightingShader(object):
     }
     """
 
-    def __init__(self):
+    def __init__(self, renderer):
+        self.id = LIGHTING
+        self.renderer = renderer
         self.shader = gl_shaders.compileProgram(
             gl_shaders.compileShader(self.vertex_shader, gl.GL_VERTEX_SHADER),
             gl_shaders.compileShader(self.fragment_shader, gl.GL_FRAGMENT_SHADER)
@@ -150,25 +153,24 @@ class LightingShader(object):
         self.view_loc = gl.glGetUniformLocation(self.shader, 'view')
         self.proj_loc = gl.glGetUniformLocation(self.shader, 'projection')
 
-        self.done_init = False
+        self.use() # must have for init uniforms
 
-    def set_default_values(self):
         self.set_ambient_strength(0.2)
         self.set_light_color((1.0, 1.0, 1.0))
-        self.set_light_pos((0,0,500))
+        self.set_light_pos((200,200,200))
 
-    def use(self, on:bool):
-        if on:
-            gl.glUseProgram(self.shader)
-            if not self.done_init:
-                self.set_default_values()
-                self.done_init = True
-        else:
-            gl.glUseProgram(0)
+    def use(self):
+        gl.glUseProgram(self.shader)
+        self.renderer.active_shader = self.id
 
+    # Determined by object
     def set_object_color(self, color):
         gl.glUniform4f(self.obj_color_loc, *color)
 
+    def set_model(self, model_mat):
+        gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+
+    # Determined by renderer
     def set_light_color(self, color):
         gl.glUniform3f(self.light_color_loc, *color)
 
@@ -177,9 +179,6 @@ class LightingShader(object):
 
     def set_light_pos(self, vec):
         gl.glUniform3f(self.light_pos_loc, *vec)
-
-    def set_model(self, model_mat):
-        gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
 
     def set_view(self, model_mat):
         gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
@@ -201,19 +200,19 @@ class OpenGLObject(object):
         self.buffers=buffers
         self.vertices = vertices
         self.indices = indices
-        self.renderer = weakref.ref(renderer)
+        self.renderer = renderer
         self.model = glm.mat4()
         self.primitive = primitive
 
     def draw(self):
-        self.shader.use(True)
+        self.shader.use()
 
         # Set the color
         self.shader.set_object_color(self.color)
 
         self.shader.set_model(self.model)
-        self.shader.set_view(self.renderer().view_mat)
-        self.shader.set_proj(self.renderer().proj_mat)
+        self.shader.set_view(self.renderer.view_mat)
+        self.shader.set_proj(self.renderer.proj_mat)
 
         gl.glBindVertexArray(self.vao)
         if self.primitive == TRIANGLES:
@@ -227,8 +226,6 @@ class OpenGLObject(object):
         else:
             raise ValueError("wrong primitive")
         gl.glBindVertexArray(0)
-
-        #self.shader.use(False)
 
     def reset(self):
         self.model = glm.mat4()
@@ -270,8 +267,10 @@ class OpenGLRenderer(object):
         gl.glFrontFace(gl.GL_CCW)
 
         self.shaders = {}
-        self.shaders[DEFAULT] = Shader()
-        self.shaders[LIGHTING] = LightingShader()
+        self.shaders[DEFAULT] = Shader(self)
+        self.shaders[LIGHTING] = LightingShader(self)
+
+        self.active_shader = NONE
 
     def get_width(self):
         return self.res[0]
@@ -289,6 +288,26 @@ class OpenGLRenderer(object):
 
     def set_camera_up(self, vec):
         self.camera_up = glm.vec3(vec)
+
+    def _adjust_lighting_shader(self, fun):
+        '''
+        Pass in a function to carry out on the lighting shader
+        Must be temporarily changed to active shader
+        '''
+        old_shader_id = self.active_shader
+        shader = self.shaders[LIGHTING]
+        shader.use()
+        fun(shader)
+        self.shaders[old_shader_id].use()
+
+    def set_light_color(self, color):
+        self._adjust_lighting_shader(lambda shader: shader.set_light_color(color))
+
+    def set_ambient_strength(self, x):
+        self._adjust_lighting_shader(lambda shader: shader.set_ambient_strength(x))
+
+    def set_light_pos(self, vec):
+        self._adjust_lighting_shader(lambda shader: shader.set_light_pos(vec))
 
     def move_camera(self, vec):
         self.camera_loc += glm.vec3(vec)
