@@ -70,7 +70,7 @@ class EGLContext(TransactionMixin):
             egl.EGL_GREEN_SIZE:         8,
             egl.EGL_BLUE_SIZE:          8,
             egl.EGL_ALPHA_SIZE:         8,
-            egl.EGL_DEPTH_SIZE:         egl.EGL_DONT_CARE,
+            egl.EGL_DEPTH_SIZE:         24,
             egl.EGL_STENCIL_SIZE:       egl.EGL_DONT_CARE,
             egl.EGL_RENDERABLE_TYPE:    egl.EGL_OPENGL_BIT,
             egl.EGL_SURFACE_TYPE:       surface_type,

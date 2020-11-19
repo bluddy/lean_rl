@@ -56,7 +56,7 @@ def dump_stats():
 class Environment(CommonEnv):
     metadata = {
             'render.modes': ['image', 'state'],
-            'camera.modes' : ['ortho', 'topdown', 'bottom'],
+            'camera.modes' : ['ortho', 'topdown', 'bottom', 'right'],
             'object.modes' : ['2d', '3d' ]
             }
     background_color = np.array([99., 153., 174., 255.]) / 255.
@@ -171,6 +171,14 @@ class Environment(CommonEnv):
                 self.renderer.set_camera_loc((self.state.width/2., -300., 800.))
                 self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
                 self.renderer.update_view_matrix()
+            elif self.camera_mode == 'right':
+                self.renderer.set_perspective()
+                self.renderer.set_camera_up((0., 0., 1.))
+                self.renderer.set_camera_loc((self.state.width + 300, self.state.height/2., 800.))
+                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
+                self.renderer.update_view_matrix()
+
+
             else:
                 raise ValueError("Unknown camera_mode" + self.camera_mode)
 
