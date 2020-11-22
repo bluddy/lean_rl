@@ -23,6 +23,9 @@ LIGHTING=2
 
 sizeof_float = ct.sizeof(ct.c_float)
 
+def arr(x):
+    return np.array(x, dtype=np.float32)
+
 class Shader(object):
     vertex_shader = """
     #version 330
@@ -470,6 +473,52 @@ class OpenGLRenderer(object):
                 [0, 1, 2],
                 dtype=np.uint32)
         return self.create_object(vertices, indices, shader=shader)
+
+    def calc_normals(self, v0, v1, v2):
+        ''' Calculate normals for counter-clockwise vertices '''
+        vec1 = v1 - v0
+        vec2 = v2 - v1
+        normal = np.cross(vec1, vec2)
+        normal /= np.linalg.norm(normal)
+        return normal
+
+    def add_normals(self, vertices):
+        ''' Add normals to vertex list '''
+
+        out = []
+        vs = []
+        for i, v in enumerate(vertices):
+            if i and i % 3 == 0:
+                n = self.calc_normals(*vs)
+                out.extend([vs[0], n, vs[1], n, vs[2], n])
+                vs = []
+
+            vs.append(v)
+        return out
+
+    def create_pyramid(self, shader=DEFAULT):
+        #                          0
+        #      0                  / \
+        #    / | \               /   \
+        #   /--4--\             /     \
+        #  1-- | --3           1-------2
+        #    --2-
+        v0 = arr([0, 0, 0.5])
+        v1 = arr([-0.5, -0.5, -0.5])
+        v2 = arr([0.5, -0.5, -0.5])
+        v3 = arr([0.5, 0.5, -0.5])
+        v4 = arr([-0.5, 0.5, -0.5])
+        vertices = [
+          v0, v1, v2,
+          v0, v2, v3,
+          v0, v3, v4,
+          v0, v4, v1,
+          v1, v4, v2,
+          v4, v3, v2,
+          ]
+        vertices = self.add_normals(vertices)
+        vertices = np.array(vertices, dtype=np.float32)
+        return self.create_object(vertices, shader=shader)
 
     def create_wireframe_rec(self, shader=DEFAULT):
         vertices = np.array(

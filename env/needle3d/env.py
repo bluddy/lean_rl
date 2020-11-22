@@ -158,24 +158,29 @@ class Environment(CommonEnv):
                     res=(self.state.width, self.state.height),
                     #bg_color=self.background_color
                     )
-            if self.camera_mode == 'ortho':
+            cm = self.camera_mode
+            if cm == 'ortho':
                 self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
-            elif self.camera_mode == 'topdown':
+            elif cm == 'topdown':
                 self.renderer.set_perspective()
                 self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 1000.))
                 self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
                 self.renderer.update_view_matrix()
-            elif self.camera_mode == 'bottom':
+            elif cm in ['bottom', 'left', 'right']:
                 self.renderer.set_perspective()
                 self.renderer.set_camera_up((0., 0., 1.))
-                self.renderer.set_camera_loc((self.state.width/2., -300., 800.))
                 self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
-                self.renderer.update_view_matrix()
-            elif self.camera_mode == 'right':
-                self.renderer.set_perspective()
-                self.renderer.set_camera_up((0., 0., 1.))
-                self.renderer.set_camera_loc((self.state.width + 300, self.state.height/2., 800.))
-                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
+                if cm == 'bottom':
+                    loc = (self.state.width/2., -300., 800.)
+                    lookat = (self.state.width/2., self.state.height/2., -100.)
+                elif cm == 'right':
+                    loc = (self.state.width + 300, self.state.height/2., 800.)
+                    lookat = (self.state.width/2., self.state.height/2., -100.)
+                elif cm  == 'left':
+                    loc = (-500, self.state.height/2., 800.)
+                    lookat = (self.state.width/2., self.state.height/2., -100.)
+                self.renderer.set_camera_loc(loc)
+                self.renderer.set_camera_lookat(lookat)
                 self.renderer.update_view_matrix()
 
 
@@ -331,7 +336,7 @@ class Environment(CommonEnv):
     def create_backround(self):
         self.background = self.renderer.create_rectangle(self.shader_mode)
         self.background.set_color(self.background_color)
-        self.background.translate((self.state.width/2., self.state.height/2., -0.5))
+        self.background.translate((self.state.width/2., self.state.height/2., -1.5))
         self.background.scale((self.state.width, self.state.height, 1.))
 
     def create_random_env(self):
@@ -620,7 +625,7 @@ class Gate:
 
     def __init__(self, env, renderer, env_width, env_height):
 
-        self.env = weakref.ref(env)
+        self.env = env
         self.renderer = renderer
 
         self.x = 0.
@@ -731,16 +736,16 @@ class Gate:
         self.bottom[:,1] *= self.env_height
 
         # Graphics
-        if self.env().object_mode =='2d':
+        if self.env.object_mode =='2d':
             create_fun = self.renderer.create_rectangle
-        elif self.env().object_mode =='3d':
+        elif self.env.object_mode =='3d':
             create_fun = self.renderer.create_cube
         else:
-            raise ValueError("Unknown object_mode " + self.env().object_mode)
-        self.mid_obj = create_fun(shader=self.env().shader_mode)
-        self.top_obj = create_fun(shader=self.env().shader_mode)
-        self.bot_obj = create_fun(shader=self.env().shader_mode)
-        self.highlight_obj = self.renderer.create_wireframe_rec(shader=self.env().shader_mode)
+            raise ValueError("Unknown object_mode " + self.env.object_mode)
+        self.mid_obj = create_fun(shader=self.env.shader_mode)
+        self.top_obj = create_fun(shader=self.env.shader_mode)
+        self.bot_obj = create_fun(shader=self.env.shader_mode)
+        self.highlight_obj = self.renderer.create_wireframe_rec(shader=self.env.shader_mode)
 
         self.mid_obj.translate((self.x, self.y, 0.))
         self.top_obj.translate((self.x, self.y, 0.))
@@ -755,7 +760,7 @@ class Gate:
         self.top_obj.translate((0., h_gl * scale, 0.))
         self.bot_obj.translate((0., -h_gl * scale, 0.))
 
-        z_scale = gh * scale if self.env().object_mode == '3d' else 1.
+        z_scale = gh * scale if self.env.object_mode == '3d' else 1.
         self.mid_obj.scale((gw * scale, (gl - bl) * scale, z_scale))
         self.top_obj.scale((gw * scale, bl * scale, z_scale))
         self.bot_obj.scale((gw * scale, bl * scale, z_scale))
@@ -904,7 +909,7 @@ class Needle:
 
     def __init__(self, env, renderer, env_width, env_height, log_file, random_pos=False):
 
-        self.env = weakref.ref(env)
+        self.env = env
         self.renderer = renderer
         if random_pos:
             self.x = random.randint(0, env_width - 1)
@@ -928,7 +933,7 @@ class Needle:
 
         #self.needle_color = np.array([134., 200., 188.])
         # Make needle clearer
-        self.needle_color = np.array([0., 0., 0., 255.]) / 255.
+        self.needle_color = np.array([0., 100., 0., 255.]) / 255.
         self.thread_color = np.array([167., 188., 214., 255.]) / 255.
 
         # Save adjusted thread pointsmath.since we don't use them for anything
@@ -940,7 +945,12 @@ class Needle:
         self.log_file = log_file
 
         # Graphics
-        self.obj = renderer.create_triangle(shader=self.env().shader_mode)
+
+        if self.env.object_mode == '2d':
+            create_fun = self.renderer.create_triangle
+        elif self.env.object_mode =='3d':
+            create_fun = self.renderer.create_pyramid
+        self.obj = create_fun(shader=self.env.shader_mode)
         self.obj.set_color(self.needle_color)
 
         self._load()
@@ -979,7 +989,8 @@ class Needle:
         old_model = self.obj.model
         self.obj.translate((self.x, self.y, 0.))
         self.obj.rotate(float(self.w) + pi_div2)
-        self.obj.scale((self.scale * 0.7, self.scale, 1.))
+        #self.obj.scale((self.scale * 0.7, self.scale, 1.))
+        self.obj.scale((10., 10., 10.))
         self.obj.draw()
         self.obj.model = old_model
 
