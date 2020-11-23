@@ -215,7 +215,7 @@ class OpenGLObject(object):
         self.indices = indices
         self.renderer = renderer
         self.model = glm.mat4()
-        self.normal_matrix = glm.inverseTranspose(self.model)
+        self.normal_matrix = glm.transpose(glm.inverse(self.model))
         self.model_dirty = False
         self.primitive = primitive
 
@@ -488,33 +488,36 @@ class OpenGLRenderer(object):
         out = []
         vs = []
         for i, v in enumerate(vertices):
-            if i and i % 3 == 0:
+            vs.append(v)
+            if len(vs) >= 3:
                 n = self.calc_normals(*vs)
                 out.extend([vs[0], n, vs[1], n, vs[2], n])
                 vs = []
-
-            vs.append(v)
         return out
 
     def create_pyramid(self, shader=DEFAULT):
+        # pos z is up
+        # pos x is right
+        # pos y is forward
         #                          0
         #      0                  / \
         #    / | \               /   \
         #   /--4--\             /     \
         #  1-- | --3           1-------2
-        #    --2-
+        # x  --2-    y
         v0 = arr([0, 0, 0.5])
         v1 = arr([-0.5, -0.5, -0.5])
-        v2 = arr([0.5, -0.5, -0.5])
+        v2 = arr([-0.5, 0.5, -0.5])
         v3 = arr([0.5, 0.5, -0.5])
-        v4 = arr([-0.5, 0.5, -0.5])
+        v4 = arr([0.5, -0.5, -0.5])
         vertices = [
           v0, v1, v2,
           v0, v2, v3,
           v0, v3, v4,
           v0, v4, v1,
-          v1, v4, v2,
-          v4, v3, v2,
+
+          v1, v4, v2, # bottom
+          v2, v4, v3,
           ]
         vertices = self.add_normals(vertices)
         vertices = np.array(vertices, dtype=np.float32)
