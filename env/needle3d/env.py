@@ -151,11 +151,10 @@ class Environment(CommonEnv):
         #from rl.utils import ForkablePdb
         #ForkablePdb().set_trace()
 
-        if self.renderer is None or \
-           self.state.width != self.renderer.get_width() or \
-           self.state.height != self.renderer.get_height():
+        if self.renderer is None:
             self.renderer = gr.OpenGLRenderer(
-                    res=(self.state.width, self.state.height),
+                    res=(488,488),
+                    #kres=(self.state.width, self.state.height),
                     #bg_color=self.background_color
                     )
             cm = self.camera_mode
@@ -169,7 +168,6 @@ class Environment(CommonEnv):
             elif cm in ['bottom', 'left', 'right']:
                 self.renderer.set_perspective()
                 self.renderer.set_camera_up((0., 0., 1.))
-                self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., -100.))
                 if cm == 'bottom':
                     loc = (self.state.width/2., -300., 800.)
                     lookat = (self.state.width/2., self.state.height/2., -100.)
@@ -177,8 +175,8 @@ class Environment(CommonEnv):
                     loc = (self.state.width + 300, self.state.height/2., 800.)
                     lookat = (self.state.width/2., self.state.height/2., -100.)
                 elif cm  == 'left':
-                    loc = (-500, self.state.height/2., 800.)
-                    lookat = (0., self.state.height/2., -100.) # debug
+                    loc = (-500, self.state.height/2., 1200.)
+                    lookat = (self.state.width/2. - 100., self.state.height/2., -100.) # debug
                 self.renderer.set_camera_loc(loc)
                 self.renderer.set_camera_lookat(lookat)
                 self.renderer.set_light_pos((self.state.width/2., self.state.height/2., 400.))
@@ -988,10 +986,11 @@ class Needle:
 
     def _draw_needle(self):
         old_model = self.obj.model
+        #self.obj.translate((self.env_width/4., self.env_height/2., 0.))
         self.obj.translate((self.x, self.y, 0.))
-        #self.obj.rotate(float(self.w) + pi_div2)
+        #self.obj.rotate(float(math.pi + pi_div2))
         if self.env.object_mode == '3d':
-            pass
+            self.obj.rotate(float(self.w), (1., 0., 0.))
             #self.obj.rotate(pi_div2, vec=(1., 0., 0.))
         elif self.env.object_mode == '2d':
             pass

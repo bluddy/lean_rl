@@ -177,8 +177,8 @@ class LightingShader(object):
     def set_object_color(self, color):
         gl.glUniform4f(self.obj_color_loc, *color)
 
-    def set_model(self, model_mat):
-        gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+    def set_model(self, mat):
+        gl.glUniformMatrix4fv(self.model_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
 
     def set_normal_matrix(self, mat):
         gl.glUniformMatrix4fv(self.normal_matrix_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
@@ -193,11 +193,11 @@ class LightingShader(object):
     def set_light_pos(self, vec):
         gl.glUniform3f(self.light_pos_loc, *vec)
 
-    def set_view(self, model_mat):
-        gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+    def set_view(self, mat):
+        gl.glUniformMatrix4fv(self.view_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
 
-    def set_proj(self, model_mat):
-        gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(model_mat))
+    def set_proj(self, mat):
+        gl.glUniformMatrix4fv(self.proj_loc, 1, gl.GL_FALSE, glm.value_ptr(mat))
 
 
 
