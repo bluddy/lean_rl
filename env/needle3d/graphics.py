@@ -321,7 +321,8 @@ class OpenGLRenderer(object):
         shader = self.shaders[LIGHTING]
         shader.use()
         fun(shader)
-        self.shaders[old_shader_id].use()
+        if old_shader_id > NONE:
+            self.shaders[old_shader_id].use()
 
     def set_light_color(self, color):
         self._adjust_lighting_shader(lambda shader: shader.set_light_color(color))
