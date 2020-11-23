@@ -479,7 +479,7 @@ class OpenGLRenderer(object):
         ''' Calculate normals for counter-clockwise vertices '''
         vec1 = v1 - v0
         vec2 = v2 - v1
-        normal = np.cross(vec1, vec2)
+        normal = -np.cross(vec1, vec2)
         normal /= np.linalg.norm(normal)
         return normal
 
