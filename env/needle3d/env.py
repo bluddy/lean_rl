@@ -153,7 +153,7 @@ class Environment(CommonEnv):
 
         if self.renderer is None:
             self.renderer = gr.OpenGLRenderer(
-                    res=(488,488),
+                    res=(976,976),
                     #kres=(self.state.width, self.state.height),
                     #bg_color=self.background_color
                     )
@@ -175,7 +175,7 @@ class Environment(CommonEnv):
                     loc = (self.state.width + 300, self.state.height/2., 800.)
                     lookat = (self.state.width/2., self.state.height/2., -100.)
                 elif cm  == 'left':
-                    loc = (-500, self.state.height/2., 1200.)
+                    loc = (-500, self.state.height/2., 1900.)
                     lookat = (self.state.width/2. - 100., self.state.height/2., -100.) # debug
                 self.renderer.set_camera_loc(loc)
                 self.renderer.set_camera_lookat(lookat)
@@ -990,7 +990,7 @@ class Needle:
         self.obj.translate((self.x, self.y, 0.))
         #self.obj.rotate(float(math.pi + pi_div2))
         if self.env.object_mode == '3d':
-            self.obj.rotate(float(self.w), (1., 0., 0.))
+            self.obj.rotate(float(self.w + math.pi), (1., 0., 0.))
             #self.obj.rotate(pi_div2, vec=(1., 0., 0.))
         elif self.env.object_mode == '2d':
             pass
