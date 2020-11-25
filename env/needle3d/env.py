@@ -994,11 +994,11 @@ class Needle:
         #self.obj.translate((self.env_width/4., self.env_height/2., 0.))
         self.obj.translate((self.x, self.y, 0.))
         if self.env.object_mode == '3d':
-            self.obj.rotate(float(-self.w) - pi_div2, (0., 0., 1.))
+            self.obj.rotate(float(-self.w) - math.pi, (0., 0., 1.))
             self.obj.scale((self.scale, self.scale,  self.scale))
-            self.obj.translate((0., 0., 0.5))
+            self.obj.translate((0., 0., 0.5)) # lift
             self.obj.rotate(pi_div2, vec=(0., 1., 0.))
-            self.obj.scale((1., 1., 1.5))
+            self.obj.scale((0.5, 0.5, 0.8)) # smaller arrow
         elif self.env.object_mode == '2d':
             self.obj.rotate(float(self.w + pi_div2))
         #self.obj.scale((self.scale * 0.7, self.scale * 1.5, self.scale))
