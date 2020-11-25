@@ -162,10 +162,11 @@ class Environment(CommonEnv):
                 self.renderer.set_ortho(0., float(self.state.width), 0., float(self.state.height))
             elif cm == 'topdown':
                 self.renderer.set_perspective()
-                self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 1000.))
+                self.renderer.set_camera_loc((self.state.width / 2., self.state.height / 2., 2500.))
                 self.renderer.set_camera_lookat((self.state.width/2., self.state.height/2., 0.))
+                self.renderer.set_light_pos((self.state.width/2., self.state.height/2., 400.))
                 self.renderer.update_view_matrix()
-            elif cm in ['bottom', 'left', 'right']:
+            else:
                 self.renderer.set_perspective()
                 self.renderer.set_camera_up((0., 0., 1.))
                 if cm == 'bottom':
@@ -176,15 +177,14 @@ class Environment(CommonEnv):
                     lookat = (self.state.width/2., self.state.height/2., -100.)
                 elif cm  == 'left':
                     loc = (-500, self.state.height/2., 1900.)
-                    lookat = (self.state.width/2. - 100., self.state.height/2., -100.) # debug
+                    lookat = (self.state.width/2. - 100., self.state.height/2., -100.)
+                elif cm == 'lowleft':
+                    loc = (-500, self.state.height/2., 10.)
+                    lookat = (self.state.width/2. - 100., float(self.state.height), 10.)
                 self.renderer.set_camera_loc(loc)
                 self.renderer.set_camera_lookat(lookat)
                 self.renderer.set_light_pos((self.state.width/2., self.state.height/2., 400.))
                 self.renderer.update_view_matrix()
-
-
-            else:
-                raise ValueError("Unknown camera_mode" + self.camera_mode)
 
         # Init env
         if self.random_env:
@@ -335,7 +335,7 @@ class Environment(CommonEnv):
     def create_backround(self):
         self.background = self.renderer.create_rectangle(self.shader_mode)
         self.background.set_color(self.background_color)
-        self.background.translate((self.state.width/2., self.state.height/2., -self.state.height/10.))
+        self.background.translate((self.state.width/2., self.state.height/2., 0.))
         self.background.scale((self.state.width, self.state.height, 1.))
 
     def create_random_env(self):
@@ -765,6 +765,11 @@ class Gate:
         self.bot_obj.scale((gw * scale, bl * scale, z_scale))
         self.highlight_obj.scale((gw * 1.05 * scale, (gl + bl) * 1.05 * scale, 1.))
 
+        self.mid_obj.translate((0., 0., 0.5))
+        self.top_obj.translate((0., 0., 0.5))
+        self.bot_obj.translate((0., 0., 0.5))
+        self.highlight_obj.translate((0., 0., 0.5))
+
         self.highlight_obj.set_color((0., 1.0, 0., 1.0)) # low alpha green
 
         #print("corners2: ", self.corners) # debug
@@ -990,12 +995,15 @@ class Needle:
         self.obj.translate((self.x, self.y, 0.))
         #self.obj.rotate(float(math.pi + pi_div2))
         if self.env.object_mode == '3d':
-            self.obj.rotate(float(self.w + math.pi), (1., 0., 0.))
-            #self.obj.rotate(pi_div2, vec=(1., 0., 0.))
+            pass
+            self.obj.rotate(float(self.w + math.pi), (0., 0., 1.))
+            self.obj.scale((self.scale, self.scale,  self.scale))
+            self.obj.translate((0., 0., 0.8))
+            self.obj.rotate(pi_div2, vec=(0., 1., 0.))
+            self.obj.scale((1., 1., 1.5))
         elif self.env.object_mode == '2d':
             pass
         #self.obj.scale((self.scale * 0.7, self.scale * 1.5, self.scale))
-        self.obj.scale((self.scale, self.scale,  self.scale))
         self.obj.draw()
         self.obj.model = old_model
 
