@@ -517,8 +517,11 @@ def run(args):
                 #print("XXX train action: ", action) # debug
                 env.step(action)
 
-        if target_sleep_time > 0:
+        if target_sleep_time:
             time.sleep(target_sleep_time)
+
+        if args.sleep_time:
+            time.sleep(args.sleep_time)
 
         # Save our data so we can loop and insert it into the replay buffer
         for env, state, ou_noise in zip(envs, states, ou_noises):
@@ -1139,6 +1142,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--play-rate', default=0., type=float,
             help='Dynamic % playing to aim for')
+
+    parser.add_argument('--sleep-time', default=0., type=float,
+            help='How long to sleep between collecting data')
 
     parser.add_argument('--add-delay', default=0., type=float,
             help='Add delay to fast environments, in seconds')

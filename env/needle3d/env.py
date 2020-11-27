@@ -14,6 +14,7 @@ from . import graphics as gr
 import cProfile, pstats
 
 GREEN = np.array([0., 255., 0., 255.]) / 255.
+LIGHT_BLUE = np.array([33., 65., 243., 255.]) / 255.
 
 '''
 For best results, use pillow-simd:
@@ -616,11 +617,11 @@ class Environment(CommonEnv):
         return False
 
 class Gate:
-    color_passed = np.array([100., 175., 100., 255.]) / 255.
-    color_failed = np.array([175., 100., 100., 255.]) / 255.
+    color_passed = np.array([100., 175., 100., 255.]) / 255. # Green
+    color_failed = np.array([175., 100., 100., 255.]) / 255. # Red
+    color_next = np.array([214., 139., 19., 255.]) / 255. # Orange
     color1 = np.array([251., 216., 114., 255.]) / 255.
     color2 = np.array([255., 50., 12., 255.]) / 255.
-    color3 = np.array([255., 12., 150., 255.]) / 255.
 
     def __init__(self, env, renderer, env_width, env_height):
 
@@ -636,10 +637,8 @@ class Gate:
         self.width = 0
         self.height = 0
         self.status = None
-        self.c1 = self.color1
-        self.c2 = self.color2
-        self.c3 = self.color3
-        self.highlight = None
+        self.c_mid = self.color1
+        self.c_outer = self.color2
 
         self.box = None
         self.bottom_box = None
@@ -658,24 +657,23 @@ class Gate:
                 (path.intersects(self.top_box) or
                 path.intersects(self.bottom_box)):
             self.status = 'failed'
-            self.c1 = self.color_failed
-            self.c2 = self.color_failed
-            self.c3 = self.color_failed
-        elif self.status == 'next' and self.box.contains(p):
-            self.status = 'passed'
-            self.c1 = self.color_passed
-            self.c2 = self.color_passed
-            self.c3 = self.color_passed
+            self.c_mid = self.color_failed
+            self.c_outer = self.color_failed
+        elif self.status == 'next':
+            if self.box.contains(p):
+                self.status = 'passed'
+                self.c_mid = self.color_passed
+                self.c_outer = self.color_passed
+            else:
+                self.c_mid = self.color_next
 
     def draw(self):
-        self.top_obj.set_color(self.c2)
+        self.top_obj.set_color(self.c_outer)
         self.top_obj.draw()
-        self.mid_obj.set_color(self.c1)
+        self.mid_obj.set_color(self.c_mid)
         self.mid_obj.draw()
-        self.bot_obj.set_color(self.c3)
+        self.bot_obj.set_color(self.c_outer)
         self.bot_obj.draw()
-        if self.status == 'next':
-            self.highlight_obj.draw()
 
     def from_params(self, x, y, w, length=None, width=None):
         ''' @x, y, w: -3.14 to 0 to 3.14
@@ -744,17 +742,14 @@ class Gate:
         self.mid_obj = create_fun(shader=self.env.shader_mode)
         self.top_obj = create_fun(shader=self.env.shader_mode)
         self.bot_obj = create_fun(shader=self.env.shader_mode)
-        self.highlight_obj = self.renderer.create_wireframe_rec(shader=self.env.shader_mode)
 
         self.mid_obj.translate((self.x, self.y, 0.))
         self.top_obj.translate((self.x, self.y, 0.))
         self.bot_obj.translate((self.x, self.y, 0.))
-        self.highlight_obj.translate((self.x, self.y, 0.))
 
         self.mid_obj.rotate(w + pi_div2)
         self.top_obj.rotate(w + pi_div2)
         self.bot_obj.rotate(w + pi_div2)
-        self.highlight_obj.rotate(w + pi_div2)
 
         self.top_obj.translate((0., h_gl * scale, 0.))
         self.bot_obj.translate((0., -h_gl * scale, 0.))
@@ -763,14 +758,10 @@ class Gate:
         self.mid_obj.scale((gw * scale, (gl - bl) * scale, z_scale))
         self.top_obj.scale((gw * scale, bl * scale, z_scale))
         self.bot_obj.scale((gw * scale, bl * scale, z_scale))
-        self.highlight_obj.scale((gw * 1.05 * scale, (gl + bl) * 1.05 * scale, 1.))
 
         self.mid_obj.translate((0., 0., 0.5))
         self.top_obj.translate((0., 0., 0.5))
         self.bot_obj.translate((0., 0., 0.5))
-        self.highlight_obj.translate((0., 0., 0.5))
-
-        self.highlight_obj.set_color((0., 1.0, 0., 1.0)) # low alpha green
 
         #print("corners2: ", self.corners) # debug
 
@@ -935,9 +926,7 @@ class Needle:
         self.env_width = env_width
         self.env_height = env_height
 
-        #self.needle_color = np.array([134., 200., 188.])
-        # Make needle clearer
-        self.needle_color = np.array([0., 100., 0., 255.]) / 255.
+        self.needle_color = LIGHT_BLUE
         self.thread_color = np.array([167., 188., 214., 255.]) / 255.
 
         # Save adjusted thread pointsmath.since we don't use them for anything
