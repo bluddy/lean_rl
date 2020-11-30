@@ -26,7 +26,8 @@ from .buffers import *
 from .env_wrapper import EnvWrapper
 
 import scipy.misc
-from multiprocessing import Process, Pipe
+
+import ray
 
 MAX_REWARD = 10000.
 MIN_REWARD = -10000.
@@ -76,6 +77,8 @@ def run(args):
 
     temp_q_avg, temp_q_max, temp_loss = [],[],[]
     env_time = 0.
+
+    ray.init()
 
     g = GlobalState()
 
@@ -517,11 +520,11 @@ def run(args):
                 #print("XXX train action: ", action) # debug
                 env.step(action)
 
-        if target_sleep_time:
-            time.sleep(target_sleep_time)
-
         if args.sleep_time:
             time.sleep(args.sleep_time)
+
+        elif target_sleep_time:
+            time.sleep(target_sleep_time)
 
         # Save our data so we can loop and insert it into the replay buffer
         for env, state, ou_noise in zip(envs, states, ou_noises):
@@ -754,6 +757,8 @@ def run(args):
     print("Best Reward: ", g.best_reward)
     csv_f.close()
     log_f.close()
+
+    ray.shutdown()
 
 def test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer, eval_loops, log_f,
         g, csv_aux, args):
