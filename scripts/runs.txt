@@ -25,3 +25,5 @@ python3 -m rl.main --env needle3d --procs 25 --lr 1e-4 --mode image --opt sgd --
 ../../../rl/graph.py --info make.csv --div 50 --tmax 2000000
 ../../../rl/graph.py --info make.csv --div 10 --tmax 2000000
 
+# Needle3d
+python3 -m rl.main --env needle3d --procs 1 --lr 5e-5 --capacity 5e4 --task 3 --mode image --policy ddqn --batch-size 64 --opt adam --name test --objects 3d --camera topdown --eval-freq 80000
