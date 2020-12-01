@@ -450,7 +450,6 @@ def run(args):
     for env in envs:
         env.reset()
     states = [env.get()[0] for env in envs] # block
-    states_nd = dummy_env.combine_states(states)
 
     zero_noises = np.zeros((args.procs, action_dim))
     ou_noises = [utils.OUNoise(action_dim, theta=args.ou_theta, sigma=args.ou_sigma) \
@@ -489,6 +488,7 @@ def run(args):
             noises = zero_noises
 
         """ action selected based on pure policy """
+        states_nd = dummy_env.combine_states(states)
         actions2 = policy.select_action(states_nd)
 
         # Track stdev of chosen actions between procs
@@ -509,7 +509,6 @@ def run(args):
 
         acted = False
         env_measure_time = time.time()
-        new_states = []
 
         # Send non-blocking actions on ready envs
         for env, action in zip(envs, actions):
@@ -517,21 +516,23 @@ def run(args):
                 #print("XXX train action: ", action) # debug
                 env.step(action)
 
-        if target_sleep_time:
-            time.sleep(target_sleep_time)
-
         if args.sleep_time:
             time.sleep(args.sleep_time)
 
+        elif target_sleep_time:
+            time.sleep(target_sleep_time)
+
         # Save our data so we can loop and insert it into the replay buffer
-        for env, state, ou_noise in zip(envs, states, ou_noises):
+        for i, env in enumerate(envs):
+            state, ou_noise = states[i], ou_noises[i]
+
             if env.is_ready() or env.poll():
                 # Get the state and saved action from the env
                 new_state, reward, done, d = env.get() # blocking
                 action = d["action"]
-                new_states.append(new_state)
 
                 # Not reset, and reward not broken
+                # Cache updates to replay buffer
                 if action is not None and reward < MAX_REWARD and reward > MIN_REWARD:
                     w_s1.append(state)
                     w_s2.append(new_state)
@@ -540,6 +541,9 @@ def run(args):
                     w_a.append(action)
                     w_es.append(d["extra_state"] if "extra_state" in d else None)
                     w_procs.append(env.server_num)
+
+                # Update state after we used it
+                states[i] = new_state
 
                 if done:
                     render_ep_path=None
@@ -559,10 +563,8 @@ def run(args):
                         rate_control.add(0.)
                 else:
                     g.warmup_steps -= 1
-            else:
-                # Nothing to do with the env yet
-                new_states.append(state)
 
+        # Update replay buffer
         if len(w_s1) > 10:
             # Do compression in parallel
             if args.compressed:
@@ -622,7 +624,7 @@ def run(args):
                 if not env.is_ready(): # Flush old messages
                     env.get()
                 env.reset()
-            new_states = [env.get()[0] for env in envs]
+            states = [env.get()[0] for env in envs]
 
             temp_loss, temp_q_avg, temp_q_max = [], [], []
 
@@ -667,7 +669,8 @@ def run(args):
             # Training aux if needed
             if args.aux is not None:
                 csv_aux_arg = csv_aux if args.aux_collect else None
-                test_cnn(policy, replay_buffer, total_times, total_measure, logdir, tb_writer,
+                test_cnn(policy, replay_buffer, total_times, total_measure,
+                        logdir, tb_writer,
                         args.eval_loops, log_f, g, csv_aux_arg, args)
 
         ## Train model
@@ -732,8 +735,6 @@ def run(args):
             policy.set_eval()
 
         # print("Training done") # debug
-        states = new_states
-        states_nd = dummy_env.combine_states(states)
 
         ## Get stats
         if args.stat_freq != 0 and \
