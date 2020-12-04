@@ -13,8 +13,12 @@ from . import graphics as gr
 
 import cProfile, pstats
 
-GREEN = np.array([0., 255., 0., 255.]) / 255.
-LIGHT_BLUE = np.array([33., 65., 243., 255.]) / 255.
+GREEN = np.array([0., 255., 0., 255.],dtype=np.float32) / 255.
+LIGHT_BLUE = np.array([33., 65., 243., 255.],dtype=np.float32) / 255.
+ORANGE = np.array([214., 139., 19., 255.],dtype=np.float32) / 255.
+PINK = np.array([245., 66., 236., 255.],dtype=np.float32) / 255.
+GREENISH = np.array([100., 175., 100., 255.], dtype=np.float32) / 255.
+REDDISH = np.array([175., 100., 100., 255.], dtype=np.float32) / 255.
 
 '''
 For best results, use pillow-simd:
@@ -337,7 +341,7 @@ class Environment(CommonEnv):
         self.background = self.renderer.create_rectangle(self.shader_mode)
         self.background.set_color(self.background_color)
         self.background.translate((self.state.width/2., self.state.height/2., 0.))
-        self.background.scale((self.state.width, self.state.height, 1.))
+        self.background.scale((self.state.width * 1.5, self.state.height * 1.5, 1.))
 
     def create_random_env(self):
         self.state.width = 1920
@@ -616,9 +620,9 @@ class Environment(CommonEnv):
         return False
 
 class Gate:
-    color_passed = np.array([100., 175., 100., 255.]) / 255. # Green
-    color_failed = np.array([175., 100., 100., 255.]) / 255. # Red
-    color_next = np.array([214., 139., 19., 255.]) / 255. # Orange
+    color_passed = GREENISH
+    color_failed = REDDISH
+    color_next = PINK
     color1 = np.array([251., 216., 114., 255.]) / 255.
     color2 = np.array([255., 50., 12., 255.]) / 255.
 
