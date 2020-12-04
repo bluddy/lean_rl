@@ -307,7 +307,7 @@ class Environment(CommonEnv):
         self.state.width = int(D[0])
         #print(" - width=%d, height=%d"%(self.width, self.height))
 
-        self.create_backround()
+        self.create_background()
 
         D = safe_load_line('Gates', handle)
         self.state.ngates = int(D[0])
@@ -333,7 +333,7 @@ class Environment(CommonEnv):
             s.load(handle)
             self.state.surfaces.append(s)
 
-    def create_backround(self):
+    def create_background(self):
         self.background = self.renderer.create_rectangle(self.shader_mode)
         self.background.set_color(self.background_color)
         self.background.translate((self.state.width/2., self.state.height/2., 0.))
@@ -353,7 +353,6 @@ class Environment(CommonEnv):
             overlaps = True
             while overlaps:
                 rand = np.random.rand(3)
-                rand[3] *= pi_div2
                 gate.from_params(*rand)
                 overlaps = False
                 for gate2 in self.state.gates:
