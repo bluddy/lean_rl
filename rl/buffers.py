@@ -54,6 +54,7 @@ class ReplayBuffer(object):
         self.mode = mode
         # Buffers to reuse memory
         self.compressed = compressed
+        self.use_priorities = False
 
     def decompress(self, data):
         ''' Used when sampling
@@ -169,6 +170,7 @@ class NaivePrioritizedBuffer(ReplayBuffer):
         self.prob_alpha = prob_alpha
         self.priorities = np.zeros((capacity,), dtype=np.float32)
         self.vacate = vacate
+        self.use_priorities = True
 
     def add(self, data, **kwargs):
         ''' In compressed mode, the states must be pre-compressed '''

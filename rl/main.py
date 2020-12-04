@@ -969,13 +969,13 @@ if __name__ == "__main__":
 
     parser.add_argument("--seed", default=1e6, type=int,
         help='Sets Gym, PyTorch and Numpy seeds')
-    parser.add_argument("--eval-freq", default=2000, type=int, # 200
+    parser.add_argument("--eval-freq", default=40000, type=int, # 200
         help='How often (time steps) we evaluate')
     parser.add_argument('--eval-envs', default=0, type=int,
             help='How many environments to test with (0 is all)')
     parser.add_argument("--train-freq", default=100, type=int,
         help='Timesteps to explore before applying learning')
-    parser.add_argument("--render-freq", default=100, type=int,
+    parser.add_argument("--render-freq", default=1000, type=int,
         help='How often (episodes) we save the images')
     parser.add_argument("--render-t-freq", default=5, type=int,
         help='How often (timesteps) we save the images in a saved episode')

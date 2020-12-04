@@ -6,11 +6,6 @@ from os.path import join as pjoin
 
 device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
-try:
-    import apex.amp as amp
-except ImportError:
-    pass
-
 e24 = pow(2,24)
 
 class OffPolicyAgent(object):
@@ -51,9 +46,6 @@ class OffPolicyAgent(object):
             opt = th.optim.SGD(model.parameters(), lr=lr)
         else:
             raise ValueError('Unknown optimizer type')
-
-        if self.amp:
-            model, opt = amp.initialize(model, opt, opt_level='O1')
 
         return model, opt
 
@@ -147,9 +139,6 @@ class OffPolicyAgent(object):
             else:
                 checkpoint[s] = obj.state_dict()
 
-        if self.amp:
-            checkpoint['amp'] = amp.state_dict()
-
         th.save(checkpoint, os.path.join(path, 'checkpoint.pth'))
 
     def load(self, path):
@@ -161,5 +150,3 @@ class OffPolicyAgent(object):
                     obj.load_state_dict(robj)
             else:
                 self.__dict__[s].load_state_dict(checkpoint[s])
-        if self.amp:
-            amp.load_state_dict(checkpoint['amp'])

@@ -6,13 +6,9 @@ from os.path import join as pjoin
 from rl.policy.common.offpolicy import OffPolicyAgent
 from .policy import QState, QImage, QMixed, QImageAux, QMixedAux
 from rl.policy.common.utils import polyak_update
+import torch.cuda.amp as amp
 
 device = th.device("cuda" if th.cuda.is_available() else "cpu")
-
-try:
-    import apex.amp as amp
-except ImportError:
-    pass
 
 # DQN
 
@@ -32,6 +28,9 @@ class DQN(OffPolicyAgent):
         self.to_save = ['q', 'q_t', 'q_opt']
 
         self._create_models()
+
+        if self.amp:
+            self.scaler = amp.GradScaler()
 
     def set_eval(self):
         self.q.eval()
@@ -192,21 +191,29 @@ class DQN(OffPolicyAgent):
 
         Q_t = reward + (done * discount * Q_t).detach()
 
+        compare_to = extra_state
+
         # Get current Q estimate
-        Q_now = self.q(state)
-        if self.aux is not None:
-            Q_now, predicted = Q_now
-        Q_now = th.gather(Q_now, -1, action)
+        with amp.autocast(enabled=self.amp):
+            Q_now = self.q(state)
 
-        # Compute Q loss
-        q_loss = (Q_now - Q_t).pow(2)
-        prios = q_loss + 1e-5
+            if self.aux is not None:
+                Q_now, predicted = Q_now
+
+            Q_now = th.gather(Q_now, -1, action)
+
+            # Compute Q loss
+            q_loss = Q_now - Q_t
+            q_loss = q_loss * q_loss
+            prios = q_loss + 1e-5
+            q_loss = q_loss.mean()
+
+            if self.aux is not None:
+                aux_loss = self.aux_loss(predicted, compare_to)
+
         prios = prios.data.cpu().numpy()
-        q_loss = q_loss.mean()
 
         if self.aux is not None:
-            compare_to = extra_state
-            aux_loss = self.aux_loss(predicted, compare_to)
             aux_losses.append(aux_loss.item())
 
             if self.freeze:
@@ -215,8 +222,8 @@ class DQN(OffPolicyAgent):
             self.q_opt.zero_grad()
 
             if self.amp:
-                with amp.scale_loss(aux_loss, self.q_opt) as scaled_loss:
-                    scaled_loss.backward()
+                self.scaler.scale(aux_loss).backward()
+                self.scaler.step(self.q_opt)
             else:
                 aux_loss.backward()
                 self.q_opt.step()
@@ -237,12 +244,12 @@ class DQN(OffPolicyAgent):
         self.q_opt.zero_grad()
 
         if self.amp:
-            with amp.scale_loss(q_loss, self.q_opt) as scaled_loss:
-                scaled_loss.backward()
+            self.scaler.scale(q_loss).backward()
+            self.scaler.step(self.q_opt)
+            self.scaler.update() # Only called after all steps in iter
         else:
             q_loss.backward()
-
-        self.q_opt.step()
+            self.q_opt.step()
 
         replay_buffer.update_priorities(indices, prios)
 
@@ -309,15 +316,17 @@ class DDQN(DQN):
                 if self.freeze:
                     update_q.freeze_some(False)
 
-                _, predicted = update_q(state)
                 compare_to = extra_state
-                aux_loss = self.aux_loss(predicted, compare_to)
+                with amp.autocast(enabled=self.amp):
+                        _, predicted = update_q(state)
+                        aux_loss = self.aux_loss(predicted, compare_to)
                 aux_losses.append(aux_loss.item())
 
                 opt.zero_grad()
+
                 if self.amp:
-                    with amp.scale_loss(aux_loss, opt) as scaled_loss:
-                        scaled_loss.backward()
+                    self.scaler.scale(aux_loss).backward()
+                    self.scaler.step(opt)
                 else:
                     aux_loss.backward()
                     opt.step()
@@ -325,34 +334,44 @@ class DDQN(DQN):
                 if self.freeze:
                     update_q.freeze_some(True) # Only backprop last layers
 
+            # Not used for backprop
+            with th.no_grad():
+                Qt = [qt(state2) for qt in self.qts]
+                if self.aux is not None:
+                    Qt = [q[0] for q in Qt]
+                Qt = th.min(*Qt)
 
-            Qt = [qt(state2) for qt in self.qts]
-            if self.aux is not None:
-                Qt = [q[0] for q in Qt]
-            Qt = th.min(*Qt)
+                Qt_max, _ = th.max(Qt, dim=-1, keepdim=True)
 
-            Qt_max, _ = th.max(Qt, dim=-1, keepdim=True)
-
-            y = reward + (done * discount * Qt_max).detach()
+                y = reward + (done * discount * Qt_max).detach()
 
             # Get current Q estimate
-            Q_now = update_q(state)
-            if self.aux is not None:
-                Q_now, _ = Q_now
-            Q_now = th.gather(Q_now, -1, action)
+            with amp.autocast(enabled=self.amp):
+                Q_now = update_q(state)
 
-            # Compute loss
-            q_loss = (Q_now - y).pow(2)
-            prios = q_loss + 1e-5
-            prios = prios.data.cpu().numpy()
-            replay_buffer.update_priorities(indices, prios)
-            q_loss = q_loss.mean()
+                if self.aux is not None:
+                    Q_now, _ = Q_now
+
+                Q_now = th.gather(Q_now, -1, action)
+
+                # Compute loss
+                q_loss = (Q_now - y)
+                q_loss = q_loss * q_loss
+                if replay_buffer.use_priorities:
+                    prios = q_loss + 1e-5
+                q_loss = q_loss.mean()
+
+            if replay_buffer.use_priorities:
+                prios = prios.data.cpu().numpy()
+                replay_buffer.update_priorities(indices, prios)
 
             # Optimize the model
             opt.zero_grad()
+
             if self.amp:
-                with amp.scale_loss(q_loss, opt) as scaled_loss:
-                    scaled_loss.backward()
+                self.scaler.scale(q_loss).backward()
+                self.scaler.step(opt)
+                self.scaler.update()
             else:
                 q_loss.backward()
                 opt.step()

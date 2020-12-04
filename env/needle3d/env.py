@@ -114,7 +114,7 @@ class Environment(CommonEnv):
         self.state.status = None
         self.extra_state_dim = 0
 
-        self.profile_time = 100
+        self.profile_time = 1000
 
         self.renderer = None
 
