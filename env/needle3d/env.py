@@ -324,7 +324,7 @@ class Environment(CommonEnv):
 
         if self.state.ngates > 0:
             self.state.next_gate = 0
-            self.state.gates[0].status = 'next'
+            self.state.gates[0]._set_next()
 
         if self.max_gates < self.state.ngates:
             self.max_gates = self.state.ngates
@@ -366,7 +366,7 @@ class Environment(CommonEnv):
 
         if self.state.ngates > 0:
             self.state.next_gate = 0
-            self.state.gates[0].status = 'next'
+            self.state.gates[0]._set_next()
 
         self.state.nsurfaces = 0 # TODO
 
@@ -597,17 +597,19 @@ class Environment(CommonEnv):
             self.state.gate_status = 'done'
             return
 
-        next_gate._update_status_and_color(
-            self.state.needle.tip, self.state.needle.last_tip)
-        status = self._get_next_gate_status()
+        status = \
+            next_gate._update_next_status_and_color(
+                self.state.needle.tip, self.state.needle.last_tip)
         self.state.gate_status = status
         # if you passed or failed the gate
         if status in ['failed', 'passed']:
             # increment to the next gate
             self.state.next_gate += 1
             next_gate = self._get_next_gate()
-            if next_gate is not None:
-                next_gate.status = 'next'
+            if next_gate is None:
+                self.state.gate_status = 'done'
+            else:
+                next_gate._set_next()
 
     def _deep_tissue_intersect(self):
         """
@@ -650,25 +652,30 @@ class Gate:
         self.env_width = env_width
         self.env_height = env_height
 
-    def _update_status_and_color(self, p, last_p):
+    def _set_next(self):
+        self.status = 'next'
+        self.c_mid = self.color_next
+
+    def _update_next_status_and_color(self, p, last_p):
         ''' take in current position,
             see if you passed or failed the gate
         '''
         path = geo.LineString([last_p, p])
 
-        if self.status != 'passed' and \
-                (path.intersects(self.top_box) or
-                path.intersects(self.bottom_box)):
+        if self.status in ['passed', 'failed']:
+            return self.status
+
+        if path.intersects(self.top_box) or \
+            path.intersects(self.bottom_box):
             self.status = 'failed'
             self.c_mid = self.color_failed
             self.c_outer = self.color_failed
-        elif self.status == 'next':
-            if self.box.contains(p):
-                self.status = 'passed'
-                self.c_mid = self.color_passed
-                self.c_outer = self.color_passed
-            else:
-                self.c_mid = self.color_next
+        elif self.box.contains(p):
+            self.status = 'passed'
+            self.c_mid = self.color_passed
+            self.c_outer = self.color_passed
+
+        return self.status
 
     def draw(self):
         self.top_obj.set_color(self.c_outer)
@@ -934,7 +941,7 @@ class Needle:
 
         # Save adjusted thread pointsmath.since we don't use them for anything
         self.thread_points = [(self.x, self.y)]
-        self.tip = geo.Point(np.array([self.x, self.y]))
+        self.tip = geo.Point([self.x, self.y])
         self.last_tip = self.tip
         self.path_length = 0.
 
@@ -1076,6 +1083,6 @@ class Needle:
 
         self.dx, self.dy, self.dw = dx, dy, dw
         self.last_tip = self.tip
-        self.tip = geo.Point(np.array([self.x, self.y]))
+        self.tip = geo.Point([self.x, self.y])
         self._compute_corners()
 
