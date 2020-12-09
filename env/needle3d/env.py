@@ -175,7 +175,7 @@ class Environment(CommonEnv):
                 self.renderer.set_perspective()
                 self.renderer.set_camera_up((0., 0., 1.))
                 if cm == 'bottom':
-                    loc = (self.state.width/2., -300., 800.)
+                    loc = (self.state.width/2., -300., 1200.)
                     lookat = (self.state.width/2., self.state.height/2., -100.)
                 elif cm == 'right':
                     loc = (self.state.width + 300, self.state.height/2., 800.)
@@ -288,7 +288,7 @@ class Environment(CommonEnv):
             needle = self.state.needle
             reward_s = 'x:{:.3f}, y:{:.3f}, w:{:.3f}'.format(
                     float(needle.x), float(needle.y), float(needle.w))
-            txt_surface = myfont.render(reward_s, False, (0, 0, 0))
+            txt_surface = myfont.render(reward_s, False, (220, 0, 0))
             surface.blit(txt_surface, (10, 10))
 
         save_name = self._gen_save_name(sim_save=sim_save) + '.png'
