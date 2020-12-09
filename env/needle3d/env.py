@@ -280,7 +280,6 @@ class Environment(CommonEnv):
         # draw text
         if not sim_save:
             myfont = pg.font.SysFont('Arial', 10)
-            '''
             reward_s = "S:{} TR:{:.3f}, R:{:.3f} a:{}".format(
                 self.server_num, self.total_reward, self.last_reward,
                 self.state.action)
@@ -288,6 +287,7 @@ class Environment(CommonEnv):
             needle = self.state.needle
             reward_s = 'x:{:.3f}, y:{:.3f}, w:{:.3f}'.format(
                     float(needle.x), float(needle.y), float(needle.w))
+            '''
             txt_surface = myfont.render(reward_s, False, (0, 0, 0))
             surface.blit(txt_surface, (10, 10))
 
