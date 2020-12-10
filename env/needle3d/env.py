@@ -670,7 +670,7 @@ class Gate:
             self.status = 'failed'
             self.c_mid = self.color_failed
             self.c_outer = self.color_failed
-        elif self.box.contains(p):
+        elif self.box.contains(p) and not self.top_box.contains(p) and not self.bottom_box.contains(p):
             self.status = 'passed'
             self.c_mid = self.color_passed
             self.c_outer = self.color_passed
