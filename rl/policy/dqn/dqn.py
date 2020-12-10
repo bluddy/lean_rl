@@ -13,7 +13,7 @@ device = th.device("cuda" if th.cuda.is_available() else "cpu")
 # DQN
 
 class DQN(OffPolicyAgent):
-    def __init__(self, action_steps:int=None, **kwargs):
+    def __init__(self, action_steps:int, cnn_net_arch=None, **kwargs):
 
         super().__init__(**kwargs)
 
@@ -25,6 +25,7 @@ class DQN(OffPolicyAgent):
         self.total_steps = np.prod(action_steps)
 
         self.action_steps = action_steps
+        self.cnn_net_arch = cnn_net_arch
         self.to_save = ['q', 'q_t', 'q_opt']
 
         self._create_models()
@@ -44,6 +45,7 @@ class DQN(OffPolicyAgent):
                 if self.aux is None:
                     n = QImage(action_dim=self.total_steps, img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim,
+                        cnn_net_arch=self.cnn_net_arch,
                         drop=self.dropout).to(device)
                 else:
                     if self.aux:
@@ -54,6 +56,7 @@ class DQN(OffPolicyAgent):
 
                     n = QImage2Outs(action_dim=self.total_steps, img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                        cnn_net_arch=self.cnn_net_arch,
                         aux_size=aux_size).to(device)
 
             elif self.network == 'densenet':
@@ -68,6 +71,7 @@ class DQN(OffPolicyAgent):
                 if not self.aux:
                     n = QMixed(state_dim=self.state_dim, action_dim=self.total_steps,
                         img_stack=self.total_stack, bn=self.bn,
+                        cnn_net_arch=self.cnn_net_arch,
                         img_dim=self.img_dim, drop=self.dropout).to(device)
                 else:
                     print("Aux")
@@ -76,6 +80,7 @@ class DQN(OffPolicyAgent):
                     n = QMixedAux(state_dim=self.state_dim, action_dim=self.total_steps,
                         img_stack=self.total_stack,
                         bn=self.bn, img_dim=self.img_dim, drop=self.dropout,
+                        cnn_net_arch=self.cnn_net_arch,
                         aux_size=aux_size).to(device)
 
             elif self.network == 'densenet':

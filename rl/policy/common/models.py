@@ -67,13 +67,19 @@ class Dummy(nn.Module):
 
 class CNN(nn.Module):
     def __init__(self, img_stack, drop=False,
-            net_arch:Tuple[List[int], List[int], List[int]]=None, img_dim:int=224, **kwargs):
+            net_arch:Tuple[List[int], List[int], List[int]]='deep', img_dim:int=224, **kwargs):
         super().__init__()
 
-        if net_arch is None:
+        if net_arch is None or net_arch == 'deep':
+            print('Deep CNN')
             net_start_f = 8
             net_filters = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
             net_strides = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 2, 2]
+        elif net_arch == 'shallow':
+            print('Shallow CNN')
+            net_start_f = 2
+            net_filters = [3, 3, 3, 3, 3, 3, 3]
+            net_strides = [2, 2, 2, 2, 2, 2, 2]
         else:
             net_start_f, net_filters, net_strides = net_arch
 
