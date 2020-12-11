@@ -701,20 +701,23 @@ class Gate:
         h_gw = gw / 2.
         h_gl = gl / 2.
         h_bl = bl / 2.
-        sinw = math.sin(w)
-        cosw = math.cos(w)
+        sinw = math.sin(w) * scale
+        cosw = math.cos(w) * scale
 
         # order of corners: TR, BR, BL, TL
         # Remember y starts from below
+        self.x = x * self.env_width
+        self.y = y * self.env_height
+        self.w = w
         self.corners = np.array([
-           [x + h_gl * cosw - h_gw * sinw,
-            y + h_gl * sinw + h_gw * cosw],
-           [x + h_gl * cosw + h_gw * sinw,
-            y + h_gl * sinw - h_gw * cosw],
-           [x - h_gl * cosw + h_gw * sinw,
-            y - h_gl * sinw - h_gw * cosw],
-           [x - h_gl * cosw - h_gw * sinw,
-            y - h_gl * sinw + h_gw * cosw],
+           [self.x + h_gl * cosw - h_gw * sinw,
+            self.y + h_gl * sinw + h_gw * cosw],
+           [self.x + h_gl * cosw + h_gw * sinw,
+            self.y + h_gl * sinw - h_gw * cosw],
+           [self.x - h_gl * cosw + h_gw * sinw,
+            self.y - h_gl * sinw - h_gw * cosw],
+           [self.x - h_gl * cosw - h_gw * sinw,
+            self.y - h_gl * sinw + h_gw * cosw],
            ])
         self.top = np.array(self.corners)
         self.top[3,:] = self.corners[0, :]
@@ -731,17 +734,7 @@ class Gate:
         self.bottom[0,0] += h_bl * cosw
         self.bottom[0,1] += h_bl * sinw
 
-        self.x = x * self.env_width
-        self.y = y * self.env_height
-        self.w = w
         #print("corners: ", self.corners) # debug
-        self.corners[:,0] *= self.env_width
-        self.corners[:,1] *= self.env_height
-        self.top[:,0] *= self.env_width
-        self.top[:,1] *= self.env_height
-        self.bottom[:,0] *= self.env_width
-        self.bottom[:,1] *= self.env_height
-
         # Graphics
         if self.env.object_mode =='2d':
             create_fun = self.renderer.create_rectangle
