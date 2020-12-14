@@ -116,6 +116,7 @@ class Environment(CommonEnv):
         self.state.next_gate = None
         self.state.filename = filename
         self.state.status = None
+        self.state.done_counter = None
         self.extra_state_dim = 0
 
         self.profile_time = 1000
@@ -149,6 +150,7 @@ class Environment(CommonEnv):
         # environment damage is the sum of the damage to all surfaces
         self.state.damage = 0
         self.state.next_gate = None
+        self.state.done_counter = 3
 
         self.state.width = 1920
         self.state.height = 1080
@@ -383,7 +385,12 @@ class Environment(CommonEnv):
             reward += 20 # Encourage getting there
         elif status == 'done':
             self.last_dist = None
-            done = True
+            if not self.state.done_counter:
+                done = True
+            else:
+                # Decrement counter
+                self.state.done_counter -= 1
+                return reward, False
 
         needle = self.state.needle
 
@@ -701,8 +708,10 @@ class Gate:
         h_gw = gw / 2.
         h_gl = gl / 2.
         h_bl = bl / 2.
+        w = -w # try
         sinw = math.sin(w) * scale
         cosw = math.cos(w) * scale
+        w = -w
 
         # order of corners: TR, BR, BL, TL
         # Remember y starts from below

@@ -13,12 +13,12 @@ class Dummy(object):
     def select_action(self, state):
         return np.ones( (len(state),), dtype=np.float32)
 
-    def train(self, replay_buffer, timesteps, beta, args):
+    def train(self, *args, **kwargs):
         return (0., 0., 0., 0.)
 
-    def save(self, path):
+    def save(self, *args, **kwargs):
         pass
 
-    def load(self, path):
+    def load(self, *args, **kwargs):
         pass
 

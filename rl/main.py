@@ -366,7 +366,7 @@ def run(args):
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
     elif args.policy == 'ddpg':
-        from policy.DDPG import DDPG
+        from rl.policy.DDPG import DDPG
         policy = DDPG(state_dim, action_dim, args.stack_size,
             args.mode, lr=args.lr, img_depth=img_depth,
             bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
@@ -386,7 +386,7 @@ def run(args):
             reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode,
             freeze=args.freeze, opt=args.opt)
     elif args.policy == 'dummy':
-        from policy.dummy import Dummy
+        from rl.policy.dummy import Dummy
         policy = Dummy()
     else:
         raise ValueError(
