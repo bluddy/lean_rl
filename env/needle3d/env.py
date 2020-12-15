@@ -66,6 +66,8 @@ class Environment(CommonEnv):
             }
     background_color = np.array([99., 153., 174., 255.]) / 255.
 
+    done_init = 3 # What to set the counter to
+
     def __init__(self, mode='image', stack_size=1,
             log_file=None, filename=None, max_steps=150, img_dim=224,
             action_steps=51,
@@ -116,7 +118,7 @@ class Environment(CommonEnv):
         self.state.next_gate = None
         self.state.filename = filename
         self.state.status = None
-        self.state.done_counter = None
+        self.state.done_counter = self.done_init
         self.extra_state_dim = 0
 
         self.profile_time = 1000
@@ -150,7 +152,7 @@ class Environment(CommonEnv):
         # environment damage is the sum of the damage to all surfaces
         self.state.damage = 0
         self.state.next_gate = None
-        self.state.done_counter = 3
+        self.state.done_counter = self.done_init
 
         self.state.width = 1920
         self.state.height = 1080
@@ -385,12 +387,8 @@ class Environment(CommonEnv):
             reward += 20 # Encourage getting there
         elif status == 'done':
             self.last_dist = None
-            if not self.state.done_counter:
-                done = True
-            else:
-                # Decrement counter
-                self.state.done_counter -= 1
-                return reward, False
+            done = True
+            return reward/10., done
 
         needle = self.state.needle
 
@@ -440,13 +438,12 @@ class Environment(CommonEnv):
         if self.t > self.max_steps:
             done = True
 
+        reward /= 10
+
         if self.scale_rewards:
             # Need to make sure we'll be positive
-            reward /= 10
             if reward < 0.:
                 reward = 0.
-        else:
-            reward /= 10
 
         return reward, done
 
@@ -554,7 +551,7 @@ class Environment(CommonEnv):
         extra = {
             "action": action_orig,
             "save_mode": self.get_save_mode(),
-            "success": self._get_next_gate_status() == 'done',
+            "success": self.state.gate_status == 'done',
             "best_action": None,
             "extra_state": None
         }
@@ -583,12 +580,6 @@ class Environment(CommonEnv):
         ''' @s: a surface '''
         return s.contains(self.state.needle.tip)
 
-    def _get_next_gate_status(self):
-        next_gate = self._get_next_gate()
-        if next_gate is None:
-            return 'done'
-        return next_gate.status
-
     def _get_next_gate(self):
         if self.state.next_gate is None or \
            self.state.next_gate >= len(self.state.gates):
@@ -601,22 +592,23 @@ class Environment(CommonEnv):
         # have we passed a new gate?
         next_gate = self._get_next_gate()
         if next_gate is None:
-            self.state.gate_status = 'done'
-            return
-
-        status = \
-            next_gate._update_next_status_and_color(
-                self.state.needle.tip, self.state.needle.last_tip)
-        self.state.gate_status = status
-        # if you passed or failed the gate
-        if status in ['failed', 'passed']:
-            # increment to the next gate
-            self.state.next_gate += 1
-            next_gate = self._get_next_gate()
-            if next_gate is None:
-                self.state.gate_status = 'done'
+            # Allow for frames before done
+            if self.state.done_counter:
+                self.state.done_counter -= 1
             else:
-                next_gate._set_next()
+                self.state.gate_status = 'done'
+        else:
+            status = \
+                next_gate._update_next_status_and_color(
+                    self.state.needle.tip, self.state.needle.last_tip)
+            self.state.gate_status = status
+            # if you passed or failed the gate
+            if status in ['failed', 'passed']:
+                # increment to the next gate
+                self.state.next_gate += 1
+                next_gate = self._get_next_gate()
+                if next_gate is not None:
+                    next_gate._set_next()
 
     def _deep_tissue_intersect(self):
         """
