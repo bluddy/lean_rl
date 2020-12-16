@@ -594,6 +594,7 @@ class Environment(CommonEnv):
         if next_gate is None:
             # Allow for frames before done
             if self.state.done_counter:
+                self.state.gate_status = 'almost_done'
                 self.state.done_counter -= 1
             else:
                 self.state.gate_status = 'done'
