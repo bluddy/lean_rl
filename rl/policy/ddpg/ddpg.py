@@ -1,7 +1,10 @@
 import numpy as np
-import torch
+import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
+from os.path import join as pjoin
+
+from rl.policy.common.offpolicy import OffPolicyAgent
 from models import ActorImage, CriticImage, ActorState, CriticState
 from os.path import join as pjoin
 
@@ -12,7 +15,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # We have greyscale, and then one RGB
 
-class DDPG(object):
+class DDPG(OffPolicyAgent):
     def __init__(self, state_dim, action_dim, stack_size,
             mode, lr=1e-4, img_depth=3, bn=True, actor_lr=None,
             img_dim=224):

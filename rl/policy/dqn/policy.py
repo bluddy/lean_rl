@@ -1,7 +1,6 @@
 import numpy as np
 import torch as th
 import torch.nn as nn
-import os, sys, math
 from rl.policy.common.models import *
 
 class QState(nn.Module):
