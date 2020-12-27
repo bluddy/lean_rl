@@ -188,7 +188,7 @@ class Environment(CommonEnv):
                     loc = (-500, self.state.height/2., 1900.)
                     lookat = (self.state.width/2. - 100., self.state.height/2., -100.)
                 elif cm == 'lowleft':
-                    loc = (-500, self.state.height/2., 10.)
+                    loc = (-500, self.state.height/2., 500.)
                     lookat = (self.state.width/2. - 100., float(self.state.height), 10.)
                 self.renderer.set_camera_loc(loc)
                 self.renderer.set_camera_lookat(lookat)
