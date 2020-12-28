@@ -35,19 +35,27 @@ class OffPolicyAgent(object):
             self.aux_loss = nn.MSELoss()
         self.aux_size = aux_size
 
+        self.needs_quantization = False
+
         self.to_save = []
 
     def _create_opt(self, model, lr):
         if self.opt_type == 'adam':
             print("opt: Adam. LR={}".format(lr))
-            opt = th.optim.Adam(model.parameters(), lr=lr)
+            if isinstance(model, nn.Module):
+                opt = th.optim.Adam(model.parameters(), lr=lr)
+            else:
+                opt = th.optim.Adam(model, lr=lr)
         elif self.opt_type == 'sgd':
             print("opt: SGD. LR={}".format(lr))
-            opt = th.optim.SGD(model.parameters(), lr=lr)
+            if isinstance(model, nn.Module):
+                opt = th.optim.SGD(model.parameters(), lr=lr)
+            else:
+                opt = th.optim.SGD(model, lr=lr)
         else:
             raise ValueError('Unknown optimizer type')
 
-        return model, opt
+        return opt
 
     def _copy_action_to_dev(self, u, batch_size):
         return th.FloatTensor(u).to(device)
@@ -63,7 +71,7 @@ class OffPolicyAgent(object):
             extra_state = th.FloatTensor(extra_state).to(device)
         return x, y, u, r, d, extra_state
 
-    def _sample_to_dev(self, replay_buffer, batch_size, beta, num):
+    def _sample_to_dev(self, replay_buffer, batch_size, beta, num=None):
         data = replay_buffer.sample(batch_size, beta=beta, num=num)
         [x, y, u, r, d, extra_state, indices] = data
         length = len(u)

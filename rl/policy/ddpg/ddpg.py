@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from os.path import join as pjoin
 
 from rl.policy.common.offpolicy import OffPolicyAgent
-from models import ActorImage, CriticImage, ActorState, CriticState
-from os.path import join as pjoin
+from rl.policy.common.actor_critic import ActorImage, CriticImage, ActorState, CriticState
+import torch.cuda.amp as amp
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -19,6 +19,8 @@ class DDPG(OffPolicyAgent):
     def __init__(self, state_dim, action_dim, stack_size,
             mode, lr=1e-4, img_depth=3, bn=True, actor_lr=None,
             img_dim=224):
+
+        super().__init__(**kwargs)
 
         self.state_dim = state_dim
         self.action_dim = action_dim

@@ -30,6 +30,8 @@ class DQN(OffPolicyAgent):
 
         self._create_models()
 
+        self.needs_quantization = True
+
         if self.amp:
             self.scaler = amp.GradScaler()
 
@@ -98,7 +100,7 @@ class DQN(OffPolicyAgent):
         self.q_t = self._create_model()
 
         self.q_t.load_state_dict(self.q.state_dict())
-        self.q, self.q_opt = self._create_opt(self.q, self.lr)
+        self.q_opt = self._create_opt(self.q, self.lr)
 
         print("DDQN LR={}".format(self.lr))
 
@@ -180,11 +182,11 @@ class DQN(OffPolicyAgent):
         action = self._discrete_to_cont(max_action)
         return action
 
-    def train(self, replay_buffer, timesteps, batch_size, discount, tau, beta):
+    def train(self, replay_buffer, batch_size, discount, tau, beta):
 
         # Sample replay buffer
         state, state2, action, reward, done, extra_state, indices = \
-            self._sample_to_dev(replay_buffer, batch_size, beta=beta, num=num)
+            self._sample_to_dev(replay_buffer, batch_size, beta=beta)
 
         Q_ts = self.q_t(state2)
         if self.aux is not None:
@@ -299,14 +301,14 @@ class DDQN(DQN):
         #import pdb
         #pdb.set_trace()
 
-        self.qs, self.opts = list(zip(*[self._create_opt(q, self.lr) for q in self.qs]))
+        self.opts = [self._create_opt(q, self.lr) for q in self.qs]
 
         print("DDQN. LR={}".format(self.lr))
 
     def _get_q(self):
         return self.qs[0]
 
-    def train(self, replay_buffer, timesteps, batch_size, discount, tau, beta):
+    def train(self, replay_buffer, batch_size, discount, tau, beta):
 
         q_losses, aux_losses, Q_max, Q_mean = [], [], [], []
 

@@ -361,10 +361,14 @@ def run(args):
         cnn_net_arch = 'shallow'
 
     if args.policy == 'td3':
-        from policy.td3 import TD3
-        policy = TD3(state_dim, action_dim, args.stack_size,
-            args.mode, lr=args.lr, img_depth=img_depth,
-            bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
+        from rl.policy.td3.td3 import TD3
+        policy = TD3(state_dim=state_dim, action_dim=action_dim, stack_size=args.stack_size,
+            mode=args.mode, network=args.network, lr=args.lr,
+            img_dim=args.img_dim, img_depth=img_depth, cnn_net_arch=cnn_net_arch,
+            amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
+            depthmap_mode=args.depthmap_mode, actor_lr=args.actor_lr,
+            policy_noise=args.policy_noise, noise_clip=args.noise_clip, policy_freq=args.policy_freq
+            )
     elif args.policy == 'ddpg':
         from rl.policy.DDPG import DDPG
         policy = DDPG(state_dim, action_dim, args.stack_size,
@@ -506,7 +510,7 @@ def run(args):
         #print("actions: ", actions, " actions2: ", actions2) # debug
 
         # for dqn, we need to quantize the actions
-        if args.policy == 'dqn':
+        if policy.needs_quantization:
             actions2 = policy.quantize_continuous(actions)
             #print("actions: ", actions, " actions2: ", actions2) # debug
             actions = actions2
@@ -704,7 +708,7 @@ def run(args):
                     (1.0 - beta_start) / beta_frames)
 
                 critic_loss, actor_loss, q_avg, q_max = policy.train(
-                    replay_buffer, g.step, batch_size=args.batch_size,
+                    replay_buffer, batch_size=args.batch_size,
                     discount=args.discount, tau=args.tau, beta=beta)
 
                 temp_q_avg.append(q_avg)
@@ -1010,11 +1014,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=32, type=int,
         help='Batch size for both actor and critic')
     #---
-    parser.add_argument("--policy-noise", default=0.04, type=float, # was 0.2
-        help='TD3 Smoothing noise added to target policy during critic update')
-    parser.add_argument("--noise_clip", default=0.1, type=float,
-        help='TD3 Range to clip target policy noise') # was 0.5
-
     parser.add_argument("--buffer", default = 'replay', # 'priority'
         help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
     parser.add_argument("--capacity", default=5e4, type=float,
@@ -1056,8 +1055,13 @@ if __name__ == "__main__":
     parser.add_argument("--reduced-dim", default = 100, type=int,
             help="Bottleneck for neural network (default:100)")
 
+    parser.add_argument("--policy-noise", default=0.05, type=float, # was 0.2
+        help='TD3 Smoothing noise added to target policy during critic update')
+    parser.add_argument("--noise_clip", default=0.1, type=float, # was 0.5
+        help='TD3 Range to clip target policy noise') # was 0.5
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')
+
     parser.add_argument("--name", default=None, type=str,
         help='Name to append to save directory')
 
@@ -1067,8 +1071,6 @@ if __name__ == "__main__":
     #--- Tau: percent copied to target
     parser.add_argument("--tau", default=0.001, type=float,
         help='Target critic network update rate')
-    parser.add_argument("--actor-tau", default=0.001, type=float,
-        help='Target actor network update rate')
     #---
 
     #--- Optimizer
@@ -1078,7 +1080,7 @@ if __name__ == "__main__":
         help="Learning rate for critic optimizer (sgd:1e-3, adam:5e-5)")
     parser.add_argument("--lr2", default=1e-3, type=float,
         help="Learning rate for second critic optimizer")
-    parser.add_argument("--actor-lr", default=1e-5, type=float,
+    parser.add_argument("--actor-lr", default=None, type=float,
         help="Learning rate for actor optimizer")
     parser.add_argument("--clip-grad", default=None, type=float,
         help="Clip the gradient to slow down learning")
