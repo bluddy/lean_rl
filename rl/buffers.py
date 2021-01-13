@@ -8,64 +8,17 @@ import random, time
 # Code based on:
 # https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
 
-def state_compress(mode, state):
-    ''' Should be called for compression mode '''
-
-    def compress_img(d):
-        l = []
-        for i in range(0, len(d), 3):
-            dd = d[i:i+3].transpose((1,2,0))
-            l.append(imageio.imwrite(imageio.RETURN_BYTES, dd, format='PNG'))
-        return l
-
-    if mode == 'image':
-        d = state.squeeze(0)
-        return compress_img(d)
-
-    elif mode == 'mixed':
-        d = state[0].squeeze(0)
-        s = compress_img(d)
-        return (s, state[1])
-
-def state_decompress(mode, state):
-    ''' Should be called for compression mode '''
-
-    def decompress_img(l):
-        limg = []
-        for d in l:
-            limg.append(imageio.imread(d, format='PNG').transpose((2,0,1)))
-        img = np.concatenate(limg, axis=0)
-        img = np.expand_dims(img, 0)
-        return img
-
-    if mode == 'image':
-        return decompress_img(state)
-
-    elif mode == 'mixed':
-        s = decompress_img(state[0])
-        return (s, state[1])
 
 # Expects tuples of (state, next_state, action, reward, done)
 class ReplayBuffer(object):
-    def __init__(self, mode, capacity, compressed=False):
+    def __init__(self, mode, capacity):
         self.capacity = capacity
         self.buffer = []
         self.pos = 0
         self.mode = mode
-        # Buffers to reuse memory
-        self.compressed = compressed
         self.use_priorities = False
 
-    def decompress(self, data):
-        ''' Used when sampling
-            @data: [state1, state2, ...]
-        '''
-        img1 = state_decompress(self.mode, data[0])
-        img2 = state_decompress(self.mode, data[1])
-        return [img1, img2] + data[2:]
-
     def add(self, data, *args, **kwargs):
-        ''' In compressed mode, the states must be pre-compressed '''
 
         if len(self) < self.capacity:
             self.buffer.append(data)
@@ -82,9 +35,6 @@ class ReplayBuffer(object):
         indices = np.random.choice(len(self), pick_size)
 
         samples = [self.buffer[idx] for idx in indices]
-
-        if self.compressed:
-            samples = [self.decompress(s) for s in samples]
 
         data = self._process_samples(samples)
 
@@ -164,17 +114,15 @@ class ReplayBuffer(object):
         return data
 
 class NaivePrioritizedBuffer(ReplayBuffer):
-    def __init__(self, mode, capacity, compressed=False, prob_alpha=0.6,
+    def __init__(self, mode, capacity, prob_alpha=0.6,
             vacate=False, **kwargs):
-        super(NaivePrioritizedBuffer, self).__init__(mode, capacity, compressed)
+        super(NaivePrioritizedBuffer, self).__init__(mode, capacity)
         self.prob_alpha = prob_alpha
         self.priorities = np.zeros((capacity,), dtype=np.float32)
         self.vacate = vacate
         self.use_priorities = True
 
     def add(self, data, **kwargs):
-        ''' In compressed mode, the states must be pre-compressed '''
-
         max_prio = self.priorities.max() if self.buffer else 1.0
 
         if len(self.buffer) < self.capacity:
@@ -215,9 +163,6 @@ class NaivePrioritizedBuffer(ReplayBuffer):
         weights = np.array(weights, dtype=np.float32)
 
         samples = [self.buffer[idx] for idx in indices]
-
-        if self.compressed:
-            samples = [self.decompress(s) for s in samples]
 
         data = self._process_samples(samples)
         # Append columns
@@ -272,13 +217,13 @@ class StatCalc(object):
         return self.sortbuf[self.length - 1]
 
 class TieredBuffer(ReplayBuffer):
-    def __init__(self, mode, capacity, compressed=False, procs=1,
+    def __init__(self, mode, capacity, procs=1,
             calc_length=10000, gamma=0.99, clip=100.,
             sub_buffer='replay', **kwargs):
         '''
             @procs: number of processes to keep track of
         '''
-        super(TieredBuffer, self).__init__(mode, capacity, compressed)
+        super(TieredBuffer, self).__init__(mode, capacity)
 
         self.gamma = float(gamma) # For Q computation
         self.clip = clip
@@ -297,7 +242,7 @@ class TieredBuffer(ReplayBuffer):
         elif sub_buffer == 'priority':
             create_buf = NaivePrioritizedBuffer
 
-        self.buffers = [create_buf(mode=mode, capacity=capacity//3, compressed=compressed)
+        self.buffers = [create_buf(mode=mode, capacity=capacity//3)
                 for _ in range(num_tiers)]
 
         self.probs = np.array([0.32, 0.32, 0.36])
@@ -308,7 +253,6 @@ class TieredBuffer(ReplayBuffer):
         self.last_tier = None
 
     def add(self, data, num=0, *args, **kwargs):
-        ''' In compressed mode, the states must be pre-compressed '''
         proc=num
 
         # data: [s1, s2, a, r, d]
@@ -380,8 +324,8 @@ class MultiBuffer(ReplayBuffer):
     ''' Buffer that contains other buffers
         Buffer choice is using
     '''
-    def __init__(self, mode, capacity, compressed, count=2, sub_buffer='priority', **kwargs):
-        super(MultiBuffer, self).__init__(mode, capacity, compressed)
+    def __init__(self, mode, capacity, count=2, sub_buffer='priority', **kwargs):
+        super(MultiBuffer, self).__init__(mode, capacity)
 
         self.count = count
 
@@ -390,11 +334,10 @@ class MultiBuffer(ReplayBuffer):
         elif sub_buffer == 'priority':
             create_buf = NaivePrioritizedBuffer
 
-        self.buffers = [create_buf(mode=mode, capacity=capacity//count, compressed=compressed)
+        self.buffers = [create_buf(mode=mode, capacity=capacity//count)
                 for _ in range(self.count)]
 
     def add(self, data, num=None, **kwargs):
-        ''' In compressed mode, the states must be pre-compressed '''
         target = num % self.count
 
         #print("Adding to ", target) # debug
@@ -435,9 +378,6 @@ class CNNBuffer(ReplayBuffer):
         indices = np.random.choice(len(self), pick_size)
 
         samples = [self.buffer[idx] for idx in indices]
-
-        if self.compressed:
-            samples = [self.decompress(s) for s in samples]
 
         data = self._process_samples(samples)
 

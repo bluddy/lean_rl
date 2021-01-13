@@ -433,23 +433,18 @@ def run(args):
         print('model_dir is {}, t={}'.format(model_dir, g.step))
 
     if args.buffer == 'replay':
-        replay_buffer = ReplayBuffer(args.mode, args.capacity,
-                compressed=args.compressed)
+        replay_buffer = ReplayBuffer(args.mode, args.capacity)
     elif args.buffer == 'priority':
-        replay_buffer = NaivePrioritizedBuffer(args.mode, args.capacity,
-                compressed=args.compressed)
+        replay_buffer = NaivePrioritizedBuffer(args.mode, args.capacity)
     elif args.buffer == 'multi':
-        replay_buffer = MultiBuffer(args.mode, args.capacity,
-                compressed=args.compressed, sub_buffer='priority')
+        replay_buffer = MultiBuffer(args.mode, args.capacity, sub_buffer='priority')
     elif args.buffer == 'disk':
         replay_buffer = DiskReplayBuffer(args.mode, args.capacity, logdir)
     elif args.buffer == 'tier':
-        replay_buffer = TieredBuffer(args.mode, args.capacity,
-                compressed=args.compressed, procs=args.procs,
+        replay_buffer = TieredBuffer(args.mode, args.capacity, procs=args.procs,
                 clip=args.buffer_clip, sub_buffer='replay')
     elif args.buffer == 'tierpr':
-        replay_buffer = TieredBuffer(args.mode, args.capacity,
-                compressed=args.compressed, procs=args.procs,
+        replay_buffer = TieredBuffer(args.mode, args.capacity, procs=args.procs,
                 clip=args.buffer_clip, sub_buffer='priority')
     else:
         raise ValueError(args.buffer + ' is not a buffer name')
@@ -574,16 +569,6 @@ def run(args):
 
         # Update replay buffer
         if len(w_s1) > 10:
-            # Do compression in parallel
-            if args.compressed:
-                w_s1 = Parallel(n_jobs=-1)(delayed(state_compress)
-                        (args.mode, s) for s in w_s1)
-                w_s2 = Parallel(n_jobs=-1)(delayed(state_compress)
-                        (args.mode, s) for s in w_s2)
-                '''
-                w_s1 = [state_compress(args.mode, s) for s in w_s1]
-                w_s2 = [state_compress(args.mode, s) for s in w_s2]
-                '''
 
             # Feed into the replay buffer
             for s1, s2, a, r, d, es, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs):
@@ -726,10 +711,10 @@ def run(args):
                     else:
                         sim_cnt += 1
 
-                s = '\nTraining T:{} TS:{:04d} PTS%:{:.1f} CL:{:.5f} Exp_std:{:.2f} p{}r{}s{}'.format(
+                s = '\nTraining T:{} TS:{:04d} RT%:{:.1f} CL:{:.5f} Estd:{:.2f} p{}r{}s{}'.format(
                     str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)),
                     g.step,
-                    rate_control.rate() * 100.,
+                    rate_control.rate() * 100., 
                     critic_loss,
                     0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
                     play_cnt, rec_cnt, sim_cnt
@@ -1018,9 +1003,6 @@ if __name__ == "__main__":
         help="Choose type of buffer, options are [replay, priority, disk, tier, tierpr]")
     parser.add_argument("--capacity", default=5e4, type=float,
         help='Size of replay buffer (bigger is better)')
-    parser.add_argument("--compressed", default=False,
-        action='store_true', dest='compressed',
-        help='Use a compressed replay buffer for efficiency')
     parser.add_argument("--buffer-clip", default=100.,
         help='Clip Q in buffer')
     parser.add_argument('--sub-buffer', default='replay',
