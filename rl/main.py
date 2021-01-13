@@ -694,7 +694,7 @@ def run(args):
                         sim_cnt += 1
 
                 s = '\nTraining T:{} TS:{:04d} RT%:{:.1f} CL:{:.5f} Estd:{:.2f} p{}r{}s{}'.format(
-                    str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)),
+                    str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)).split('.')[0],
                     g.step,
                     rate_control.rate() * 100.,
                     critic_loss,
