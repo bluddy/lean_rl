@@ -463,9 +463,6 @@ def run(args):
     proc_std = []
     terminate = False
 
-    # Termporary storage for data
-    w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs = [],[],[],[],[],[],[]
-
     while g.step < args.max_timesteps and not terminate:
 
         # Interact with the environments
@@ -535,15 +532,12 @@ def run(args):
                 action = d["action"]
 
                 # Not reset, and reward not broken
-                # Cache updates to replay buffer
                 if action is not None and reward < MAX_REWARD and reward > MIN_REWARD:
-                    w_s1.append(state)
-                    w_s2.append(new_state)
-                    w_r.append(reward)
-                    w_d.append(done)
-                    w_a.append(action)
-                    w_es.append(d["extra_state"] if "extra_state" in d else None)
-                    w_procs.append(env.server_num)
+
+                    data = [state, new_state, action, reward, done]
+                    if "extra_state" in d and d["extra_state"] is not None:
+                        data.append(d["extra_state"])
+                    replay_buffer.add(data, num=env.server_num)
 
                 # Update state after we used it
                 states[i] = new_state
@@ -566,17 +560,6 @@ def run(args):
                         rate_control.add(0.)
                 else:
                     g.warmup_steps -= 1
-
-        # Update replay buffer
-        if len(w_s1) > 10:
-
-            # Feed into the replay buffer
-            for s1, s2, a, r, d, es, p in zip(w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs):
-                data = [s1, s2, a, r, d]
-                if es is not None:
-                    data.append(es)
-                replay_buffer.add(data, num=p)
-            w_s1, w_s2, w_a, w_r, w_d, w_es, w_procs = [],[],[],[],[],[],[]
 
         env_time += time.time() - env_measure_time
         if acted:
