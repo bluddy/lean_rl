@@ -110,7 +110,17 @@ class TD3(OffPolicyAgent):
             Q_t = reward + not_done * discount * Q_t
 
         # Get current Q estimates
-        with amp.autocast(enabled=self.amp):
+        if self.amp:
+            with amp.autocast():
+                Qs_now = [crit(state, action) for crit in self.critics]
+
+                # Compute critic loss
+                loss_c = sum(((Q_now - Q_t).pow(2) for Q_now in Qs_now))
+                if replay_buffer.use_priorities:
+                    prios = (loss_c + 1e-5).data.cpu().numpy()
+                    replay_buffer.update_priorities(indices, prios)
+                loss_c = loss_c.mean()
+        else:
             Qs_now = [crit(state, action) for crit in self.critics]
 
             # Compute critic loss
@@ -134,7 +144,10 @@ class TD3(OffPolicyAgent):
         if not self.train_step % self.policy_freq:
 
             # Compute actor loss
-            with amp.autocast(enabled=self.amp):
+            if self.amp:
+                with amp.autocast():
+                    loss_a = -self.critics[0](state, self.actor(state)).mean()
+            else:
                 loss_a = -self.critics[0](state, self.actor(state)).mean()
 
             self.opt_a.zero_grad()
