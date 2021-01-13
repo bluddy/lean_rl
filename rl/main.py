@@ -35,7 +35,9 @@ class GlobalState(object):
     ''' Easy to serialize global state for runs '''
     def __init__(self, step=0, play_steps=0, best_reward=-1e5, last_train_step=0,
                 last_eval_step=0, last_stat_step=0, total_reloads=0,
-                consec_reloads=0, runtime=0, warmup_steps=0, reload_since_eval=False, **kwargs):
+                consec_reloads=0, runtime=0, warmup_steps=0, reload_since_eval=False,
+                episodes=0,
+                **kwargs):
         self.step = step    # total steps
         self.play_steps = play_steps  # number of playback steps
         self.best_reward = best_reward
@@ -47,6 +49,7 @@ class GlobalState(object):
         self.runtime = runtime # total runtime
         self.warmup_steps = warmup_steps
         self.reload_since_eval = reload_since_eval
+        self.episodes = 0
 
 class GlobalStateEncoder(JSONEncoder):
     def default(self, o):
@@ -463,6 +466,10 @@ def run(args):
     proc_std = []
     terminate = False
 
+    # Keep per-proc stats
+    train_ep_rs = np.zeros((args.procs, 1), dtype=np.float)
+    train_ep_ts = np.zeros((args.procs, 1), dtype=np.int)
+
     while g.step < args.max_timesteps and not terminate:
 
         # Interact with the environments
@@ -543,12 +550,19 @@ def run(args):
                 states[i] = new_state
 
                 if done:
+                    # get stats from env
+                    train_ep_ts[i] = env.t
+                    train_ep_rs[i] = env.total_reward
+                    g.episodes += 1
+
+                    # reset env, tell to render episode if needed
                     render_ep_path=None
                     if (env.episode + 1) % args.render_freq == 0:
                         render_ep_path=out_path
-
                     env.reset(render_ep_path=render_ep_path) # Send async action
+
                     ou_noise.reset() # Reset to mean
+
 
                 acted = True
                 if g.warmup_steps <= 0:
@@ -693,15 +707,18 @@ def run(args):
                     else:
                         sim_cnt += 1
 
-                s = '\nTraining T:{} TS:{:04d} RT%:{:.1f} CL:{:.5f} Estd:{:.2f} p{}r{}s{}'.format(
+                s = '\nTrain T:{} TS:{:04d} Ep:{:03d}{} CL:{:.3f} std:{:.2f}{} R:{:.1f} EpT:{}'.format(
                     str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)).split('.')[0],
                     g.step,
-                    rate_control.rate() * 100.,
+                    g.episodes,
+                    ' RT%:{:.1f}'.format(rate_control.rate() * 100.) if args.play_rate else '',
                     critic_loss,
                     0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
-                    play_cnt, rec_cnt, sim_cnt
+                    ' p{}r{}s{}'.format(play_cnt, rec_cnt, sim_cnt) if args.record or args.playback else '',
+                    np.mean(train_ep_rs),
+                    np.mean(train_ep_ts),
                     )
-                s2 = ' AL:{:.5f}'.format(actor_loss) if actor_loss else ''
+                s2 = ' AL:{:.3f}'.format(actor_loss) if actor_loss else ''
                 print(s + s2, end='')
                 proc_std = []
 
