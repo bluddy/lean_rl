@@ -9,7 +9,7 @@ class ActorState(nn.Module):
         super().__init__()
 
         if net_arch is None:
-            net_arch = [100, 50, action_dim]
+            net_arch = [256, 256, action_dim]
 
         self.linear = create_mlp(state_dim, net_arch=net_arch, last=True, **kwargs)
 
@@ -24,7 +24,7 @@ class CriticState(nn.Module):
         super(CriticState, self).__init__()
 
         if net_arch is None:
-            net_arch = [state_dim + action_dim, 100, 50, 1]
+            net_arch = [256, 256, 1]
 
         self.linear = create_mlp(state_dim + action_dim, net_arch=net_arch, last=True, **kwargs)
 
@@ -38,7 +38,7 @@ class ActorImage(nn.Module):
         super().__init__()
 
         if fc_net_arch is None:
-            fc_net_arch = [100, 50, action_dim]
+            fc_net_arch = [256, 256, action_dim]
 
         self.cnn = CNN(net_arch=cnn_net_arch, **kwargs)
         self.linear = Linear(self.cnn, net_arch=fc_net_arch, last=True, **kwargs)
@@ -55,7 +55,7 @@ class CriticImage(nn.Module):
         super().__init__()
 
         if fc_net_arch is None:
-            fc_net_arch = ([], [], [100, 50, 20, 1])
+            fc_net_arch = ([], [], [256, 256, 1])
 
         self.cnn = CNN(net_arch=cnn_net_arch, **kwargs)
         self.actions = Dummy(action_dim)

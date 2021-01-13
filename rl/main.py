@@ -79,7 +79,7 @@ def run(args):
 
     g = GlobalState()
 
-    g.warmup_t = args.learning_start
+    g.warmup_steps = args.learning_start
 
     start_measure_time = time.time()
 
@@ -996,7 +996,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-ou-noise", default=True,
         action='store_false', dest='ou_noise',
         help='Use OU Noise process for noise instead of epsilon greedy')
-    parser.add_argument("--ou-sigma", default=0.5, type=float,
+    parser.add_argument("--ou-sigma", default=0.25, type=float,
         help='OU sigma level: how much to add per step') # was 0.25
     parser.add_argument("--ou-theta", default=0.15, type=float,
         help='OU theta: how much to reuse current levels')
@@ -1057,7 +1057,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--policy-noise", default=0.05, type=float, # was 0.2
         help='TD3 Smoothing noise added to target policy during critic update')
-    parser.add_argument("--noise_clip", default=0.1, type=float, # was 0.5
+    parser.add_argument("--noise-clip", default=0.1, type=float, # was 0.5
         help='TD3 Range to clip target policy noise') # was 0.5
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')

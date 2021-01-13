@@ -1,5 +1,6 @@
 import numpy as np
 import torch as th
+import copy
 from os.path import join as pjoin
 
 from rl.policy.common.offpolicy import OffPolicyAgent
@@ -66,23 +67,19 @@ class TD3(OffPolicyAgent):
                     cnn_net_arch=self.cnn_net_arch).to(device)
         elif self.mode == 'state':
             n = ActorState(state_dim=self.state_dim, action_dim=self.action_dim,
-                    bn=self.bn, drop=self.dropout,
-                    cnn_net_arch=seslf.cnn_net_arch).to(device)
+                    bn=self.bn, drop=self.dropout).to(device)
         else:
             raise ValueError('Unrecognized mode ' + self.mode)
         return n
 
     def _create_models(self):
         self.actor = self._create_actor()
-        self.actor_t = self._create_actor()
-        self.actor_t.load_state_dict(self.actor.state_dict())
+        self.actor_t = copy.deepcopy(self.actor)
 
         self.opt_a = self._create_opt(self.actor, self.actor_lr)
 
         self.critics =   [self._create_critic() for _ in range(2)]
-        self.critics_t = [self._create_critic() for _ in range(2)]
-        for c, c_t in zip(self.critics, self.critics_t):
-            c_t.load_state_dict(c.state_dict())
+        self.critics_t = [copy.deepcopy(c) for c in self.critics]
 
         params = (par for m in self.critics for par in m.parameters())
         self.opt_c = self._create_opt(params, self.lr)
@@ -96,7 +93,7 @@ class TD3(OffPolicyAgent):
     def train(self, replay_buffer, batch_size, discount, tau, beta):
 
         # Sample replay buffer
-        state, state2, action, reward, done, extra_state, indices = \
+        state, state2, action, reward, not_done, extra_state, indices = \
             self._sample_to_dev(replay_buffer, batch_size, beta=beta)
 
         with th.no_grad():
@@ -105,12 +102,12 @@ class TD3(OffPolicyAgent):
             noise = noise.clamp(-self.noise_clip, self.noise_clip)
 
             action2 = self.actor_t(state2) + noise
-            action2 = action2.clamp(-1., 1.)
+            action2 = action2.clamp(-1., 1.) # due to noise
 
             # Compute the target Q value: min over all critic targets
             Qs_t = (c_t(state2, action2) for c_t in self.critics_t)
             Q_t = th.min(*Qs_t)
-            Q_t = reward + done * discount * Q_t
+            Q_t = reward + not_done * discount * Q_t
 
         # Get current Q estimates
         with amp.autocast(enabled=self.amp):
