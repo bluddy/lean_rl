@@ -18,12 +18,16 @@ def avg(l):
     return sum(l)/float(len(l))
 
 class TD3(OffPolicyAgent):
-    def __init__(self, policy_noise, noise_clip, policy_freq, cnn_net_arch=None, actor_lr:float=None, **kwargs):
+    def __init__(self,
+            tau=0.005, discount=0.99,
+            policy_noise=0.2, noise_clip=0.5, policy_freq=2,
+            cnn_net_arch=None, **kwargs):
 
         super().__init__(**kwargs)
 
-        self.actor_lr = self.lr if actor_lr is None else actor_lr
         self.cnn_net_arch = cnn_net_arch
+        self.tau = tau
+        self.discount = discount
         self.policy_noise = policy_noise
         self.noise_clip = noise_clip
         self.policy_freq = policy_freq
@@ -76,7 +80,7 @@ class TD3(OffPolicyAgent):
         self.actor = self._create_actor()
         self.actor_t = copy.deepcopy(self.actor)
 
-        self.opt_a = self._create_opt(self.actor, self.actor_lr)
+        self.opt_a = self._create_opt(self.actor, self.lr)
 
         self.critics =   [self._create_critic() for _ in range(2)]
         self.critics_t = [copy.deepcopy(c) for c in self.critics]
@@ -90,7 +94,7 @@ class TD3(OffPolicyAgent):
         action = self.actor(state).cpu().data.numpy()
         return action
 
-    def train(self, replay_buffer, batch_size, discount, tau, beta):
+    def train(self, replay_buffer, batch_size, beta):
 
         # Sample replay buffer
         state, state2, action, reward, not_done, extra_state, indices = \
@@ -107,7 +111,7 @@ class TD3(OffPolicyAgent):
             # Compute the target Q value: min over all critic targets
             Qs_t = (c_t(state2, action2) for c_t in self.critics_t)
             Q_t = th.min(*Qs_t)
-            Q_t = reward + not_done * discount * Q_t
+            Q_t = reward + not_done * self.discount * Q_t
 
         # Get current Q estimates
         if self.amp:
@@ -161,8 +165,8 @@ class TD3(OffPolicyAgent):
                 self.opt_a.step()
 
             for c, c_t in (self.critics, self.critics_t):
-                polyak_update(c.parameters(), c_t.parameters(), tau)
-            polyak_update(self.actor.parameters(), self.actor_t.parameters(), tau)
+                polyak_update(c.parameters(), c_t.parameters(), self.tau)
+            polyak_update(self.actor.parameters(), self.actor_t.parameters(), self.tau)
 
             self.last_loss_a_np = loss_a.item()
 

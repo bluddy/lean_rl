@@ -13,7 +13,9 @@ device = th.device("cuda" if th.cuda.is_available() else "cpu")
 # DQN
 
 class DQN(OffPolicyAgent):
-    def __init__(self, action_steps:int, cnn_net_arch=None, **kwargs):
+    def __init__(self, action_steps:int,
+            tau=0.005, discount=0.99,
+            cnn_net_arch=None, **kwargs):
 
         super().__init__(**kwargs)
 
@@ -25,6 +27,7 @@ class DQN(OffPolicyAgent):
         self.total_steps = np.prod(action_steps)
 
         self.action_steps = action_steps
+        self.discount = discount
         self.cnn_net_arch = cnn_net_arch
         self.to_save = ['q', 'q_t', 'q_opt']
 
@@ -182,7 +185,7 @@ class DQN(OffPolicyAgent):
         action = self._discrete_to_cont(max_action)
         return action
 
-    def train(self, replay_buffer, batch_size, discount, tau, beta):
+    def train(self, replay_buffer, batch_size, beta):
 
         # Sample replay buffer
         state, state2, action, reward, done, extra_state, indices = \
@@ -196,7 +199,7 @@ class DQN(OffPolicyAgent):
         # Compute the target Q value
         # done: We use reverse of done to not consider future rewards
 
-        Q_t = reward + (done * discount * Q_t).detach()
+        Q_t = reward + (done * self.discount * Q_t).detach()
 
         compare_to = extra_state
 
@@ -261,7 +264,7 @@ class DQN(OffPolicyAgent):
         replay_buffer.update_priorities(indices, prios)
 
         # Update the frozen target models
-        polyak_update(self.q.parameters(), self.q_t.parameters(), tau)
+        polyak_update(self.q.parameters(), self.q_t.parameters(), self.tau)
 
         a_ret = None
         if self.aux is not None:
@@ -308,7 +311,7 @@ class DDQN(DQN):
     def _get_q(self):
         return self.qs[0]
 
-    def train(self, replay_buffer, batch_size, discount, tau, beta):
+    def train(self, replay_buffer, batch_size, beta):
 
         q_losses, aux_losses, Q_max, Q_mean = [], [], [], []
 
@@ -350,7 +353,7 @@ class DDQN(DQN):
 
                 Qt_max, _ = th.max(Qt, dim=-1, keepdim=True)
 
-                y = reward + (done * discount * Qt_max).detach()
+                y = reward + (done * self.discount * Qt_max).detach()
 
             # Get current Q estimate
             with amp.autocast(enabled=self.amp):
@@ -384,7 +387,7 @@ class DDQN(DQN):
                 opt.step()
 
             # Update the frozen target models
-            polyak_update(update_q.parameters(), update_qt.parameters(), tau)
+            polyak_update(update_q.parameters(), update_qt.parameters(), self.tau)
 
             q_losses.append(q_loss.item())
             Q_mean.append(Q_now.mean().item())

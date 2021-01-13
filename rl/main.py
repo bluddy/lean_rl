@@ -366,14 +366,14 @@ def run(args):
             mode=args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth, cnn_net_arch=cnn_net_arch,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            depthmap_mode=args.depthmap_mode, actor_lr=args.actor_lr,
+            depthmap_mode=args.depthmap_mode,
             policy_noise=args.policy_noise, noise_clip=args.noise_clip, policy_freq=args.policy_freq
             )
     elif args.policy == 'ddpg':
         from rl.policy.DDPG import DDPG
         policy = DDPG(state_dim, action_dim, args.stack_size,
             args.mode, lr=args.lr, img_depth=img_depth,
-            bn=args.batchnorm, actor_lr=args.actor_lr, img_dim=args.img_dim)
+            bn=args.batchnorm, img_dim=args.img_dim)
     elif args.policy == 'dqn':
         from rl.policy.dqn.dqn import DQN
         policy = DQN(state_dim, action_dim, action_steps, args.stack_size,
@@ -693,8 +693,7 @@ def run(args):
                     (1.0 - beta_start) / beta_frames)
 
                 critic_loss, actor_loss, q_avg, q_max = policy.train(
-                    replay_buffer, batch_size=args.batch_size,
-                    discount=args.discount, tau=args.tau, beta=beta)
+                    replay_buffer, batch_size=args.batch_size, beta=beta)
 
                 temp_q_avg.append(q_avg)
                 temp_q_max.append(q_max)
@@ -714,7 +713,7 @@ def run(args):
                 s = '\nTraining T:{} TS:{:04d} RT%:{:.1f} CL:{:.5f} Estd:{:.2f} p{}r{}s{}'.format(
                     str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)),
                     g.step,
-                    rate_control.rate() * 100., 
+                    rate_control.rate() * 100.,
                     critic_loss,
                     0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
                     play_cnt, rec_cnt, sim_cnt
@@ -1060,10 +1059,6 @@ if __name__ == "__main__":
         help="Optimizer to use [sgd|adam]")
     parser.add_argument("--lr", default=5e-5, type=float,
         help="Learning rate for critic optimizer (sgd:1e-3, adam:5e-5)")
-    parser.add_argument("--lr2", default=1e-3, type=float,
-        help="Learning rate for second critic optimizer")
-    parser.add_argument("--actor-lr", default=None, type=float,
-        help="Learning rate for actor optimizer")
     parser.add_argument("--clip-grad", default=None, type=float,
         help="Clip the gradient to slow down learning")
     #---
