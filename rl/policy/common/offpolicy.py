@@ -12,7 +12,7 @@ class OffPolicyAgent(object):
     def __init__(self, state_dim, action_dim, stack_size,
             mode, network:str, lr=1e-4, img_depth=3, img_dim=224,
             amp=False, dropout=False, aux:bool=False, aux_size=6, reduced_dim=10,
-            depthmap_mode=False, freeze=False, opt='adam'):
+            depthmap_mode=False, freeze=False, opt='adam', batchnorm=True):
 
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -23,7 +23,7 @@ class OffPolicyAgent(object):
         self.mode = mode
         self.network = network
         self.lr = lr
-        self.bn = True
+        self.bn = batchnorm
         self.img_dim = img_dim
         self.amp = amp
         self.reduced_dim = reduced_dim

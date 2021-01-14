@@ -40,7 +40,9 @@ class TD3(OffPolicyAgent):
 
         if self.amp:
             self.scaler = amp.GradScaler()
-        print("TD3")
+        print("TD3. Discount:{}, Tau:{}, Policy_noise:{}, Noise_clip:{}, Policy_freq:{}, BN:{}".format(
+            self.discount, self.tau, self.policy_noise, self.noise_clip, self.policy_freq, self.bn
+            ))
 
     def set_eval(self):
         self.actor.eval()

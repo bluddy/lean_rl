@@ -82,7 +82,7 @@ def run(args):
 
     g = GlobalState()
 
-    g.warmup_steps = args.learning_start
+    g.warmup_steps = args.start_learning
 
     start_measure_time = time.time()
 
@@ -370,7 +370,8 @@ def run(args):
             img_dim=args.img_dim, img_depth=img_depth, cnn_net_arch=cnn_net_arch,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
             depthmap_mode=args.depthmap_mode,
-            policy_noise=args.policy_noise, noise_clip=args.noise_clip, policy_freq=args.policy_freq
+            policy_noise=args.policy_noise, noise_clip=args.noise_clip, policy_freq=args.policy_freq,
+            batchnorm=args.batchnorm
             )
     elif args.policy == 'ddpg':
         from rl.policy.DDPG import DDPG
@@ -383,7 +384,9 @@ def run(args):
             args.mode, network=args.network, lr=args.lr,
             img_dim=args.img_dim, img_depth=img_depth, cnn_net_arch=cnn_net_arch,
             amp=args.amp, dropout=args.dropout, aux=args.aux, aux_size=extra_state_dim,
-            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze, opt=args.opt)
+            reduced_dim=args.reduced_dim, depthmap_mode=args.depthmap_mode, freeze=args.freeze, opt=args.opt,
+            batchnorm=args.batchnorm
+            )
     elif args.policy == 'ddqn':
         from rl.policy.dqn.dqn import DDQN
         policy = DDQN(state_dim=state_dim, action_dim=action_dim, action_steps=action_steps,
@@ -469,6 +472,7 @@ def run(args):
     # Keep per-proc stats
     train_ep_rs = np.zeros((args.procs, 1), dtype=np.float)
     train_ep_ts = np.zeros((args.procs, 1), dtype=np.int)
+    train_ep_done = False
 
     while g.step < args.max_timesteps and not terminate:
 
@@ -553,6 +557,7 @@ def run(args):
                     # get stats from env
                     train_ep_ts[i] = env.t
                     train_ep_rs[i] = env.total_reward
+                    train_ep_done = True
                     g.episodes += 1
 
                     # reset env, tell to render episode if needed
@@ -575,12 +580,12 @@ def run(args):
                 else:
                     g.warmup_steps -= 1
 
-        env_time += time.time() - env_measure_time
-        if acted:
+        #env_time += time.time() - env_measure_time
+        #if acted:
             #print("Env time: ", env_elapsed_time) # debug
-            sys.stdout.write('.')
-            sys.stdout.flush()
-            env_time = 0.
+            #sys.stdout.write('.')
+            #sys.stdout.flush()
+            #env_time = 0.
 
         # Evaluate episode
         if g.warmup_steps <= 0 and g.step - g.last_eval_step > args.eval_freq:
@@ -696,33 +701,36 @@ def run(args):
                 temp_q_max.append(q_max)
                 temp_loss.append(critic_loss)
 
-                # Collect stats
-                play_cnt, rec_cnt, sim_cnt = 0, 0, 0
-                for env in envs:
-                    mode = env.get_save_mode()
-                    if mode == 'play':
-                        play_cnt += 1
-                    elif mode == 'record':
-                        rec_cnt += 1
-                    else:
-                        sim_cnt += 1
+                # Only print train info if an episode is done
+                if train_ep_done:
+                    train_ep_done = False
+                    # Collect stats
+                    play_cnt, rec_cnt, sim_cnt = 0, 0, 0
+                    for env in envs:
+                        mode = env.get_save_mode()
+                        if mode == 'play':
+                            play_cnt += 1
+                        elif mode == 'record':
+                            rec_cnt += 1
+                        else:
+                            sim_cnt += 1
 
-                s = '\nTrain T:{} TS:{:04d} Ep:{:03d}{} CL:{:.3f} std:{:.2f}{} R:{:.1f} EpT:{}'.format(
-                    str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)).split('.')[0],
-                    g.step,
-                    g.episodes,
-                    ' RT%:{:.1f}'.format(rate_control.rate() * 100.) if args.play_rate else '',
-                    critic_loss,
-                    0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
-                    ' p{}r{}s{}'.format(play_cnt, rec_cnt, sim_cnt) if args.record or args.playback else '',
-                    np.mean(train_ep_rs),
-                    np.mean(train_ep_ts),
-                    )
-                s2 = ' AL:{:.3f}'.format(actor_loss) if actor_loss else ''
-                print(s + s2, end='')
-                proc_std = []
+                    s = '\nTrain T:{} TS:{:04d} Ep:{:03d}{} CL:{:.3f} std:{:.2f}{} R:{:.1f} EpT:{}'.format(
+                        str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)).split('.')[0],
+                        g.step,
+                        g.episodes,
+                        ' RT%:{:.1f}'.format(rate_control.rate() * 100.) if args.play_rate else '',
+                        critic_loss,
+                        0 if len(proc_std) == 0 else sum(proc_std)/len(proc_std),
+                        ' p{}r{}s{}'.format(play_cnt, rec_cnt, sim_cnt) if args.record or args.playback else '',
+                        np.mean(train_ep_rs),
+                        int(np.mean(train_ep_ts)),
+                        )
+                    s2 = ' AL:{:.3f}'.format(actor_loss) if actor_loss else ''
+                    print(s + s2, end='')
+                    proc_std = []
 
-                log_f.write(s + s2 + '\n')
+                    log_f.write(s + s2 + '\n')
 
             policy.set_eval()
 
@@ -961,7 +969,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--seed", default=1e6, type=int,
         help='Sets Gym, PyTorch and Numpy seeds')
-    parser.add_argument("--eval-freq", default=40000, type=int, # 200
+    parser.add_argument("--eval-freq", default=5000, type=int, # 200
         help='How often (time steps) we evaluate')
     parser.add_argument('--eval-envs', default=0, type=int,
             help='How many environments to test with (0 is all)')
@@ -969,18 +977,18 @@ if __name__ == "__main__":
         help='Timesteps to explore before applying learning')
     parser.add_argument("--render-freq", default=1000, type=int,
         help='How often (episodes) we save the images')
-    parser.add_argument("--render-t-freq", default=5, type=int,
+    parser.add_argument("--render-t-freq", default=2, type=int,
         help='How often (timesteps) we save the images in a saved episode')
     parser.add_argument("--max-timesteps", default=2e7, type=float,
         help='Max time steps to run environment for')
-    parser.add_argument("--learning-start", default=None, type=int,
+    parser.add_argument("--start-learning", default=None, type=int,
         help='Timesteps before learning')
 
     #--- Exploration Noise
     parser.add_argument("--no-ou-noise", default=True,
         action='store_false', dest='ou_noise',
         help='Use OU Noise process for noise instead of epsilon greedy')
-    parser.add_argument("--ou-sigma", default=0.25, type=float,
+    parser.add_argument("--ou-sigma", default=0.5, type=float,
         help='OU sigma level: how much to add per step') # was 0.25
     parser.add_argument("--ou-theta", default=0.15, type=float,
         help='OU theta: how much to reuse current levels')
@@ -1137,13 +1145,14 @@ if __name__ == "__main__":
             help='Angle of camera for needle3d (ortho/topdown/bottom)')
     parser.add_argument('--objects', default='2d',
             help='Type of objects to use (2d/3d)')
+    parser.add_argument('--no-batchnorm', default=True, action='store_false',
+            dest='batchnorm', help='Use batchnorm')
 
     args = parser.parse_args()
 
     args.policy = args.policy.lower()
     args.env = args.env.lower()
     # Image mode requires batchnorm
-    args.batchnorm = True
     args.img_dim = 64 if args.env == 'atari' else args.img_dim
     args.capacity = int(args.capacity)
 
@@ -1162,11 +1171,11 @@ if __name__ == "__main__":
         args.aux = 'state'
 
     # If we're loading, fill up the buffer before we start learning
-    if args.learning_start is None:
+    if args.start_learning is None:
         if args.load_last:
-            args.learning_start = args.capacity
+            args.start_learning = args.capacity
         else:
-            args.learning_start = 0 # default value normally
+            args.start_learning = 0 # default value normally
 
     assert not (args.depthmap_mode and args.stereo_mode)
     assert (args.mode in ['image', 'mixed', 'state'])
