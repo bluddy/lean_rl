@@ -1,5 +1,6 @@
 import numpy as np
 import torch as th
+import torch.nn.functional as F
 import copy
 from os.path import join as pjoin
 
@@ -97,6 +98,7 @@ class TD3(OffPolicyAgent):
         return action
 
     def train(self, replay_buffer, batch_size, beta):
+        self.train_step += 1
 
         # Sample replay buffer
         state, state2, action, reward, not_done, extra_state, indices = \
@@ -121,20 +123,21 @@ class TD3(OffPolicyAgent):
                 Qs_now = [crit(state, action) for crit in self.critics]
 
                 # Compute critic loss
-                loss_c = sum(((Q_now - Q_t).pow(2) for Q_now in Qs_now))
+                loss_c = sum((F.mse_loss(Q_now, Q_t) for Q_now in Qs_now))
+
                 if replay_buffer.use_priorities:
-                    prios = (loss_c + 1e-5).data.cpu().numpy()
-                    replay_buffer.update_priorities(indices, prios)
-                loss_c = loss_c.mean()
+                    losses_c = sum((Q_now - Q_t) ** 2 for Q_now in Qs_now).data.cpu.numpy()
+                    replay_buffer.update_priorities(indices, losses_c + 1e-5)
+
         else:
             Qs_now = [crit(state, action) for crit in self.critics]
 
             # Compute critic loss
-            loss_c = sum(((Q_now - Q_t).pow(2) for Q_now in Qs_now))
+            loss_c = sum((F.mse_loss(Q_now, Q_t) for Q_now in Qs_now))
+
             if replay_buffer.use_priorities:
-                prios = (loss_c + 1e-5).data.cpu().numpy()
-                replay_buffer.update_priorities(indices, prios)
-            loss_c = loss_c.mean()
+                losses_c = sum((Q_now - Q_t) ** 2 for Q_now in Qs_now).data.cpu.numpy()
+                replay_buffer.update_priorities(indices, losses_c + 1e-5)
 
         self.opt_c.zero_grad()
 
@@ -181,6 +184,5 @@ class TD3(OffPolicyAgent):
             Q_mean = avg(list(Q_now.mean().item() for Q_now in Qs_now))
             Q_max = max((Q_now.max().item() for Q_now in Qs_now))
 
-        self.train_step += 1
-
         return loss_c.item(), self.last_loss_a_np, Q_mean, Q_max
+

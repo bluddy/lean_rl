@@ -28,6 +28,7 @@ class DQN(OffPolicyAgent):
 
         self.action_steps = action_steps
         self.discount = discount
+        self.tau = tau
         self.cnn_net_arch = cnn_net_arch
         self.to_save = ['q', 'q_t', 'q_opt']
 

@@ -669,7 +669,7 @@ def run(args):
                         args.eval_loops, log_f, g, csv_aux_arg, args)
 
         ## Train model
-        if g.warmup_steps <= 0 and \
+        if acted and not g.warmup_steps and \
             g.step - g.last_train_step > args.train_freq and \
             len(replay_buffer) > args.batch_size:
 
@@ -803,7 +803,7 @@ def evaluate_policy(
     '''
 
     #policy.actor.eval() # set for batchnorm
-    rewards = np.zeros((args.procs,), dtype=np.float32)
+    rewards = np.zeros((args.procs, 1), dtype=np.float32)
     actions = []
     success_1 = []
     success_2 = []
@@ -831,17 +831,20 @@ def evaluate_policy(
                     states[i] = state
                     rewards[i] += reward
                     env.render(save_path=test_path)
-        if acted:
-            sys.stdout.write('.')
-            sys.stdout.flush()
+        #if acted:
+            #sys.stdout.write('.')
+            #sys.stdout.flush()
 
     succ_temp = [0 for _ in range(3)] # All ending states
+    times = np.zeros((args.procs, 1), dtype=np.int)
+
     for i, env in enumerate(envs):
         if env.success < 0:
             env.success = 0
         elif env.success > 2:
             env.success = 2
         succ_temp[env.success] += 1
+        times[i] = env.t
 
     #Get average % for success states 1 and 2
     succ_sum = sum(succ_temp)
@@ -926,13 +929,19 @@ def evaluate_policy(
     plt.savefig(pjoin(logdir, 'success.png'))
     plt.close()
 
-    s = "\nEval Ep:{} R:{:.3f} T:{} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
-        "min:{:.2f} max:{:.2f} " \
+    s = "\nEval Ep:{} R:{:.3f} EpT:{} T:{} Rav:{:.3f} BRav:{:.3f} a_avg:{:.2f} a_std:{:.2f} " \
         "Q_avg:{:.2f} Q_max:{:.2f} loss:{:.3f}".format(
-      env.episode, avg_reward,
-      str(datetime.timedelta(seconds=g.runtime)),
-      r_avg[-1], g.best_reward, avg_action, std_action,
-      min_action, max_action, q_avg, q_max, loss_avg)
+      env.episode,
+      avg_reward,
+      times.mean(),
+      str(datetime.timedelta(seconds=g.runtime)).split('.')[0],
+      r_avg[-1],
+      g.best_reward,
+      avg_action,
+      std_action,
+      q_avg,
+      q_max,
+      loss_avg)
     print(s)
     log_f.write(s + '\n')
     # TODO: remove last_learn_t, last_eval_t, g.best_reward
