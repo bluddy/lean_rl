@@ -169,7 +169,7 @@ class TD3(OffPolicyAgent):
                 loss_a.backward()
                 self.opt_a.step()
 
-            for c, c_t in (self.critics, self.critics_t):
+            for c, c_t in zip(self.critics, self.critics_t):
                 polyak_update(c.parameters(), c_t.parameters(), self.tau)
             polyak_update(self.actor.parameters(), self.actor_t.parameters(), self.tau)
 
