@@ -27,3 +27,6 @@ python3 -m rl.main --env needle3d --procs 25 --lr 1e-4 --mode image --opt sgd --
 
 # Needle3d
 python3 -m rl.main --env needle3d --procs 1 --lr 5e-5 --capacity 5e4 --task 3 --mode image --policy ddqn --batch-size 64 --opt adam --name test --objects 3d --camera topdown --eval-freq 80000
+
+# TD3 runs
+python3 -m rl.main --env needle --procs 1 --lr 5e-5 --capacity 1e5 --task 14 --mode state --policy td3 --batch-size 64 --no-batchnorm --train-freq 0 --start-learning 25000

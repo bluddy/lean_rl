@@ -982,7 +982,7 @@ if __name__ == "__main__":
         help='How often (time steps) we evaluate')
     parser.add_argument('--eval-envs', default=0, type=int,
             help='How many environments to test with (0 is all)')
-    parser.add_argument("--train-freq", default=100, type=int,
+    parser.add_argument("--train-freq", default=0, type=int, # was 100
         help='Timesteps to explore before applying learning')
     parser.add_argument("--render-freq", default=1000, type=int,
         help='How often (episodes) we save the images')
@@ -1053,9 +1053,9 @@ if __name__ == "__main__":
     parser.add_argument("--reduced-dim", default = 100, type=int,
             help="Bottleneck for neural network (default:100)")
 
-    parser.add_argument("--policy-noise", default=0.05, type=float, # was 0.2
+    parser.add_argument("--policy-noise", default=0.2, type=float,
         help='TD3 Smoothing noise added to target policy during critic update')
-    parser.add_argument("--noise-clip", default=0.1, type=float, # was 0.5
+    parser.add_argument("--noise-clip", default=0.5, type=float,
         help='TD3 Range to clip target policy noise') # was 0.5
     parser.add_argument("--policy-freq", default=2, type=int,
         help='Frequency of TD3 delayed actor policy updates')
@@ -1067,14 +1067,14 @@ if __name__ == "__main__":
         help='Discount factor (0.99 is good)')
 
     #--- Tau: percent copied to target
-    parser.add_argument("--tau", default=0.001, type=float,
+    parser.add_argument("--tau", default=0.005, type=float, # was 0.001
         help='Target critic network update rate')
     #---
 
     #--- Optimizer
     parser.add_argument("--opt", default='adam',
         help="Optimizer to use [sgd|adam]")
-    parser.add_argument("--lr", default=5e-5, type=float,
+    parser.add_argument("--lr", default=5e-5, type=float, # 3e-4?
         help="Learning rate for critic optimizer (sgd:1e-3, adam:5e-5)")
     parser.add_argument("--clip-grad", default=None, type=float,
         help="Clip the gradient to slow down learning")
@@ -1089,7 +1089,7 @@ if __name__ == "__main__":
         help="If load-last is selected, continue from last best saved model")
     #---
 
-    parser.add_argument("--policy", default="ddqn", type=str,
+    parser.add_argument("--policy", default="td3", type=str, # td3 best. ddqn decent
             help="Policy type. dummy|ddpg|td3|dqn|ddqn|bdqn")
     parser.add_argument("--n-samples", default=100, type=int,
             help="Number of samples for Batch DQN")
