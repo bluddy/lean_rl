@@ -581,10 +581,10 @@ def run(args):
                     g.warmup_steps -= 1
 
         #env_time += time.time() - env_measure_time
-        #if acted:
+        if acted:
             #print("Env time: ", env_elapsed_time) # debug
-            #sys.stdout.write('.')
-            #sys.stdout.flush()
+            sys.stdout.write('.')
+            sys.stdout.flush()
             #env_time = 0.
 
         # Evaluate episode
@@ -669,7 +669,7 @@ def run(args):
                         args.eval_loops, log_f, g, csv_aux_arg, args)
 
         ## Train model
-        if acted and not g.warmup_steps and \
+        if not g.warmup_steps and \
             g.step - g.last_train_step > args.train_freq and \
             len(replay_buffer) > args.batch_size:
 
@@ -982,7 +982,7 @@ if __name__ == "__main__":
         help='How often (time steps) we evaluate')
     parser.add_argument('--eval-envs', default=0, type=int,
             help='How many environments to test with (0 is all)')
-    parser.add_argument("--train-freq", default=0, type=int, # was 100
+    parser.add_argument("--train-freq", default=1, type=int, # was 100
         help='Timesteps to explore before applying learning')
     parser.add_argument("--render-freq", default=1000, type=int,
         help='How often (episodes) we save the images')
