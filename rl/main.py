@@ -36,7 +36,7 @@ class GlobalState(object):
     def __init__(self, step=0, play_steps=0, best_reward=-1e5, last_train_step=0,
                 last_eval_step=0, last_stat_step=0, total_reloads=0,
                 consec_reloads=0, runtime=0, warmup_steps=0, reload_since_eval=False,
-                episodes=0,
+                episodes=0, train_steps=0,
                 **kwargs):
         self.step = step    # total steps
         self.play_steps = play_steps  # number of playback steps
@@ -49,7 +49,8 @@ class GlobalState(object):
         self.runtime = runtime # total runtime
         self.warmup_steps = warmup_steps
         self.reload_since_eval = reload_since_eval
-        self.episodes = 0
+        self.episodes = episodes
+        self.train_steps = train_steps # total number of train steps
 
 class GlobalStateEncoder(JSONEncoder):
     def default(self, o):
@@ -675,6 +676,8 @@ def run(args):
 
             g.last_train_step = g.step
 
+            g.train_steps += 1
+
             # Check rate
             if args.play_rate != 0.:
                 rate = rate_control.rate() * 100.
@@ -715,8 +718,9 @@ def run(args):
                         else:
                             sim_cnt += 1
 
-                    s = '\nTrain T:{} TS:{:04d} Ep:{:03d}{} CL:{:.3f} std:{:.2f}{} R:{:.1f} EpT:{}'.format(
+                    s = '\nTrain T:{} S:{:04d}/{:04d} Ep:{:03d}{} CL:{:.3f} std:{:.2f}{} R:{:.1f} EpT:{}'.format(
                         str(datetime.timedelta(seconds=g.runtime + time.time() - start_measure_time)).split('.')[0],
+                        g.train_steps,
                         g.step,
                         g.episodes,
                         ' RT%:{:.1f}'.format(rate_control.rate() * 100.) if args.play_rate else '',
@@ -949,7 +953,8 @@ def evaluate_policy(
         g.step, avg_reward, q_avg, q_max, loss_avg,
         g.best_reward, g.last_train_step, g.last_eval_step, succ1_pct, succ2_pct, g.play_steps,
         1 if g.reload_since_eval else 0,
-        g.runtime
+        g.runtime,
+        g.train_steps,
     ])
     csv_f.flush()
 
