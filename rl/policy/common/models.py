@@ -39,6 +39,8 @@ def create_mlp(start: int, net_arch: List[int], bn=True, drop=False, last=False,
     '''
     bn, drop, relu = bn, drop, True
 
+    print(f"Linear: bn:{bn}, drop:{drop}")
+
     ll = []
     last_units = start
     for i, units in enumerate(net_arch):
@@ -71,12 +73,12 @@ class CNN(nn.Module):
         super().__init__()
 
         if net_arch is None or net_arch == 'deep':
-            print('Deep CNN')
+            print('Deep ', end='')
             net_start_f = 8
             net_filters = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
             net_strides = [1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 2, 2]
         elif net_arch == 'shallow':
-            print('Shallow CNN')
+            print('Shallow ', end='')
             net_start_f = 2
             net_filters = [3, 3, 3, 3, 3, 3, 3]
             net_strides = [2, 2, 2, 2, 2, 2, 2]
@@ -88,7 +90,7 @@ class CNN(nn.Module):
 
         ll = []
         in_f = calc_features(img_stack)
-        print("CNN. input_f:{}, drop:{}".format(in_f, drop))
+        print(f"CNN. input_f:{in_f}, drop:{drop}, bn:{bn}")
 
         last_f = in_f
         f = net_start_f
