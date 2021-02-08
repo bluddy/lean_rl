@@ -9,8 +9,6 @@ from typing import List, Dict, Type, Tuple
 feat_size = 7
 
 
-def calc_features(img_stack):
-    return img_stack
 
 def make_linear(in_size:int, out_size:int, bn=False, drop=False, relu=True):
     l = []
@@ -89,7 +87,7 @@ class CNN(nn.Module):
         bn=True
 
         ll = []
-        in_f = calc_features(img_stack)
+        in_f = img_stack
         print(f"CNN. input_f:{in_f}, drop:{drop}, bn:{bn}")
 
         last_f = in_f
